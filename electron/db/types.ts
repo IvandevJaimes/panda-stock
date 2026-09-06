@@ -5,8 +5,47 @@ export type EstadoCaja = 'abierta' | 'cerrada'
 export type MetodoPago = 'efectivo' | 'transferencia' | 'debito' | 'credito' | 'cuenta_corriente'
 export type TipoTarifa = 'minorista' | 'mayoreo'
 export type TipoMovimientoStock = 'entrada' | 'venta' | 'ajuste_positivo' | 'ajuste_negativo' | 'merma' | 'devolucion'
+export type TipoAjusteStock = 'ajuste_positivo' | 'ajuste_negativo' | 'merma'
 
-export type ScanProductResult = {
+export type Empleado = {
+  id: number
+  nombre: string
+  activo: boolean
+  creadoEn: string
+}
+
+export type NuevoEmpleado = {
+  nombre: string
+}
+
+export type Categoria = {
+  id: number
+  nombre: string
+  activo: boolean
+}
+
+export type NuevaCategoria = {
+  nombre: string
+}
+
+export type Marca = {
+  id: number
+  nombre: string
+  activo: boolean
+}
+
+export type NuevaMarca = {
+  nombre: string
+}
+
+export type FiltrosProducto = {
+  search?: string | null
+  categoriaId?: number | null
+  marcaId?: number | null
+  bajoStock?: boolean
+}
+
+export type Producto = {
   id: number
   categoriaId: number | null
   marcaId: number | null
@@ -23,6 +62,111 @@ export type ScanProductResult = {
   stockMinimo: number
   vencimiento: string | null
   activo: boolean
+  creadoEn: string
+  actualizadoEn: string | null
+}
+
+export type NuevoProducto = {
+  categoriaId?: number | null
+  marcaId?: number | null
+  nombre: string
+  codigoInterno: string
+  codigosBarras?: string | null
+  tipoVenta?: TipoVenta
+  unidadMedida?: UnidadMedida
+  costo?: number
+  porcentajeGanancia?: number
+  precioVenta?: number
+  precioMayoreo?: number
+  stockMinimo?: number
+  vencimiento?: string | null
+}
+
+export type Lote = {
+  id: number
+  productoId: number
+  numeroLote: string | null
+  fechaIngreso: string
+  fechaVence: string | null
+  costoUnitario: number
+  cantidadInicial: number
+  cantidadActual: number
+  creadoEn: string
+}
+
+export type NuevoLote = {
+  productoId: number
+  numeroLote?: string | null
+  fechaIngreso: string
+  fechaVence?: string | null
+  costoUnitario?: number
+  cantidadInicial: number
+}
+
+export type Caja = {
+  id: number
+  empleadoId: number
+  montoInicial: number
+  montoEsperado: number | null
+  montoReal: number | null
+  diferencia: number | null
+  estado: EstadoCaja
+  fechaApertura: string | null
+  fechaCierre: string | null
+  observaciones: string | null
+}
+
+export type AperturaCajaInput = {
+  empleadoId: number
+  montoInicial?: number
+  observaciones?: string | null
+}
+
+export type CierreCajaInput = {
+  cajaId: number
+  montoReal: number
+  observaciones?: string | null
+}
+
+export type CajaSummary = {
+  totalVentas: number
+  totalEfectivo: number
+  totalTransferencia: number
+  totalTarjeta: number
+}
+
+export type Venta = {
+  id: number
+  cajaId: number | null
+  empleadoId: number
+  subtotal: number
+  descuento: number
+  impuesto: number
+  total: number
+  estado: EstadoVenta
+  fechaHora: string
+}
+
+export type DetalleVenta = {
+  id: number
+  ventaId: number
+  productoId: number | null
+  loteId: number | null
+  tipoTarifa: TipoTarifa
+  descripcionItem: string
+  cantidad: number
+  precioUnitario: number
+  costoUnitario: number
+  subtotal: number
+}
+
+export type Pago = {
+  id: number
+  ventaId: number
+  metodo: MetodoPago
+  monto: number
+  referencia: string | null
+  fechaHora: string
 }
 
 export type DetalleVentaInput = {
@@ -37,10 +181,10 @@ export type DetalleVentaInput = {
 export type PagoInput = {
   metodo: MetodoPago
   monto: number
-  referencia: string | null
+  referencia?: string | null
 }
 
-export type VentaInput = {
+export type VentaCompletaInput = {
   cajaId: number | null
   empleadoId: number
   subtotal: number
@@ -52,5 +196,74 @@ export type VentaInput = {
 }
 
 export type VentaResult = {
+  success: boolean
   ventaId: number
+}
+
+export type FiltrosVentas = {
+  desde?: string
+  hasta?: string
+  cajaId?: number
+}
+
+export type VentaDetalle = {
+  venta: Venta
+  items: DetalleVenta[]
+  pagos: Pago[]
+}
+
+export type MovimientoStock = {
+  id: number
+  productoId: number
+  loteId: number | null
+  ventaId: number | null
+  tipo: TipoMovimientoStock
+  cantidad: number
+  stockAnterior: number | null
+  stockPosterior: number | null
+  motivo: string | null
+  fechaHora: string
+}
+
+export type NuevoMovimientoStock = {
+  productoId: number
+  loteId?: number | null
+  ventaId?: number | null
+  tipo: TipoMovimientoStock
+  cantidad: number
+  stockAnterior?: number | null
+  stockPosterior?: number | null
+  motivo?: string | null
+}
+
+export type AjusteStockInput = {
+  productoId: number
+  cantidad: number
+  motivo: string
+  tipo: TipoAjusteStock
+}
+
+export type FiltrosMovimientos = {
+  productoId?: number
+  limit?: number
+}
+
+export type ReportesSummary = {
+  caja: {
+    cajaId: number | null
+    montoInicial: number
+    montoEsperado: number
+    montoReal: number | null
+    diferencia: number | null
+    ventas: number
+  }
+  totalVentas: number
+  cantVentas: number
+  ventasPorMetodo: { metodo: MetodoPago; monto: number }[]
+  productosMasVendidos: { productoId: number | null; nombre: string; cantidad: number; monto: number }[]
+}
+
+export type FiltrosReportes = {
+  desde?: string
+  hasta?: string
 }

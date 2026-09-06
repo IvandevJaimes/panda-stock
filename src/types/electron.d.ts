@@ -1,4 +1,27 @@
-import type { ScanProductResult, VentaInput, VentaResult } from '../../electron/db/types'
+import type {
+  AjusteStockInput,
+  AperturaCajaInput,
+  Caja,
+  CajaSummary,
+  Categoria,
+  CierreCajaInput,
+  Empleado,
+  FiltrosMovimientos,
+  FiltrosProducto,
+  FiltrosReportes,
+  FiltrosVentas,
+  Lote,
+  Marca,
+  MovimientoStock,
+  NuevoEmpleado,
+  NuevoLote,
+  Producto,
+  ReportesSummary,
+  Venta,
+  VentaCompletaInput,
+  VentaDetalle,
+  VentaResult,
+} from '../../electron/db/types'
 
 export {}
 
@@ -6,13 +29,58 @@ declare global {
   interface Window {
     electronAPI: {
       platform: string
-      db: {
-        scanProduct: (codigo: string) => Promise<ScanProductResult | null>
-        processSale: (venta: VentaInput) => Promise<VentaResult>
-      }
-      reports: {
+      seguridad: {
         verifyPin: (pin: string) => Promise<boolean>
         changePin: (pinActual: string, pinNuevo: string) => Promise<boolean>
+      }
+      empleados: {
+        getAll: () => Promise<Empleado[]>
+        create: (data: NuevoEmpleado) => Promise<Empleado>
+        toggle: (id: number, activo: boolean) => Promise<void>
+      }
+      categorias: {
+        getAll: () => Promise<Categoria[]>
+        create: (nombre: string) => Promise<Categoria>
+        update: (id: number, nombre: string) => Promise<void>
+        delete: (id: number) => Promise<void>
+      }
+      marcas: {
+        getAll: () => Promise<Marca[]>
+        create: (nombre: string) => Promise<Marca>
+        update: (id: number, nombre: string) => Promise<void>
+        delete: (id: number) => Promise<void>
+      }
+      productos: {
+        scan: (codigo: string) => Promise<Producto | null>
+        getAll: (filtros?: FiltrosProducto) => Promise<Producto[]>
+        getById: (id: number) => Promise<Producto | null>
+        create: (data: Record<string, unknown>) => Promise<Producto>
+        update: (id: number, data: Record<string, unknown>) => Promise<Producto>
+        delete: (id: number) => Promise<void>
+        getAlerts: () => Promise<Producto[]>
+      }
+      lotes: {
+        getByProducto: (productoId: number) => Promise<Lote[]>
+        create: (data: NuevoLote) => Promise<Lote>
+        getExpiring: (diasLimite: number) => Promise<Lote[]>
+      }
+      cajas: {
+        getActive: () => Promise<Caja | null>
+        open: (data: AperturaCajaInput) => Promise<Caja>
+        getSummary: (cajaId: number) => Promise<CajaSummary>
+        close: (data: CierreCajaInput) => Promise<Caja>
+      }
+      ventas: {
+        process: (venta: VentaCompletaInput) => Promise<VentaResult>
+        getAll: (filtros?: FiltrosVentas) => Promise<Venta[]>
+        getDetail: (idVenta: number) => Promise<VentaDetalle | null>
+      }
+      movimientos: {
+        getAll: (filtros?: FiltrosMovimientos) => Promise<MovimientoStock[]>
+        ajuste: (data: AjusteStockInput) => Promise<void>
+      }
+      reportes: {
+        getSummary: (filtros?: FiltrosReportes) => Promise<ReportesSummary>
       }
     }
   }
