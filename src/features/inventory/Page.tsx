@@ -1,16 +1,11 @@
 import { useMemo, useState } from "react";
 import {
-  createColumnHelper,
-  tableFeatures,
-  useTable,
-} from "@tanstack/react-table";
-import {
   AlertTriangle,
+  Boxes,
   Clock,
   FilterX,
   PackagePlus,
   PackageX,
-  Pencil,
   Plus,
   Search,
   SlidersHorizontal,
@@ -19,22 +14,15 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "../../lib/cn";
-import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui/Input";
 import { KpiCard } from "../../components/ui/KpiCard";
-import { Tooltip } from "../../components/ui/Tooltip";
+import { Pagination } from "../../components/ui/Pagination";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "../../components/ui/Table";
-
-type EstadoInventario = "vencido" | "por-vencer" | "ok";
+  ProductCard,
+  type ProductStatus,
+} from "../../components/ui/ProductCard";
+import { Tooltip } from "../../components/ui/Tooltip";
 
 type KpiFilter =
   | "all"
@@ -52,7 +40,7 @@ type ProductoInventario = {
   stock: number;
   minStock: number;
   expiresAt: string | null;
-  status: EstadoInventario;
+  status: "vencido" | "por-vencer" | "ok";
 };
 
 const stockMock: ProductoInventario[] = [
@@ -111,23 +99,260 @@ const stockMock: ProductoInventario[] = [
     expiresAt: "2027-03-01",
     status: "ok",
   },
+  {
+    id: 6,
+    name: "Máscara de pestañas",
+    category: "Maquillaje",
+    price: 62,
+    cost: 38,
+    stock: 0,
+    minStock: 8,
+    expiresAt: "2026-11-20",
+    status: "ok",
+  },
+  {
+    id: 7,
+    name: "Base de maquillaje L'Oréal",
+    category: "Maquillaje",
+    price: 89,
+    cost: 55,
+    stock: 4,
+    minStock: 6,
+    expiresAt: "2027-05-12",
+    status: "ok",
+  },
+  {
+    id: 8,
+    name: "Delineador negro",
+    category: "Maquillaje",
+    price: 28,
+    cost: 14,
+    stock: 34,
+    minStock: 10,
+    expiresAt: "2026-12-30",
+    status: "ok",
+  },
+  {
+    id: 9,
+    name: "Sombra de ojos paleta",
+    category: "Maquillaje",
+    price: 120,
+    cost: 78,
+    stock: 7,
+    minStock: 4,
+    expiresAt: "2026-09-09",
+    status: "por-vencer",
+  },
+  {
+    id: 10,
+    name: "Protector solar FPS 50",
+    category: "Cuidado personal",
+    price: 95,
+    cost: 61,
+    stock: 18,
+    minStock: 12,
+    expiresAt: "2026-09-02",
+    status: "vencido",
+  },
+  {
+    id: 11,
+    name: "Desodorante Axe",
+    category: "Cuidado personal",
+    price: 32,
+    cost: 18,
+    stock: 40,
+    minStock: 15,
+    expiresAt: "2027-07-01",
+    status: "ok",
+  },
+  {
+    id: 12,
+    name: "Gel para el cabello",
+    category: "Cuidado capilar",
+    price: 22,
+    cost: 11,
+    stock: 3,
+    minStock: 10,
+    expiresAt: "2027-02-14",
+    status: "ok",
+  },
+  {
+    id: 13,
+    name: "Tónico facial",
+    category: "Cuidado facial",
+    price: 38,
+    cost: 22,
+    stock: 26,
+    minStock: 8,
+    expiresAt: "2026-09-11",
+    status: "por-vencer",
+  },
+  {
+    id: 14,
+    name: "Serum vitamina C",
+    category: "Cuidado facial",
+    price: 145,
+    cost: 98,
+    stock: 5,
+    minStock: 6,
+    expiresAt: "2026-08-30",
+    status: "vencido",
+  },
+  {
+    id: 15,
+    name: "Crema hidratante corporal",
+    category: "Cuidado personal",
+    price: 47,
+    cost: 28,
+    stock: 22,
+    minStock: 9,
+    expiresAt: "2027-08-05",
+    status: "ok",
+  },
+  {
+    id: 16,
+    name: "Champú sólido",
+    category: "Cuidado capilar",
+    price: 54,
+    cost: 33,
+    stock: 0,
+    minStock: 5,
+    expiresAt: "2026-12-10",
+    status: "ok",
+  },
+  {
+    id: 17,
+    name: "Perfume floral",
+    category: "Fragancias",
+    price: 210,
+    cost: 132,
+    stock: 9,
+    minStock: 4,
+    expiresAt: "2027-06-18",
+    status: "ok",
+  },
+  {
+    id: 18,
+    name: "Colonia para hombre",
+    category: "Fragancias",
+    price: 165,
+    cost: 104,
+    stock: 6,
+    minStock: 4,
+    expiresAt: "2026-09-06",
+    status: "por-vencer",
+  },
+  {
+    id: 19,
+    name: "Jabón de manos líquido",
+    category: "Limpieza",
+    price: 18,
+    cost: 9,
+    stock: 55,
+    minStock: 20,
+    expiresAt: "2027-04-22",
+    status: "ok",
+  },
+  {
+    id: 20,
+    name: "Limpiador multiuso",
+    category: "Limpieza",
+    price: 26,
+    cost: 13,
+    stock: 0,
+    minStock: 10,
+    expiresAt: "2027-01-30",
+    status: "ok",
+  },
+  {
+    id: 21,
+    name: "Lavandina 1L",
+    category: "Limpieza",
+    price: 12,
+    cost: 6,
+    stock: 70,
+    minStock: 25,
+    expiresAt: "2026-09-08",
+    status: "por-vencer",
+  },
+  {
+    id: 22,
+    name: "Esponja de cocina x3",
+    category: "Limpieza",
+    price: 8,
+    cost: 3,
+    stock: 100,
+    minStock: 30,
+    expiresAt: null,
+    status: "ok",
+  },
+  {
+    id: 23,
+    name: "Cepillo de dientes",
+    category: "Higiene bucal",
+    price: 14,
+    cost: 7,
+    stock: 2,
+    minStock: 12,
+    expiresAt: "2027-09-01",
+    status: "ok",
+  },
+  {
+    id: 24,
+    name: "Pasta dental 90g",
+    category: "Higiene bucal",
+    price: 21,
+    cost: 11,
+    stock: 33,
+    minStock: 15,
+    expiresAt: "2026-10-01",
+    status: "ok",
+  },
+  {
+    id: 25,
+    name: "Hilo dental",
+    category: "Higiene bucal",
+    price: 16,
+    cost: 8,
+    stock: 1,
+    minStock: 10,
+    expiresAt: "2027-11-11",
+    status: "ok",
+  },
+  {
+    id: 26,
+    name: "Enjuague bucal",
+    category: "Higiene bucal",
+    price: 30,
+    cost: 17,
+    stock: 14,
+    minStock: 8,
+    expiresAt: "2026-09-04",
+    status: "vencido",
+  },
+  {
+    id: 27,
+    name: "Toallitas desmaquillantes",
+    category: "Cuidado facial",
+    price: 35,
+    cost: 20,
+    stock: 11,
+    minStock: 6,
+    expiresAt: "2027-02-28",
+    status: "ok",
+  },
+  {
+    id: 28,
+    name: "Crema para manos",
+    category: "Cuidado personal",
+    price: 25,
+    cost: 14,
+    stock: 8,
+    minStock: 7,
+    expiresAt: "2026-09-12",
+    status: "por-vencer",
+  },
 ];
-
-const formatoMoneda = new Intl.NumberFormat("es-AR", {
-  style: "currency",
-  currency: "ARS",
-  minimumFractionDigits: 2,
-});
-
-function darFormatoFecha(fecha: string | null): string {
-  if (!fecha) return "—";
-  const [anio, mes, dia] = fecha.split("-");
-  return `${dia}/${mes}/${anio}`;
-}
-
-const features = tableFeatures({});
-
-const columnHelper = createColumnHelper<typeof features, ProductoInventario>();
 
 function normalizar(texto: string): string {
   return texto
@@ -136,13 +361,27 @@ function normalizar(texto: string): string {
     .replace(/[\u0300-\u036f]/g, "");
 }
 
+function derivarStatus(p: ProductoInventario): ProductStatus {
+  if (p.status === "vencido") return "expired";
+  if (p.status === "por-vencer") return "expiring_soon";
+  if (p.stock === 0) return "out_of_stock";
+  if (p.stock <= p.minStock) return "low_stock";
+  return "normal";
+}
+
+const PAGE_SIZE = 10;
+
 export function InventoryPage() {
   const [busqueda, setBusqueda] = useState("");
-
   const [activeKpiFilter, setActiveKpiFilter] = useState<KpiFilter>("all");
+  const [paginaActual, setPaginaActual] = useState(1);
 
   const handleKpiClick = (filter: KpiFilter) => {
-    setActiveKpiFilter((prev) => (prev === filter ? "all" : filter));
+    setActiveKpiFilter((prev) => {
+      const nuevo = prev === filter ? "all" : filter;
+      if (nuevo !== prev) setPaginaActual(1);
+      return nuevo;
+    });
   };
 
   const hayFiltroActivo = busqueda.trim() !== "" || activeKpiFilter !== "all";
@@ -150,6 +389,7 @@ export function InventoryPage() {
   const limpiarFiltros = () => {
     setBusqueda("");
     setActiveKpiFilter("all");
+    setPaginaActual(1);
   };
 
   const filasFiltradas = useMemo(() => {
@@ -177,106 +417,14 @@ export function InventoryPage() {
     return stockMock.filter((p) => coincideTexto(p) && coincideKpi(p));
   }, [busqueda, activeKpiFilter]);
 
-  const columns = useMemo(
-    () =>
-      columnHelper.columns([
-        columnHelper.accessor("name", {
-          header: "Producto",
-          cell: ({ getValue }) => (
-            <span className="font-semibold text-slate-900 dark:text-slate-100">
-              {getValue()}
-            </span>
-          ),
-        }),
-        columnHelper.accessor("category", {
-          header: "Categoría",
-          cell: ({ getValue }) => (
-            <span className="text-slate-500 dark:text-slate-400">
-              {getValue()}
-            </span>
-          ),
-        }),
-        columnHelper.accessor("price", {
-          header: "Precio",
-          cell: ({ getValue }) => (
-            <span className="tabular-nums">
-              {formatoMoneda.format(getValue())}
-            </span>
-          ),
-        }),
-        columnHelper.accessor("cost", {
-          header: "Costo",
-          cell: ({ getValue }) => (
-            <span className="tabular-nums text-slate-500 dark:text-slate-400">
-              {formatoMoneda.format(getValue())}
-            </span>
-          ),
-        }),
-        columnHelper.accessor("stock", {
-          header: "Existencia",
-          cell: ({ getValue }) => (
-            <span className="block text-right tabular-nums">{getValue()}</span>
-          ),
-        }),
-        columnHelper.accessor("minStock", {
-          header: "Stock mínimo",
-          cell: ({ getValue }) => (
-            <span className="block text-right tabular-nums text-slate-500 dark:text-slate-400">
-              {getValue()}
-            </span>
-          ),
-        }),
-        columnHelper.accessor("expiresAt", {
-          header: "Vence",
-          cell: ({ getValue }) => (
-            <span className="tabular-nums text-slate-500 dark:text-slate-400">
-              {darFormatoFecha(getValue())}
-            </span>
-          ),
-        }),
-        columnHelper.accessor("status", {
-          header: "Estado",
-          cell: ({ getValue }) => {
-            const estado = getValue();
-            if (estado === "vencido")
-              return (
-                <Badge variant="expired" dot>
-                  Vencido
-                </Badge>
-              );
-            if (estado === "por-vencer")
-              return (
-                <Badge variant="warning" dot>
-                  Por vencer
-                </Badge>
-              );
-            return <Badge>—</Badge>;
-          },
-        }),
-        columnHelper.display({
-          id: "accion",
-          header: "Acción",
-          cell: () => (
-            <button
-              type="button"
-              onClick={() => toast.info("Edición de producto en desarrollo")}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-1 text-xs font-medium text-slate-600 transition-colors duration-150 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-            >
-              <Pencil size={12} />
-              Editar
-            </button>
-          ),
-        }),
-      ]),
-    [],
+  const totalPaginas = Math.max(1, Math.ceil(filasFiltradas.length / PAGE_SIZE));
+  const paginaSegura = Math.min(paginaActual, totalPaginas);
+  const filasPagina = filasFiltradas.slice(
+    (paginaSegura - 1) * PAGE_SIZE,
+    paginaSegura * PAGE_SIZE,
   );
 
-  const table = useTable({
-    key: `inventory-${filasFiltradas.length}`,
-    features,
-    columns,
-    data: filasFiltradas,
-  });
+  const totalItems = filasFiltradas.length;
 
   const kpis = useMemo(
     () => ({
@@ -320,40 +468,47 @@ export function InventoryPage() {
       <div className="mt-2 grid grid-cols-2 gap-2.5 sm:gap-3.5 xl:grid-cols-4">
         <KpiCard
           icon={<AlertTriangle className="h-4 w-4 sm:h-4.5 sm:w-4.5" />}
-          iconBgClass="bg-amber-100 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400"
+          iconBgClass="bg-amber-100 text-amber-600 dark:bg-amber-950/50 dark:text-amber-400"
           title="Stock bajo"
           value={kpis.stockBajo}
           subtitle="por debajo del mínimo"
+          subtitleHighlightClass="font-medium text-amber-600 dark:text-amber-400"
           onClick={() => handleKpiClick("low_stock")}
           isActive={activeKpiFilter === "low_stock"}
+          activeColor="amber"
         />
         <KpiCard
           icon={<Clock className="h-4 w-4 sm:h-4.5 sm:w-4.5" />}
-          iconBgClass="bg-blue-100 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400"
+          iconBgClass="bg-amber-100 text-amber-600 dark:bg-amber-950/50 dark:text-amber-400"
           title="Por vencer"
           value={kpis.porVencer}
           subtitle="próximos 14 días"
+          subtitleHighlightClass="font-medium text-amber-600 dark:text-amber-400"
           onClick={() => handleKpiClick("expiring_soon")}
           isActive={activeKpiFilter === "expiring_soon"}
+          activeColor="amber"
         />
         <KpiCard
           icon={<PackageX className="h-4 w-4 sm:h-4.5 sm:w-4.5" />}
-          iconBgClass="bg-slate-200/80 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
+          iconBgClass="bg-rose-100 text-rose-600 dark:bg-rose-950/50 dark:text-rose-400"
           title="Agotados"
           value={kpis.agotados}
           subtitle="sin existencias"
+          subtitleHighlightClass="font-medium text-rose-600 dark:text-rose-400"
           onClick={() => handleKpiClick("out_of_stock")}
           isActive={activeKpiFilter === "out_of_stock"}
+          activeColor="rose"
         />
         <KpiCard
           icon={<XCircle className="h-4 w-4 sm:h-4.5 sm:w-4.5" />}
-          iconBgClass="bg-rose-100 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400"
+          iconBgClass="bg-rose-100 text-rose-600 dark:bg-rose-950/50 dark:text-rose-400"
           title="Vencidos"
           value={kpis.vencidos}
           subtitle="requieren baja o descarte"
-          subtitleHighlightClass="font-medium text-rose-500 dark:text-rose-400"
+          subtitleHighlightClass="font-medium text-rose-600 dark:text-rose-400"
           onClick={() => handleKpiClick("expired")}
           isActive={activeKpiFilter === "expired"}
+          activeColor="rose"
         />
       </div>
 
@@ -363,7 +518,10 @@ export function InventoryPage() {
         <div className="flex shrink-0 items-center gap-1.5 lg:flex-1">
           <Input
             value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
+            onChange={(e) => {
+              setBusqueda(e.target.value);
+              setPaginaActual(1);
+            }}
             placeholder="Buscar producto…"
             leftIcon={<Search size={16} />}
             className="w-full"
@@ -373,7 +531,10 @@ export function InventoryPage() {
               busqueda.length > 0 ? (
                 <button
                   type="button"
-                  onClick={() => setBusqueda("")}
+                  onClick={() => {
+                    setBusqueda("");
+                    setPaginaActual(1);
+                  }}
                   aria-label="Limpiar búsqueda"
                   className="grid h-5 w-5 cursor-pointer place-items-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
                 >
@@ -430,49 +591,57 @@ export function InventoryPage() {
         </div>
       </div>
 
-      {/* ── Tabla ── */}
-      <TableContainer className="mt-3 shadow-xs">
-        <Table>
-          <TableHeader>
-            {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id} className="hover:bg-transparent">
-                {headerGroup.headers.map((header) => (
-                  <TableHead key={header.id}>
-                    {header.isPlaceholder ? null : (
-                      <table.FlexRender header={header} />
-                    )}
-                  </TableHead>
-                ))}
-              </TableRow>
-            ))}
-          </TableHeader>
-          <TableBody>
-            {filasFiltradas.length === 0 ? (
-              <TableRow className="hover:bg-transparent">
-                <TableCell
-                  colSpan={columns.length}
-                  className="py-10 text-center text-slate-500 dark:text-slate-400"
-                >
-                  Ningún producto coincide con la búsqueda.
-                </TableCell>
-              </TableRow>
-            ) : (
-              table.getRowModel().rows.map((row) => (
-                <TableRow
-                  key={row.id}
-                  className="border-b border-slate-100 dark:border-slate-800/60"
-                >
-                  {row.getAllCells().map((cell) => (
-                    <TableCell key={cell.id}>
-                      <table.FlexRender cell={cell} />
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </TableContainer>
+      {/* ── Cuadrícula de productos ── */}
+      {filasFiltradas.length === 0 ? (
+        <div className="mt-6 flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-14 text-center dark:border-slate-800 dark:bg-[#111827]">
+          <span className="grid h-12 w-12 place-items-center rounded-xl bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500">
+            <Boxes size={22} />
+          </span>
+          <div>
+            <p className="font-display text-sm font-bold text-slate-900 dark:text-white">
+              No se encontraron productos
+            </p>
+            <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
+              Probá con otra búsqueda o limpiá los filtros.
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-2 flex w-full flex-col gap-2.5">
+          {filasPagina.map((producto) => (
+            <ProductCard
+              key={producto.id}
+              category={producto.category}
+              name={producto.name}
+              stock={producto.stock}
+              minStock={producto.minStock}
+              price={producto.price}
+              expiresAt={producto.expiresAt ?? undefined}
+              status={derivarStatus(producto)}
+              onEdit={() => toast.info(`Editar ${producto.name} en desarrollo`)}
+              onDelete={() =>
+                toast.info(`Eliminar ${producto.name} en desarrollo`)
+              }
+            />
+          ))}
+
+          <div className="mt-2 flex flex-col items-center justify-between gap-2 sm:flex-row">
+            <span className="text-xs font-medium text-slate-400 dark:text-slate-500">
+              Mostrando{" "}
+              <span className="font-semibold text-slate-600 dark:text-slate-300">
+                {(paginaSegura - 1) * PAGE_SIZE + 1}–
+                {Math.min(paginaSegura * PAGE_SIZE, totalItems)}
+              </span>{" "}
+              de {totalItems} productos
+            </span>
+            <Pagination
+              currentPage={paginaSegura}
+              totalPages={totalPaginas}
+              onPageChange={setPaginaActual}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

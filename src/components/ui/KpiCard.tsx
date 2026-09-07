@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import { cn } from "../../lib/cn";
 
+type ActiveColor = "amber" | "rose" | "emerald";
+
 type KpiCardProps = {
   icon: ReactNode;
   /** Clases de color del fondo del icono (ej. `bg-amber-100 text-amber-600 dark:bg-amber-950/40`) */
@@ -12,6 +14,16 @@ type KpiCardProps = {
   subtitleHighlightClass?: string;
   onClick?: () => void;
   isActive?: boolean;
+  /** Color del anillo y borde cuando está activa */
+  activeColor?: ActiveColor;
+};
+
+const activeStyles: Record<ActiveColor, string> = {
+  amber:
+    "border-amber-500/50 bg-amber-50/40 ring-2 ring-amber-500 dark:bg-amber-950/20",
+  rose: "border-rose-500/50 bg-rose-50/40 ring-2 ring-rose-500 dark:bg-rose-950/20",
+  emerald:
+    "border-emerald-500/50 bg-emerald-50/30 ring-2 ring-emerald-500 dark:bg-emerald-950/20",
 };
 
 export function KpiCard({
@@ -23,6 +35,7 @@ export function KpiCard({
   subtitleHighlightClass,
   onClick,
   isActive = false,
+  activeColor = "emerald",
 }: KpiCardProps) {
   const contenido = (
     <div className="flex items-center gap-3">
@@ -57,8 +70,7 @@ export function KpiCard({
     "rounded-2xl border border-slate-200 bg-white p-3.5 text-left shadow-xs dark:border-slate-800/80 dark:bg-[#111827] sm:p-4",
     onClick &&
       "cursor-pointer transition-all duration-150 hover:border-slate-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:hover:border-slate-700",
-    isActive &&
-      "border-emerald-500/50 bg-emerald-50/30 ring-2 ring-emerald-500 dark:bg-emerald-950/20",
+    isActive && activeStyles[activeColor],
   );
 
   if (onClick) {

@@ -43,6 +43,7 @@ export function Header() {
             src="/panda-stock-logo.png"
             alt="Logo de Panda Stock"
             className="h-7 w-7 object-cover"
+            draggable={false}
           />
         </div>
         <div className="hidden sm:flex min-w-0 flex-col leading-tight">
