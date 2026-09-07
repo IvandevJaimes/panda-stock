@@ -38,8 +38,12 @@ export function Header() {
     <header className="flex h-16 shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3 text-slate-900 dark:border-slate-800 dark:bg-[#111827] dark:text-slate-200 md:gap-4 md:px-6 lg:gap-6">
       {/* ── Marca ── */}
       <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-emerald-500 text-[#0b0f17] ">
-          <span className="text-lg leading-none ">🐼</span>
+        <div className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-xl bg-emerald-500">
+          <img
+            src="/panda-stock-logo.png"
+            alt="Logo de Panda Stock"
+            className="h-7 w-7 object-cover"
+          />
         </div>
         <div className="hidden sm:flex min-w-0 flex-col leading-tight">
           <span className="truncate font-display text-[14px] font-bold text-slate-900 dark:text-white sm:text-[15px]">
