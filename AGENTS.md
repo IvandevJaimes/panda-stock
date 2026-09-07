@@ -16,6 +16,8 @@ Este documento define el conjunto de directrices estrictas, convenciones y patro
   - `refactor/<nombre-en-kebab-case>`: Mejoras internas sin cambio funcional.
   - `chore/<nombre-en-kebab-case>`: Tareas de mantenimiento, dependencias o configuración.
 
+**⚠️ Nunca borres ramas, ni locales ni remotas.** Todas las ramas se conservan permanentemente como historial. No se ejecutan comandos de borrado de ramas (`git branch -d/-D`, `git push origin --delete`, etc.), ni se solicitan confirmaciones para ello.
+
 ### 1.2 Convención de Commits (Estrictamente en Español)
 
 Todos los commits deben seguir el estándar de **Conventional Commits traducido al español**, con mensajes concisos, descriptivos y en tiempo presente:
