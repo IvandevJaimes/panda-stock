@@ -26,6 +26,13 @@ export function Pill({
       role="button"
       tabIndex={0}
       onClick={onSelect}
+      onMouseEnter={(e) => {
+        e.currentTarget.scrollIntoView({
+          behavior: "smooth",
+          block: "nearest",
+          inline: "nearest",
+        });
+      }}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
@@ -42,8 +49,9 @@ export function Pill({
       )}
     >
       <span className="whitespace-nowrap">{label}</span>
+
       {showActions && (
-        <div className="flex items-center gap-1 max-w-0 overflow-hidden opacity-0 transition-all duration-200 ease-out group-hover:ml-1.5 group-hover:max-w-16 group-hover:opacity-100">
+        <div className="flex items-center gap-2 max-w-0 overflow-hidden   opacity-0 transition-all duration-200 ease-out group-hover:ml-1.5 group-hover:max-w-16 group-hover:opacity-100">
           <Tooltip content="Editar" placement="top">
             <button
               type="button"
@@ -55,8 +63,8 @@ export function Pill({
               className={cn(
                 "p-1 rounded-full transition-colors cursor-pointer",
                 active
-                  ? " text-emerald-100 hover:text-white hover:bg-emerald-600"
-                  : "text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-300/50",
+                  ? "text-slate-300 hover:text-white"
+                  : " text-slate-400 hover:text-slate-700 dark:hover:text-slate-300",
               )}
             >
               <Pencil className="h-3.5 w-3.5" />
@@ -71,10 +79,8 @@ export function Pill({
                 onDelete?.();
               }}
               className={cn(
-                "p-1 rounded-full transition-colors cursor-pointer",
-                active
-                  ? " text-emerald-100 hover:text-rose-200 hover:bg-rose-500/20"
-                  : "text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 hover:bg-rose-100/60 dark:hover:bg-rose-950/40",
+                "p-1 rounded-full transition-colors cursor-pointer hover:text-red-600 dark:hover:text-red-400",
+                active ? "text-slate-200" : "text-slate-400",
               )}
             >
               <Trash2 className="h-3.5 w-3.5" />

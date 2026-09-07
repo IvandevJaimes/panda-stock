@@ -10,7 +10,7 @@ export function AppLayout() {
   return (
     <div className="flex h-screen w-full max-w-full flex-col overflow-hidden bg-[#f4f6f8] text-[#16202c] dark:bg-[#0b0f17] dark:text-[#e8ecf2]">
       <Header />
-      <main className="flex-1 transform-gpu overflow-y-auto overscroll-contain p-4 will-change-transform md:p-6">
+      <main className="flex-1 transform-gpu overflow-y-auto overscroll-contain px-4 pb-4 will-change-transform md:px-6 md:pb-6">
         <Outlet />
       </main>
       <SettingsDrawer />

@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { cn } from "../../lib/cn";
 
-type ActiveColor = "amber" | "rose" | "emerald";
+type ActiveColor = "amber" | "red" | "emerald";
 
 type KpiCardProps = {
   icon: ReactNode;
@@ -21,7 +21,7 @@ type KpiCardProps = {
 const activeStyles: Record<ActiveColor, string> = {
   amber:
     "border-amber-500/50 bg-amber-50/40 ring-2 ring-amber-500 dark:bg-amber-950/20",
-  rose: "border-rose-500/50 bg-rose-50/40 ring-2 ring-rose-500 dark:bg-rose-950/20",
+  red: "border-red-500/50 bg-red-50/40 ring-2 ring-red-500 dark:bg-red-950/20",
   emerald:
     "border-emerald-500/50 bg-emerald-50/30 ring-2 ring-emerald-500 dark:bg-emerald-950/20",
 };

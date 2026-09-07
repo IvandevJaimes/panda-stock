@@ -1,7 +1,7 @@
 import type { HTMLAttributes } from "react";
 import { cn } from "../../lib/cn";
 
-type ProgressBarVariant = "auto" | "emerald" | "amber" | "rose";
+type ProgressBarVariant = "auto" | "emerald" | "amber" | "red";
 
 type ProgressBarProps = HTMLAttributes<HTMLDivElement> & {
   /** Valor de 0 a 100 */
@@ -12,12 +12,12 @@ type ProgressBarProps = HTMLAttributes<HTMLDivElement> & {
 
 /** Color automático según el valor: rojo en 0, ámbar ≤ 25%, verde esmeralda el resto */
 const autoColor = (value: number) =>
-  value <= 0 ? "bg-rose-500" : value <= 25 ? "bg-amber-500" : "bg-emerald-500";
+  value <= 0 ? "bg-red-500" : value <= 25 ? "bg-amber-500" : "bg-emerald-500";
 
 const variants: Record<Exclude<ProgressBarVariant, "auto">, string> = {
   emerald: "bg-emerald-500",
   amber: "bg-amber-500",
-  rose: "bg-rose-500",
+  red: "bg-red-500",
 };
 
 export function ProgressBar({
@@ -35,7 +35,10 @@ export function ProgressBar({
       aria-valuemin={0}
       aria-valuemax={100}
       className={cn(
-        "h-1.5 w-full overflow-hidden rounded-full bg-slate-300 dark:bg-slate-800",
+        "h-1.5 w-full overflow-hidden rounded-full",
+        variant === "red"
+          ? "bg-red-100 dark:bg-red-950/40"
+          : "bg-slate-300 dark:bg-slate-800",
         className,
       )}
       {...props}

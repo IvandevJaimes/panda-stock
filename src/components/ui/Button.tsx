@@ -21,7 +21,8 @@ const variants: Record<Variant, string> = {
     'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 focus-visible:ring-slate-400/30 dark:border-slate-700 dark:bg-[#111827] dark:text-slate-200 dark:hover:bg-slate-800',
   ghost:
     'bg-transparent text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800/60',
-  danger: 'bg-rose-600 text-white hover:bg-rose-500 focus-visible:ring-rose-500/30',
+  danger:
+    'bg-red-600 text-white hover:bg-red-700 focus-visible:ring-red-500/30 shadow-xs dark:bg-red-600 dark:hover:bg-red-500',
 }
 
 const sizes: Record<Size, string> = {

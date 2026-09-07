@@ -370,7 +370,7 @@ function derivarStatus(p: ProductoInventario): ProductStatus {
   return "normal";
 }
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 20;
 
 export function InventoryPage() {
   const [busqueda, setBusqueda] = useState("");
@@ -460,7 +460,7 @@ export function InventoryPage() {
   );
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-3 pt-4 md:pt-6">
       {/* ── Encabezado ── */}
       <div className="flex flex-row items-center justify-between gap-3">
         <div className="flex items-center gap-3">
@@ -512,142 +512,171 @@ export function InventoryPage() {
         />
         <KpiCard
           icon={<PackageX className="h-4 w-4 sm:h-4.5 sm:w-4.5" />}
-          iconBgClass="bg-rose-100 text-rose-600 dark:bg-rose-950/50 dark:text-rose-400"
+          iconBgClass="bg-red-100 text-red-600 border border-red-200 dark:bg-red-950/60 dark:text-red-400 dark:border-red-900/60"
           title="Agotados"
           value={kpis.agotados}
           subtitle="sin existencias"
-          subtitleHighlightClass="font-medium text-rose-600 dark:text-rose-400"
+          subtitleHighlightClass="font-medium text-red-600/80 dark:text-red-400/80"
           onClick={() => handleKpiClick("out_of_stock")}
           isActive={activeKpiFilter === "out_of_stock"}
-          activeColor="rose"
+          activeColor="red"
         />
         <KpiCard
           icon={<XCircle className="h-4 w-4 sm:h-4.5 sm:w-4.5" />}
-          iconBgClass="bg-rose-100 text-rose-600 dark:bg-rose-950/50 dark:text-rose-400"
+          iconBgClass="bg-red-100 text-red-600 border border-red-200 dark:bg-red-950/60 dark:text-red-400 dark:border-red-900/60"
           title="Vencidos"
           value={kpis.vencidos}
           subtitle="requieren baja o descarte"
-          subtitleHighlightClass="font-medium text-rose-600 dark:text-rose-400"
+          subtitleHighlightClass="font-medium text-red-600/80 dark:text-red-400/80"
           onClick={() => handleKpiClick("expired")}
           isActive={activeKpiFilter === "expired"}
-          activeColor="rose"
+          activeColor="red"
         />
       </div>
 
-      {/* ── Barra de categorías ── */}
-      <div className="mt-2 flex w-full items-center gap-1.5 overflow-x-auto pb-1.5 select-none scrollbar-none">
-        <Tooltip content="Nueva categoría" placement="top">
-          <button
-            type="button"
-            onClick={() => toast.info("Nueva categoría en desarrollo")}
-            aria-label="Nueva categoría"
-            className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full border border-dashed border-slate-300 text-slate-500 transition-colors select-none hover:border-emerald-500 hover:bg-emerald-50/50 hover:text-emerald-600 dark:border-slate-700 dark:text-slate-400 dark:hover:border-emerald-500 dark:hover:bg-emerald-950/20 dark:hover:text-emerald-400"
-          >
-            <Plus className="h-4 w-4" />
-          </button>
-        </Tooltip>
-<Pill
-          label="Todas"
-          active={selectedCategory === "all"}
-          showActions={false}
-          onSelect={() => {
-            setSelectedCategory("all");
-            setPaginaActual(1);
-          }}
-        />
-        {categorias.map((categoria) => (
-          <Pill
-            key={categoria}
-            label={categoria}
-            active={selectedCategory === categoria}
-            onSelect={() => {
-              setSelectedCategory((prev) =>
-                prev === categoria ? "all" : categoria,
-              );
-              setPaginaActual(1);
-            }}
-            onEdit={() => toast.info(`Editar categoría "${categoria}" en desarrollo`)}
-            onDelete={() => toast.info(`Eliminar categoría "${categoria}" en desarrollo`)}
-          />
-        ))}
-      </div>
+      {/* ── Contenedor sticky: categorías + toolbar se anclan al top al scrollear ── */}
+      <div className="sticky top-0 z-20 flex w-full flex-col gap-2.5 border-b border-slate-200/80 bg-[#f4f6f8] pt-3 pb-3 transition-colors select-none relative after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-3 after:bg-gradient-to-b after:from-slate-900/10 after:to-transparent after:content-[''] dark:border-slate-800/60 dark:bg-[#0b0f17] dark:after:from-black/45">
+        {/* ── Barra de categorías: anclaje fijo + carrusel desplazable ── */}
+        <div className="flex w-full items-center select-none">
+          {/* 1. Anclaje fijo: botón Nueva + separador + fondo opaco + máscara degradada */}
+          <div className="relative z-10 flex shrink-0 items-center bg-[#f4f6f8] pr-3 pb-2 dark:bg-[#0b0f17]">
+            <Tooltip content="Crear una nueva categoría" placement="top">
+              <button
+                type="button"
+                onClick={() => toast.info("Nueva categoría en desarrollo")}
+                aria-label="Nueva categoría"
+                className={cn(
+                  "h-8 px-3 rounded-full text-xs font-semibold shrink-0 select-none",
+                  "flex items-center gap-1.5 transition-all duration-150 shadow-xs cursor-pointer",
+                  "bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 border border-emerald-500/30",
+                  "dark:bg-emerald-500/10 dark:hover:bg-emerald-500/20 dark:text-emerald-400 dark:border-emerald-500/30",
+                  "active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40",
+                )}
+              >
+                <Plus className="h-4 w-4 stroke-[2.5]" />
+                <span>Nueva</span>
+              </button>
+            </Tooltip>
 
-      {/* ── Barra de herramientas ── */}
-      <div className="mt-1 flex flex-col items-stretch justify-between gap-3 lg:flex-row lg:items-center">
-        {/* GRUPO BÚSQUEDA: siempre juntos, ancho completo en todos los breakpoints */}
-        <div className="flex shrink-0 items-center gap-1.5 lg:flex-1">
-          <Input
-            value={busqueda}
-            onChange={(e) => {
-              setBusqueda(e.target.value);
-              setPaginaActual(1);
-            }}
-            placeholder="Buscar producto…"
-            leftIcon={<Search size={16} />}
-            className="w-full"
-            wrapperClassName="flex-1 min-w-0"
-            aria-label="Buscar producto"
-            rightAction={
-              busqueda.length > 0 ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setBusqueda("");
-                    setPaginaActual(1);
-                  }}
-                  aria-label="Limpiar búsqueda"
-                  className="grid h-5 w-5 cursor-pointer place-items-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
-                >
-                  <X size={14} />
-                </button>
-              ) : undefined
-            }
-          />
-          <Tooltip
-            content={hayFiltroActivo ? "Limpiar todos los filtros" : undefined}
-            placement="top"
-          >
-            <button
-              type="button"
-              onClick={limpiarFiltros}
-              disabled={!hayFiltroActivo}
-              aria-label="Limpiar todos los filtros"
-              className={cn(
-                "shrink-0 select-none rounded-xl p-2 transition-colors duration-150",
-                hayFiltroActivo
-                  ? "cursor-pointer text-slate-400 hover:text-rose-500 dark:text-slate-500 dark:hover:text-rose-400"
-                  : "cursor-not-allowed text-slate-400 opacity-25 dark:text-slate-600",
-              )}
-            >
-              <FilterX className="h-5 w-5" />
-            </button>
-          </Tooltip>
+            <div
+              className="mx-2.5 h-4 w-px shrink-0 bg-slate-300 dark:bg-slate-700/60"
+              aria-hidden="true"
+            />
+
+            {/* Máscara degradada: las pills se desvanecen suavemente bajo el anclaje */}
+            <div
+              className="pointer-events-none absolute inset-y-0 -right-2 w-2 bg-gradient-to-r from-[#f4f6f8] via-[#f4f6f8]/70 to-transparent dark:from-[#0b0f17] dark:via-[#0b0f17]/70"
+              aria-hidden="true"
+            />
+          </div>
+
+          {/* 2. Carrusel desplazable: Todas + categorías */}
+          <div className="custom-scrollbar flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto pl-1 pb-2 pr-8 sm:pr-10">
+            <Pill
+              label="Todas"
+              active={selectedCategory === "all"}
+              showActions={false}
+              onSelect={() => {
+                setSelectedCategory("all");
+                setPaginaActual(1);
+              }}
+            />
+            {categorias.map((categoria) => (
+              <Pill
+                key={categoria}
+                label={categoria}
+                active={selectedCategory === categoria}
+                onSelect={() => {
+                  setSelectedCategory((prev) =>
+                    prev === categoria ? "all" : categoria,
+                  );
+                  setPaginaActual(1);
+                }}
+                onEdit={() => toast.info(`Editar categoría "${categoria}" en desarrollo`)}
+                onDelete={() => toast.info(`Eliminar categoría "${categoria}" en desarrollo`)}
+              />
+            ))}
+            <div className="w-6 shrink-0 pointer-events-none" aria-hidden="true" />
+          </div>
         </div>
-        <div className="flex flex-nowrap items-center gap-2.5 overflow-x-auto pb-1 lg:pb-0">
-          <Button
-            variant="primary"
-            icon={<Plus size={16} />}
-            onClick={() => toast.info("Alta de inventario en desarrollo")}
-            className="whitespace-nowrap"
-          >
-            Agregar Inventario
-          </Button>
-          <Button
-            variant="outline"
-            icon={<SlidersHorizontal size={16} />}
-            onClick={() => toast.info("Ajuste de stock en desarrollo")}
-            className="whitespace-nowrap"
-          >
-            Ajustar stock
-          </Button>
-          <Button
-            variant="danger"
-            icon={<Plus size={16} />}
-            onClick={() => toast.info("Registro de pérdida en desarrollo")}
-            className="whitespace-nowrap"
-          >
-            Registrar pérdida
-          </Button>
+
+        {/* ── Barra de herramientas ── */}
+        <div className="flex flex-col items-stretch justify-between gap-3 lg:flex-row lg:items-center">
+          {/* GRUPO BÚSQUEDA: siempre juntos, ancho completo en todos los breakpoints */}
+          <div className="flex shrink-0 items-center gap-1.5 lg:flex-1">
+            <Input
+              value={busqueda}
+              onChange={(e) => {
+                setBusqueda(e.target.value);
+                setPaginaActual(1);
+              }}
+              placeholder="Buscar producto…"
+              leftIcon={<Search size={16} />}
+              className="w-full"
+              wrapperClassName="flex-1 min-w-0"
+              aria-label="Buscar producto"
+              rightAction={
+                busqueda.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBusqueda("");
+                      setPaginaActual(1);
+                    }}
+                    aria-label="Limpiar búsqueda"
+                    className="grid h-5 w-5 cursor-pointer place-items-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+                  >
+                    <X size={14} />
+                  </button>
+                ) : undefined
+              }
+            />
+            <Tooltip
+              content={hayFiltroActivo ? "Limpiar todos los filtros" : undefined}
+              placement="top"
+            >
+              <button
+                type="button"
+                onClick={limpiarFiltros}
+                disabled={!hayFiltroActivo}
+                aria-label="Limpiar todos los filtros"
+                className={cn(
+                  "shrink-0 select-none rounded-xl p-2 transition-colors duration-150",
+                  hayFiltroActivo
+                    ? "cursor-pointer text-slate-400 hover:text-red-600 dark:text-slate-500 dark:hover:text-red-400"
+                    : "cursor-not-allowed text-slate-400 opacity-25 dark:text-slate-600",
+                )}
+              >
+                <FilterX className="h-5 w-5" />
+              </button>
+            </Tooltip>
+          </div>
+          <div className="flex flex-nowrap items-center gap-2.5 overflow-x-auto pb-1 lg:pb-0">
+            <Button
+              variant="primary"
+              icon={<Plus size={16} />}
+              onClick={() => toast.info("Alta de inventario en desarrollo")}
+              className="whitespace-nowrap"
+            >
+              Agregar Inventario
+            </Button>
+            <Button
+              variant="outline"
+              icon={<SlidersHorizontal size={16} />}
+              onClick={() => toast.info("Ajuste de stock en desarrollo")}
+              className="whitespace-nowrap"
+            >
+              Ajustar stock
+            </Button>
+            <Button
+              variant="danger"
+              icon={<Plus size={16} />}
+              onClick={() => toast.info("Registro de pérdida en desarrollo")}
+              className="whitespace-nowrap"
+            >
+              Registrar pérdida
+            </Button>
+          </div>
         </div>
       </div>
 
