@@ -1,99 +1,95 @@
-import { useEffect, useState } from 'react'
-import { Bell, Moon, Sun } from 'lucide-react'
-import { cajasService } from '../../services/cajas.service'
+import { NavLink } from 'react-router-dom'
+import { Bell, Package, Settings, ShoppingBag, TrendingUp, type LucideIcon } from 'lucide-react'
 import { useSettingsStore } from '../../stores/settings.store'
 import { useUIStore } from '../../stores/ui.store'
 import { cn } from '../../lib/cn'
 
-export function Header() {
-  const theme = useUIStore((state) => state.theme)
-  const toggleTheme = useUIStore((state) => state.toggleTheme)
-  const storeName = useSettingsStore((state) => state.storeName)
-  const [cajaAbierta, setCajaAbierta] = useState(false)
+interface MainNavItem {
+  to: string
+  label: string
+  icon: LucideIcon
+}
 
-  useEffect(() => {
-    let activo = true
-    cajasService
-      .getActive()
-      .then((caja) => {
-        if (activo) setCajaAbierta(caja !== null)
-      })
-      .catch(() => {
-        if (activo) setCajaAbierta(false)
-      })
-    return () => {
-      activo = false
-    }
-  }, [])
+const mainNavItems: MainNavItem[] = [
+  { to: '/pos', label: 'Ventas', icon: ShoppingBag },
+  { to: '/inventory', label: 'Inventario', icon: Package },
+  { to: '/reports', label: 'Reportes', icon: TrendingUp },
+]
+
+export function Header() {
+  const storeName = useSettingsStore((state) => state.storeName)
+  const toggleRightSidebar = useUIStore((state) => state.toggleRightSidebar)
 
   return (
-    <header
-      className={cn(
-        'flex h-14 shrink-0 items-center gap-4 px-6',
-        'border-b border-[#e3e8ee] bg-[rgba(255,255,255,0.86)] backdrop-blur-[14px]',
-        'dark:border-[#212b37] dark:bg-[rgba(11,15,20,0.82)]',
-      )}
-    >
-      {/* ── Nombre del local ── */}
-      <div className="flex flex-col leading-tight">
-        <h1 className="font-display text-[17px] font-bold tracking-[-0.01em] text-[#16202c] dark:text-[#e8ecf2]">
-          {storeName}
-        </h1>
-        <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#8c99a9] dark:text-[#66707e]">
-          Punto de venta
-        </span>
+    <header className="flex h-16 shrink-0 items-center gap-4 border-b border-slate-800 bg-[#111827] px-4 text-slate-200 md:gap-6 md:px-6">
+      {/* ── Marca ── */}
+      <div className="flex shrink-0 items-center gap-3">
+        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-500 text-[#0b0f17]">
+          <span className="text-xl leading-none">🐼</span>
+        </div>
+        <div className="flex flex-col leading-tight">
+          <span className="font-display text-[15px] font-bold text-white">{storeName}</span>
+          <span className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+            Punto de venta
+          </span>
+        </div>
       </div>
 
+      {/* ── Navegación principal (píldoras) ── */}
+      <nav className="flex flex-1 items-center justify-center gap-1.5">
+        {mainNavItems.map(({ to, label, icon: Icon }) => (
+          <NavLink
+            key={to}
+            to={to}
+            className={({ isActive }) =>
+              cn(
+                'inline-flex items-center gap-2 rounded-full border px-4 py-2',
+                'font-display text-sm font-medium transition-colors duration-150',
+                isActive
+                  ? 'border-emerald-500/40 bg-emerald-950/40 text-emerald-400'
+                  : 'border-transparent text-slate-300 hover:bg-slate-800/60 hover:text-white',
+              )
+            }
+          >
+            <Icon size={17} />
+            {label}
+          </NavLink>
+        ))}
+      </nav>
+
       {/* ── Acciones ── */}
-      <div className="ml-auto flex items-center gap-2">
-        {/* Indicador de caja abierta */}
-        {cajaAbierta && (
+      <div className="flex shrink-0 items-center gap-2">
+        {/* Notificaciones */}
+        <button
+          aria-label="Notificaciones"
+          className={cn(
+            'relative grid h-10 w-10 place-items-center rounded-xl',
+            'border border-slate-700/60 bg-slate-800/40 text-slate-300',
+            'transition-colors duration-150 hover:bg-slate-800/60 hover:text-white',
+          )}
+        >
+          <Bell size={18} />
           <span
             className={cn(
-              'inline-flex items-center gap-2 rounded-full border px-3.5 py-2',
-              'border-[rgba(5,150,105,0.30)] bg-[rgba(5,150,105,0.10)]',
-              'font-display text-[13px] font-semibold text-[#047857]',
-              'dark:border-[rgba(16,185,129,0.35)] dark:bg-[rgba(16,185,129,0.12)] dark:text-[#34d399]',
+              'absolute -right-1.5 -top-1.5 grid h-4.5 min-w-4.5 place-items-center rounded-full',
+              'border border-[#111827] bg-red-500 px-1 text-[10px] font-bold leading-none text-white',
             )}
           >
-            <span
-              className={cn(
-                'h-2 w-2 shrink-0 animate-pulse rounded-full',
-                'bg-[#059669] shadow-[0_0_0_4px_rgba(5,150,105,0.10)]',
-                'dark:bg-[#10b981] dark:shadow-[0_0_0_4px_rgba(16,185,129,0.14)]',
-              )}
-            />
-            Caja abierta
+            6
           </span>
-        )}
-
-        {/* Campana de notificaciones */}
-        <button
-          className={cn(
-            'relative grid h-10 w-10 shrink-0 cursor-pointer place-items-center rounded-xl',
-            'border border-[#e3e8ee] bg-white text-[#5a687a] transition-all duration-150',
-            'hover:border-[#d5dce4] hover:bg-[#f1f4f7] hover:text-[#16202c]',
-            'dark:border-[#212b37] dark:bg-[#121821] dark:text-[#a6b0bf]',
-            'dark:hover:border-[#2b3745] dark:hover:bg-[#181f2a] dark:hover:text-[#e8ecf2]',
-          )}
-          aria-label="Notificaciones"
-        >
-          <Bell size={19} />
         </button>
 
-        {/* Toggle de tema */}
+        {/* Configuración → abre el panel lateral derecho */}
         <button
-          onClick={toggleTheme}
-          aria-label="Cambiar tema"
+          onClick={toggleRightSidebar}
+          aria-label="Abrir panel lateral"
           className={cn(
-            'grid h-10 w-10 shrink-0 cursor-pointer place-items-center rounded-xl',
-            'border border-[#e3e8ee] bg-[#f8fafc] text-[#5a687a] transition-all duration-150',
-            'hover:border-[#d5dce4] hover:bg-[#f1f4f7] hover:text-[#16202c]',
-            'dark:border-[#212b37] dark:bg-[#181f2a] dark:text-[#a6b0bf]',
-            'dark:hover:border-[#2b3745] dark:hover:bg-[#1e2733] dark:hover:text-[#e8ecf2]',
+            'grid h-10 w-10 place-items-center rounded-xl',
+            'border border-slate-700/60 bg-slate-800/40 text-slate-300',
+            'transition-colors duration-150 hover:bg-slate-800/60 hover:text-white',
           )}
         >
-          {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+          <Settings size={18} />
         </button>
       </div>
     </header>

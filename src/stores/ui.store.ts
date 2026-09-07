@@ -6,10 +6,14 @@ type UIState = {
   theme: Theme
   /** Identificador del modal globalmente abierto (null = ninguno) */
   activeModal: string | null
+  /** Estado del sidebar/drawer colapsable desde la derecha */
+  isRightSidebarOpen: boolean
   setTheme: (theme: Theme) => void
   toggleTheme: () => void
   openModal: (id: string) => void
   closeModal: () => void
+  toggleRightSidebar: () => void
+  closeRightSidebar: () => void
 }
 
 function applyTheme(theme: Theme) {
@@ -21,6 +25,7 @@ function applyTheme(theme: Theme) {
 export const useUIStore = create<UIState>((set, get) => ({
   theme: 'dark',
   activeModal: null,
+  isRightSidebarOpen: false,
   setTheme: (theme) => {
     applyTheme(theme)
     set({ theme })
@@ -32,4 +37,6 @@ export const useUIStore = create<UIState>((set, get) => ({
   },
   openModal: (id) => set({ activeModal: id }),
   closeModal: () => set({ activeModal: null }),
+  toggleRightSidebar: () => set((state) => ({ isRightSidebarOpen: !state.isRightSidebarOpen })),
+  closeRightSidebar: () => set({ isRightSidebarOpen: false }),
 }))
