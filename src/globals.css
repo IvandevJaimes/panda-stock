@@ -6,14 +6,11 @@
   --color-primary: #10b981;
   --color-primary-hover: #059669;
   --color-secondary: #1e2733;
+  --font-sans: 'Nunito Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Rubik', ui-sans-serif, system-ui, sans-serif;
 }
 
-:root {
-  --font-sans: 'Nunito Sans', system-ui, sans-serif;
-  --font-display: 'Rubik', system-ui, sans-serif;
-}
-
-*{
+* {
   user-select: none;
 }
 

@@ -1,30 +1,36 @@
 import { Outlet } from 'react-router-dom'
 import { useTheme } from '../../hooks/useTheme'
 import { Header } from './Header'
-import { Navigation } from './Navigation'
+import { Sidebar } from './Sidebar'
 
+/**
+ * Layout principal de la aplicación.
+ * Estructura: Sidebar fijo lateral + columna principal (Header + contenido con scroll independiente).
+ * Los glows decorativos replican el fondo de la plantilla.
+ */
 export function AppLayout() {
   useTheme()
 
   return (
-    <div className="flex h-screen w-full bg-white text-gray-900 dark:bg-[#0b0f14] dark:text-gray-50">
-      <aside className="flex h-full w-60 shrink-0 flex-col border-r border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
-        <div className="flex h-14 items-center border-b border-gray-200 px-6 dark:border-gray-800">
-          <span className="font-display text-lg font-bold text-primary">
-            PANDA
-          </span>
-          <span className="font-display text-lg font-light text-gray-400 dark:text-gray-500">
-            STOCK
-          </span>
-        </div>
-        <Navigation />
-      </aside>
-      <main className="flex h-full min-w-0 flex-1 flex-col">
-        <Header />
-        <div className="flex-1 overflow-auto p-6">
-          <Outlet />
-        </div>
-      </main>
+    <div className="relative flex h-screen w-full overflow-hidden bg-[#f4f6f8] text-[#16202c] dark:bg-[#0b0f14] dark:text-[#e8ecf2]">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-y-0 right-0 w-[900px] bg-[radial-gradient(900px_500px_at_85%_-10%,rgba(5,150,105,0.06),transparent_60%)] dark:bg-[radial-gradient(900px_500px_at_85%_-10%,rgba(16,185,129,0.07),transparent_60%)]"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-y-0 left-0 w-[700px] bg-[radial-gradient(700px_420px_at_-10%_0%,rgba(37,99,235,0.05),transparent_55%)] dark:bg-[radial-gradient(700px_420px_at_-10%_0%,rgba(96,165,250,0.05),transparent_55%)]"
+      />
+
+      <div className="relative z-10 flex h-full w-full min-w-0">
+        <Sidebar />
+        <main className="flex h-full min-w-0 flex-1 flex-col">
+          <Header />
+          <div className="flex-1 overflow-auto p-6">
+            <Outlet />
+          </div>
+        </main>
+      </div>
     </div>
   )
 }
