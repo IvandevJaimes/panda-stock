@@ -2,6 +2,14 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+@utility scrollbar-none {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge legacy */
+  &::-webkit-scrollbar {
+    display: none; /* Chromium/WebKit */
+  }
+}
+
 @theme {
   --color-primary: #10b981;
   --color-primary-hover: #059669;

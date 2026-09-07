@@ -18,6 +18,7 @@ import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui/Input";
 import { KpiCard } from "../../components/ui/KpiCard";
 import { Pagination } from "../../components/ui/Pagination";
+import { Pill } from "../../components/ui/Pill";
 import {
   ProductCard,
   type ProductStatus,
@@ -375,6 +376,7 @@ export function InventoryPage() {
   const [busqueda, setBusqueda] = useState("");
   const [activeKpiFilter, setActiveKpiFilter] = useState<KpiFilter>("all");
   const [paginaActual, setPaginaActual] = useState(1);
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
 
   const handleKpiClick = (filter: KpiFilter) => {
     setActiveKpiFilter((prev) => {
@@ -384,13 +386,25 @@ export function InventoryPage() {
     });
   };
 
-  const hayFiltroActivo = busqueda.trim() !== "" || activeKpiFilter !== "all";
+  const hayFiltroActivo =
+    busqueda.trim() !== "" ||
+    activeKpiFilter !== "all" ||
+    selectedCategory !== "all";
 
   const limpiarFiltros = () => {
     setBusqueda("");
     setActiveKpiFilter("all");
+    setSelectedCategory("all");
     setPaginaActual(1);
   };
+
+  const categorias = useMemo(
+    () =>
+      Array.from(new Set(stockMock.map((p) => p.category))).sort((a, b) =>
+        a.localeCompare(b, "es"),
+      ),
+    [],
+  );
 
   const filasFiltradas = useMemo(() => {
     const texto = normalizar(busqueda.trim());
@@ -398,6 +412,9 @@ export function InventoryPage() {
       !texto ||
       normalizar(p.name).includes(texto) ||
       normalizar(p.category).includes(texto);
+
+    const coincideCategoria = (p: ProductoInventario) =>
+      selectedCategory === "all" || p.category === selectedCategory;
 
     const coincideKpi = (p: ProductoInventario) => {
       switch (activeKpiFilter) {
@@ -414,10 +431,15 @@ export function InventoryPage() {
       }
     };
 
-    return stockMock.filter((p) => coincideTexto(p) && coincideKpi(p));
-  }, [busqueda, activeKpiFilter]);
+    return stockMock.filter(
+      (p) => coincideTexto(p) && coincideCategoria(p) && coincideKpi(p),
+    );
+  }, [busqueda, selectedCategory, activeKpiFilter]);
 
-  const totalPaginas = Math.max(1, Math.ceil(filasFiltradas.length / PAGE_SIZE));
+  const totalPaginas = Math.max(
+    1,
+    Math.ceil(filasFiltradas.length / PAGE_SIZE),
+  );
   const paginaSegura = Math.min(paginaActual, totalPaginas);
   const filasPagina = filasFiltradas.slice(
     (paginaSegura - 1) * PAGE_SIZE,
@@ -512,8 +534,46 @@ export function InventoryPage() {
         />
       </div>
 
+      {/* ── Barra de categorías ── */}
+      <div className="mt-2 flex w-full items-center gap-1.5 overflow-x-auto pb-1.5 select-none scrollbar-none">
+        <Tooltip content="Nueva categoría" placement="top">
+          <button
+            type="button"
+            onClick={() => toast.info("Nueva categoría en desarrollo")}
+            aria-label="Nueva categoría"
+            className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full border border-dashed border-slate-300 text-slate-500 transition-colors select-none hover:border-emerald-500 hover:bg-emerald-50/50 hover:text-emerald-600 dark:border-slate-700 dark:text-slate-400 dark:hover:border-emerald-500 dark:hover:bg-emerald-950/20 dark:hover:text-emerald-400"
+          >
+            <Plus className="h-4 w-4" />
+          </button>
+        </Tooltip>
+<Pill
+          label="Todas"
+          active={selectedCategory === "all"}
+          showActions={false}
+          onSelect={() => {
+            setSelectedCategory("all");
+            setPaginaActual(1);
+          }}
+        />
+        {categorias.map((categoria) => (
+          <Pill
+            key={categoria}
+            label={categoria}
+            active={selectedCategory === categoria}
+            onSelect={() => {
+              setSelectedCategory((prev) =>
+                prev === categoria ? "all" : categoria,
+              );
+              setPaginaActual(1);
+            }}
+            onEdit={() => toast.info(`Editar categoría "${categoria}" en desarrollo`)}
+            onDelete={() => toast.info(`Eliminar categoría "${categoria}" en desarrollo`)}
+          />
+        ))}
+      </div>
+
       {/* ── Barra de herramientas ── */}
-      <div className="mt-3 flex flex-col items-stretch justify-between gap-3 lg:flex-row lg:items-center">
+      <div className="mt-1 flex flex-col items-stretch justify-between gap-3 lg:flex-row lg:items-center">
         {/* GRUPO BÚSQUEDA: siempre juntos, ancho completo en todos los breakpoints */}
         <div className="flex shrink-0 items-center gap-1.5 lg:flex-1">
           <Input
