@@ -1,53 +1,99 @@
-import { useEffect, type ReactNode } from 'react'
-import { X } from 'lucide-react'
+import { useEffect, type ReactNode } from "react";
+import { X } from "lucide-react";
+import { cn } from "../../lib/cn";
 
-type ModalProps = {
-  open: boolean
-  onClose: () => void
-  title?: string
-  children: ReactNode
+export interface ModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  title?: string;
+  children: ReactNode;
+  className?: string;
+  maxWidth?: "sm" | "md" | "lg" | "xl" | "2xl";
 }
 
-export function Modal({ open, onClose, title, children }: ModalProps) {
-  useEffect(() => {
-    if (!open) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [open, onClose])
+const maxWidthClasses = {
+  sm: "max-w-sm",
+  md: "max-w-md",
+  lg: "max-w-lg",
+  xl: "max-w-xl",
+  "2xl": "max-w-2xl",
+} as const;
 
-  if (!open) return null
+export function Modal({
+  isOpen,
+  onClose,
+  title,
+  children,
+  className,
+  maxWidth = "md",
+}: ModalProps) {
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+
+    // 1. Fallback estándar para el body
+    document.body.classList.add("overflow-hidden");
+
+    // 2. Congelar el contenedor interno real del layout
+    const scrollContainer = document.getElementById("main-layout-scroll");
+    if (scrollContainer) {
+      scrollContainer.classList.add("!overflow-hidden");
+    }
+
+    document.addEventListener("keydown", onKey);
+
+    return () => {
+      document.body.classList.remove("overflow-hidden");
+      if (scrollContainer) {
+        scrollContainer.classList.remove("!overflow-hidden");
+      }
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [isOpen, onClose]);
+
+  if (!isOpen) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      role="dialog"
-      aria-modal="true"
-    >
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+      {/* Overlay */}
       <div
-        className="absolute inset-0 bg-black/50"
+        className="absolute inset-0 bg-black/40 backdrop-blur-xs animate-entry-fade"
         onClick={onClose}
         aria-hidden="true"
       />
-      <div className="relative w-full max-w-lg rounded-lg border border-gray-200 bg-white p-6 shadow-lg dark:border-gray-800 dark:bg-gray-900">
-        <div className="mb-4 flex items-center justify-between">
+
+      {/* Contenedor del Modal */}
+      <div
+        className={cn(
+          "relative w-full flex max-h-[90vh] flex-col rounded-2xl border border-slate-200 bg-white shadow-xl dark:border-slate-800 dark:bg-[#111827] animate-entry-up",
+          maxWidthClasses[maxWidth],
+          className,
+        )}
+        role="dialog"
+        aria-modal="true"
+      >
+        {/* Cabecera */}
+        <div className="flex shrink-0 items-center border-b border-slate-100 px-6 py-4 dark:border-slate-800/60">
           {title && (
-            <h3 className="font-display text-lg font-semibold text-gray-900 dark:text-gray-50">
+            <h2 className="font-display text-lg font-semibold text-slate-900 dark:text-white">
               {title}
-            </h3>
+            </h2>
           )}
           <button
             onClick={onClose}
-            className="cursor-pointer rounded-md p-1 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
-            aria-label="Cerrar"
+            className="ml-auto -mr-2 cursor-pointer rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+            aria-label="Cerrar modal"
           >
-            <X size={18} />
+            <X className="h-4 w-4" />
           </button>
         </div>
-        {children}
+
+        {/* Contenido scrolleable */}
+        <div className="custom-scrollbar overflow-y-auto p-6">{children}</div>
       </div>
     </div>
-  )
+  );
 }

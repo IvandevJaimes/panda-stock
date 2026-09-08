@@ -15,7 +15,11 @@ import {
 import { toast } from "sonner";
 import { cn } from "../../lib/cn";
 import { Button } from "../../components/ui/Button";
+import { ConfirmModal } from "../../components/ui/ConfirmModal";
+import { CreateCategoryModal } from "../../components/inventory/CreateCategoryModal";
+import { EditCategoryModal } from "../../components/inventory/EditCategoryModal";
 import { EmptyState } from "../../components/ui/EmptyState";
+import { useCategories } from "../../hooks/useCategories";
 import { Input } from "../../components/ui/Input";
 import { KpiCard } from "../../components/ui/KpiCard";
 import { Pagination } from "../../components/ui/Pagination";
@@ -25,6 +29,7 @@ import {
   type ProductStatus,
 } from "../../components/ui/ProductCard";
 import { Tooltip } from "../../components/ui/Tooltip";
+import type { Categoria } from "../../../electron/db/types";
 
 type KpiFilter =
   | "all"
@@ -378,6 +383,11 @@ export function InventoryPage() {
   const [activeKpiFilter, setActiveKpiFilter] = useState<KpiFilter>("all");
   const [paginaActual, setPaginaActual] = useState(1);
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [isCreateCategoryOpen, setIsCreateCategoryOpen] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<Categoria | null>(null);
+  const [deletingCategory, setDeletingCategory] = useState<Categoria | null>(null);
+  const { categories, addCategory, updateCategory, removeCategory } =
+    useCategories();
 
   const handleKpiClick = (filter: KpiFilter) => {
     setActiveKpiFilter((prev) => {
@@ -399,14 +409,6 @@ export function InventoryPage() {
     setPaginaActual(1);
   };
 
-  const categorias = useMemo(
-    () =>
-      Array.from(new Set(stockMock.map((p) => p.category))).sort((a, b) =>
-        a.localeCompare(b, "es"),
-      ),
-    [],
-  );
-
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     stockMock.forEach((p) => {
@@ -425,8 +427,13 @@ export function InventoryPage() {
       normalizar(p.name).includes(texto) ||
       normalizar(p.category).includes(texto);
 
-    const coincideCategoria = (p: ProductoInventario) =>
-      selectedCategory === "all" || p.category === selectedCategory;
+    const coincideCategoria = (p: ProductoInventario) => {
+      if (selectedCategory === "all") return true;
+      const catSel = categories.find(
+        (c) => String(c.id) === selectedCategory,
+      );
+      return catSel ? p.category === catSel.nombre : false;
+    };
 
     const coincideKpi = (p: ProductoInventario) => {
       switch (activeKpiFilter) {
@@ -446,7 +453,7 @@ export function InventoryPage() {
     return stockMock.filter(
       (p) => coincideTexto(p) && coincideCategoria(p) && coincideKpi(p),
     );
-  }, [busqueda, selectedCategory, activeKpiFilter]);
+  }, [busqueda, selectedCategory, activeKpiFilter, categories]);
 
   const totalPaginas = Math.max(
     1,
@@ -559,7 +566,7 @@ export function InventoryPage() {
             <Tooltip content="Crear una nueva categoría" placement="top">
               <button
                 type="button"
-                onClick={() => toast.info("Nueva categoría en desarrollo")}
+                onClick={() => setIsCreateCategoryOpen(true)}
                 aria-label="Nueva categoría"
                 className={cn(
                   "h-8 px-3 rounded-full text-xs font-semibold shrink-0 select-none",
@@ -592,24 +599,29 @@ export function InventoryPage() {
                 setPaginaActual(1);
               }}
             />
-            {categorias.map((categoria) => (
+            {categories.map((categoria) => (
               <Pill
-                key={categoria}
-                label={categoria}
-                count={categoryCounts[categoria] || 0}
-                active={selectedCategory === categoria}
+                key={categoria.id}
+                label={categoria.nombre}
+                count={categoryCounts[categoria.nombre] || 0}
+                active={selectedCategory === String(categoria.id)}
                 onSelect={() => {
                   setSelectedCategory((prev) =>
-                    prev === categoria ? "all" : categoria,
+                    prev === String(categoria.id) ? "all" : String(categoria.id),
                   );
                   setPaginaActual(1);
                 }}
-                onEdit={() =>
-                  toast.info(`Editar categoría "${categoria}" en desarrollo`)
-                }
-                onDelete={() =>
-                  toast.info(`Eliminar categoría "${categoria}" en desarrollo`)
-                }
+                onEdit={() => setEditingCategory(categoria)}
+                onDelete={() => {
+                  const count = categoryCounts[categoria.nombre] || 0;
+                  if (count > 0) {
+                    toast.error(
+                      `No podés eliminar "${categoria.nombre}" porque tiene ${count} ${count === 1 ? "producto asociado" : "productos asociados"}. Reasignalos o eliminalos primero.`,
+                    );
+                    return;
+                  }
+                  setDeletingCategory(categoria);
+                }}
               />
             ))}
             <div
@@ -752,6 +764,54 @@ export function InventoryPage() {
           </div>
         </div>
       )}
+
+      <CreateCategoryModal
+        isOpen={isCreateCategoryOpen}
+        onClose={() => setIsCreateCategoryOpen(false)}
+        categories={categories}
+        onSuccess={(newCategory) => {
+          addCategory(newCategory);
+          setSelectedCategory(String(newCategory.id));
+          toast.success(`Categoría "${newCategory.nombre}" creada`);
+        }}
+      />
+
+      <EditCategoryModal
+        isOpen={editingCategory !== null}
+        onClose={() => setEditingCategory(null)}
+        category={editingCategory}
+        categories={categories}
+        onSuccess={(updatedCategory) => {
+          updateCategory(updatedCategory);
+          setEditingCategory(null);
+          toast.success(`Categoría "${updatedCategory.nombre}" actualizada`);
+        }}
+      />
+
+      <ConfirmModal
+        isOpen={deletingCategory !== null}
+        onClose={() => setDeletingCategory(null)}
+        onConfirm={async () => {
+          if (!deletingCategory) return;
+          try {
+            await removeCategory(deletingCategory.id);
+            if (selectedCategory === String(deletingCategory.id)) {
+              setSelectedCategory("all");
+              setPaginaActual(1);
+            }
+            toast.success(`Categoría "${deletingCategory.nombre}" eliminada`);
+          } catch (error) {
+            toast.error(
+              error instanceof Error
+                ? error.message
+                : "No se pudo eliminar la categoría",
+            );
+            throw error;
+          }
+        }}
+        title="Eliminar categoría"
+        description={`¿Estás seguro de que deseas eliminar la categoría "${deletingCategory?.nombre}"? Esta acción no se puede deshacer.`}
+      />
     </div>
   );
 }

@@ -55,8 +55,8 @@ h6 {
 
 * {
   ::-webkit-scrollbar {
-    width: 5px;
-    height: 7px;
+    width: 3px;
+    height: 5px;
     cursor: pointer;
   }
 
@@ -123,6 +123,26 @@ h6 {
   will-change: opacity;
 }
 
+@keyframes shakeError {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20%,
+  60% {
+    transform: translateX(-4px);
+  }
+  40%,
+  80% {
+    transform: translateX(4px);
+  }
+}
+
+.animate-shake {
+  animation: shakeError 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+  will-change: transform;
+}
+
 /* Stagger delays para listas y grillas */
 .stagger-1 {
   animation-delay: 30ms;
@@ -142,7 +162,8 @@ h6 {
 
 @media (prefers-reduced-motion: reduce) {
   .animate-entry-up,
-  .animate-entry-fade {
+  .animate-entry-fade,
+  .animate-shake {
     animation: none !important;
     transform: none !important;
     opacity: 1 !important;

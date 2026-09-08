@@ -7,7 +7,7 @@ import { createHash } from "node:crypto";
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
-import { and, asc, desc, eq, gt, gte, isNotNull, like, lte, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, gte, isNotNull, like, lte, or, sql } from "drizzle-orm";
 import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 //#region \0rolldown/runtime.js
 var __defProp = Object.defineProperty;
@@ -219,7 +219,9 @@ function updateCategoria(id, nombre) {
 	getDb().update(categorias).set({ nombre }).where(eq(categorias.id, id)).run();
 }
 function deleteCategoria(id) {
-	getDb().update(categorias).set({ activo: false }).where(eq(categorias.id, id)).run();
+	const productosAsociados = getDb().select({ count: count() }).from(productos).where(eq(productos.categoriaId, id)).get();
+	if (productosAsociados && productosAsociados.count > 0) throw new Error("No se puede eliminar la categoría porque tiene productos asociados.");
+	getDb().delete(categorias).where(eq(categorias.id, id)).run();
 }
 function getMarcas() {
 	return getDb().select().from(marcas).orderBy(asc(marcas.nombre)).all();

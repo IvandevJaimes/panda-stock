@@ -1,6 +1,7 @@
 import {
   and,
   asc,
+  count,
   desc,
   eq,
   gt,
@@ -123,9 +124,18 @@ export function updateCategoria(id: number, nombre: string): void {
 }
 
 export function deleteCategoria(id: number): void {
+  const productosAsociados = getDb()
+    .select({ count: count() })
+    .from(productos)
+    .where(eq(productos.categoriaId, id))
+    .get()
+
+  if (productosAsociados && productosAsociados.count > 0) {
+    throw new Error('No se puede eliminar la categoría porque tiene productos asociados.')
+  }
+
   getDb()
-    .update(categorias)
-    .set({ activo: false })
+    .delete(categorias)
     .where(eq(categorias.id, id))
     .run()
 }
