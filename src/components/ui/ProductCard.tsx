@@ -23,6 +23,7 @@ export interface ProductCardProps {
   onEdit?: () => void;
   onDelete?: () => void;
   className?: string;
+  style?: React.CSSProperties;
 }
 
 const statusStyles: Record<ProductStatus, string> = {
@@ -49,6 +50,7 @@ export function ProductCard({
   onEdit,
   onDelete,
   className,
+  style,
 }: ProductCardProps) {
   const maxReference = Math.max(minStock * 2, 20);
   const stockPercentage = Math.round((stock / maxReference) * 100);
@@ -75,8 +77,9 @@ export function ProductCard({
 
   return (
     <div
+      style={style}
       className={cn(
-        "w-full h-14 sm:h-16 px-3 sm:px-4 rounded-2xl cursor-pointer border transition-colors duration-150 select-none shadow-xs overflow-hidden",
+        "w-full h-14 sm:h-16 px-3 sm:px-4 rounded-2xl cursor-pointer border transition-colors duration-150 select-none shadow-xs overflow-hidden animate-entry-up",
         "grid grid-cols-[1fr_auto_1fr] min-w-0 items-center gap-3 sm:gap-4",
         statusStyles[resolvedStatus] || statusStyles.normal,
         className,
@@ -100,7 +103,7 @@ export function ProductCard({
       </div>
 
       {/* 2. Centro: Columna de stock con ancho fijo, exactamente en el centro geométrico */}
-      <div className="flex w-36 shrink-0 flex-col justify-center gap-1 px-1 md:w-56">
+      <div className="flex w-36 shrink-0 flex-col justify-center gap-1 px-1 md:w-40">
         <div className="flex items-center justify-between text-[10px] leading-none sm:text-[11px]">
           <span className="hidden text-slate-400 md:inline dark:text-slate-500">
             Stock
@@ -114,7 +117,10 @@ export function ProductCard({
           </span>
         </div>
         <div className="w-full min-w-0">
-          <ProgressBar value={stock === 0 ? 0 : stockPercentage} variant={stockVariant} />
+          <ProgressBar
+            value={stock === 0 ? 0 : stockPercentage}
+            variant={stockVariant}
+          />
         </div>
       </div>
 

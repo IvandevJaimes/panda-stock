@@ -10,6 +10,8 @@ export type PillProps = {
   onEdit?: () => void;
   onDelete?: () => void;
   className?: string;
+  /** Cantidad de productos asociados. Si se define, se muestra un badge numérico. */
+  count?: number;
 };
 
 export function Pill({
@@ -20,6 +22,7 @@ export function Pill({
   onEdit,
   onDelete,
   className,
+  count,
 }: PillProps) {
   return (
     <div
@@ -49,6 +52,19 @@ export function Pill({
       )}
     >
       <span className="whitespace-nowrap">{label}</span>
+
+      {count !== undefined && (
+        <span
+          className={cn(
+            "ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold transition-colors leading-none",
+            active
+              ? "bg-emerald-400/50 text-emerald-50"
+              : "bg-slate-200/80 text-slate-500 group-hover:bg-slate-300/80 dark:bg-slate-700/80 dark:text-slate-400 dark:group-hover:bg-slate-600/80",
+          )}
+        >
+          {count}
+        </span>
+      )}
 
       {showActions && (
         <div className="flex items-center gap-2 max-w-0 overflow-hidden   opacity-0 transition-all duration-200 ease-out group-hover:ml-1.5 group-hover:max-w-16 group-hover:opacity-100">

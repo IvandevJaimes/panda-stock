@@ -16,6 +16,8 @@ type KpiCardProps = {
   isActive?: boolean;
   /** Color del anillo y borde cuando está activa */
   activeColor?: ActiveColor;
+  /** Clases extra aplicadas a la raíz de la card */
+  className?: string;
 };
 
 const activeStyles: Record<ActiveColor, string> = {
@@ -36,6 +38,7 @@ export function KpiCard({
   onClick,
   isActive = false,
   activeColor = "emerald",
+  className,
 }: KpiCardProps) {
   const contenido = (
     <div className="flex items-center gap-3">
@@ -67,10 +70,11 @@ export function KpiCard({
   );
 
   const baseClases = cn(
-    "rounded-2xl border border-slate-200 bg-white p-3.5 text-left shadow-xs dark:border-slate-800/80 dark:bg-[#111827] sm:p-4",
+    "w-full rounded-2xl border border-slate-200 bg-white p-3.5 text-left shadow-xs dark:border-slate-800/80 dark:bg-[#111827] sm:p-4",
     onClick &&
       "cursor-pointer transition-all duration-150 hover:border-slate-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:hover:border-slate-700",
     isActive && activeStyles[activeColor],
+    className,
   );
 
   if (onClick) {

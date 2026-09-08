@@ -15,6 +15,7 @@ import {
 import { toast } from "sonner";
 import { cn } from "../../lib/cn";
 import { Button } from "../../components/ui/Button";
+import { EmptyState } from "../../components/ui/EmptyState";
 import { Input } from "../../components/ui/Input";
 import { KpiCard } from "../../components/ui/KpiCard";
 import { Pagination } from "../../components/ui/Pagination";
@@ -406,6 +407,17 @@ export function InventoryPage() {
     [],
   );
 
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    stockMock.forEach((p) => {
+      if (p.category) {
+        counts[p.category] = (counts[p.category] || 0) + 1;
+      }
+    });
+    return counts;
+  }, []);
+  const totalProducts = stockMock.length;
+
   const filasFiltradas = useMemo(() => {
     const texto = normalizar(busqueda.trim());
     const coincideTexto = (p: ProductoInventario) =>
@@ -487,8 +499,9 @@ export function InventoryPage() {
       </div>
 
       {/* ── KPIs ── */}
-      <div className="mt-2 grid grid-cols-2 gap-2.5 sm:gap-3.5 xl:grid-cols-4">
+      <div className="mt-2 grid grid-cols-2 gap-2.5 sm:gap-3.5 lg:grid-cols-4">
         <KpiCard
+          className="animate-entry-up stagger-1"
           icon={<AlertTriangle className="h-4 w-4 sm:h-4.5 sm:w-4.5" />}
           iconBgClass="bg-amber-100 text-amber-600 dark:bg-amber-950/50 dark:text-amber-400"
           title="Stock bajo"
@@ -500,6 +513,7 @@ export function InventoryPage() {
           activeColor="amber"
         />
         <KpiCard
+          className="animate-entry-up stagger-2"
           icon={<Clock className="h-4 w-4 sm:h-4.5 sm:w-4.5" />}
           iconBgClass="bg-amber-100 text-amber-600 dark:bg-amber-950/50 dark:text-amber-400"
           title="Por vencer"
@@ -511,6 +525,7 @@ export function InventoryPage() {
           activeColor="amber"
         />
         <KpiCard
+          className="animate-entry-up stagger-3"
           icon={<PackageX className="h-4 w-4 sm:h-4.5 sm:w-4.5" />}
           iconBgClass="bg-red-100 text-red-600 border border-red-200 dark:bg-red-950/60 dark:text-red-400 dark:border-red-900/60"
           title="Agotados"
@@ -522,6 +537,7 @@ export function InventoryPage() {
           activeColor="red"
         />
         <KpiCard
+          className="animate-entry-up stagger-4"
           icon={<XCircle className="h-4 w-4 sm:h-4.5 sm:w-4.5" />}
           iconBgClass="bg-red-100 text-red-600 border border-red-200 dark:bg-red-950/60 dark:text-red-400 dark:border-red-900/60"
           title="Vencidos"
@@ -535,7 +551,7 @@ export function InventoryPage() {
       </div>
 
       {/* ── Contenedor sticky: categorías + toolbar se anclan al top al scrollear ── */}
-      <div className="sticky top-0 z-20 flex w-full flex-col gap-2.5 border-b border-slate-200/80 bg-[#f4f6f8] pt-3 pb-3 transition-colors select-none relative after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-3 after:bg-gradient-to-b after:from-slate-900/10 after:to-transparent after:content-[''] dark:border-slate-800/60 dark:bg-[#0b0f17] dark:after:from-black/45">
+      <div className="sticky top-0 z-20 flex w-full min-w-0 flex-col gap-2.5 border-b border-slate-200/80 bg-[#f4f6f8] pt-3 pb-3 transition-colors select-none relative after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-3 after:bg-gradient-to-b after:from-slate-900/10 after:to-transparent after:content-[''] dark:border-slate-800/60 dark:bg-[#0b0f17] dark:after:from-black/45">
         {/* ── Barra de categorías: anclaje fijo + carrusel desplazable ── */}
         <div className="flex w-full items-center select-none">
           {/* 1. Anclaje fijo: botón Nueva + separador + fondo opaco + máscara degradada */}
@@ -562,12 +578,6 @@ export function InventoryPage() {
               className="mx-2.5 h-4 w-px shrink-0 bg-slate-300 dark:bg-slate-700/60"
               aria-hidden="true"
             />
-
-            {/* Máscara degradada: las pills se desvanecen suavemente bajo el anclaje */}
-            <div
-              className="pointer-events-none absolute inset-y-0 -right-2 w-2 bg-gradient-to-r from-[#f4f6f8] via-[#f4f6f8]/70 to-transparent dark:from-[#0b0f17] dark:via-[#0b0f17]/70"
-              aria-hidden="true"
-            />
           </div>
 
           {/* 2. Carrusel desplazable: Todas + categorías */}
@@ -576,6 +586,7 @@ export function InventoryPage() {
               label="Todas"
               active={selectedCategory === "all"}
               showActions={false}
+              count={totalProducts}
               onSelect={() => {
                 setSelectedCategory("all");
                 setPaginaActual(1);
@@ -585,6 +596,7 @@ export function InventoryPage() {
               <Pill
                 key={categoria}
                 label={categoria}
+                count={categoryCounts[categoria] || 0}
                 active={selectedCategory === categoria}
                 onSelect={() => {
                   setSelectedCategory((prev) =>
@@ -592,18 +604,25 @@ export function InventoryPage() {
                   );
                   setPaginaActual(1);
                 }}
-                onEdit={() => toast.info(`Editar categoría "${categoria}" en desarrollo`)}
-                onDelete={() => toast.info(`Eliminar categoría "${categoria}" en desarrollo`)}
+                onEdit={() =>
+                  toast.info(`Editar categoría "${categoria}" en desarrollo`)
+                }
+                onDelete={() =>
+                  toast.info(`Eliminar categoría "${categoria}" en desarrollo`)
+                }
               />
             ))}
-            <div className="w-6 shrink-0 pointer-events-none" aria-hidden="true" />
+            <div
+              className="w-6 shrink-0 pointer-events-none"
+              aria-hidden="true"
+            />
           </div>
         </div>
 
         {/* ── Barra de herramientas ── */}
-        <div className="flex flex-col items-stretch justify-between gap-3 lg:flex-row lg:items-center">
+        <div className="flex pt-0.5 w-full min-w-0 flex-col items-stretch justify-between gap-3 lg:flex-row lg:items-center">
           {/* GRUPO BÚSQUEDA: siempre juntos, ancho completo en todos los breakpoints */}
-          <div className="flex shrink-0 items-center gap-1.5 lg:flex-1">
+          <div className="flex min-w-0 flex-1 shrink-0 items-center gap-1.5 lg:flex-1">
             <Input
               value={busqueda}
               onChange={(e) => {
@@ -613,7 +632,7 @@ export function InventoryPage() {
               placeholder="Buscar producto…"
               leftIcon={<Search size={16} />}
               className="w-full"
-              wrapperClassName="flex-1 min-w-0"
+              wrapperClassName="flex-1 min-w-[240px]"
               aria-label="Buscar producto"
               rightAction={
                 busqueda.length > 0 ? (
@@ -632,7 +651,9 @@ export function InventoryPage() {
               }
             />
             <Tooltip
-              content={hayFiltroActivo ? "Limpiar todos los filtros" : undefined}
+              content={
+                hayFiltroActivo ? "Limpiar todos los filtros" : undefined
+              }
               placement="top"
             >
               <button
@@ -682,24 +703,24 @@ export function InventoryPage() {
 
       {/* ── Cuadrícula de productos ── */}
       {filasFiltradas.length === 0 ? (
-        <div className="mt-6 flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-14 text-center dark:border-slate-800 dark:bg-[#111827]">
-          <span className="grid h-12 w-12 place-items-center rounded-xl bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500">
-            <Boxes size={22} />
-          </span>
-          <div>
-            <p className="font-display text-sm font-bold text-slate-900 dark:text-white">
-              No se encontraron productos
-            </p>
-            <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
-              Probá con otra búsqueda o limpiá los filtros.
-            </p>
-          </div>
-        </div>
+        <EmptyState
+          icon={<Boxes className="h-12 w-12 stroke-[1.5]" />}
+          title="No se encontraron productos"
+          description="No hay productos que coincidan con tu búsqueda o filtros actuales. Probá con otra búsqueda o limpiá los filtros."
+          action={
+            hayFiltroActivo ? (
+              <Button variant="outline" onClick={limpiarFiltros}>
+                Limpiar filtros
+              </Button>
+            ) : undefined
+          }
+        />
       ) : (
-        <div className="mt-2 flex w-full flex-col gap-2.5">
-          {filasPagina.map((producto) => (
+        <div className="mt-2 px-0.5 flex w-full min-w-0 flex-col gap-2.5">
+          {filasPagina.map((producto, index) => (
             <ProductCard
               key={producto.id}
+              style={{ animationDelay: index < 8 ? `${index * 20}ms` : "0ms" }}
               category={producto.category}
               name={producto.name}
               stock={producto.stock}

@@ -99,7 +99,7 @@ export function Header() {
             {isDark ? (
               <Sun className="h-5.5 w-5.5 text-amber-400" />
             ) : (
-              <Moon className="h-5.5 w-5.5 text-slate-700" />
+              <Moon className="h-5.5 w-5.5 text-blue-700" />
             )}
           </button>
         </Tooltip>
