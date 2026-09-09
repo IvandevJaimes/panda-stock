@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { AlertTriangle, Loader2 } from "lucide-react";
 import { Modal } from "./Modal";
 
@@ -23,9 +23,14 @@ export function ConfirmModal({
 }: ConfirmModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  useEffect(() => {
+  // Reset del estado al cerrar el modal: ajuste DURANTE el render (patrón oficial de
+  // React para sincronizar estado con cambios de props). Evita el setState en effect,
+  // que dispararía un render en cascada extra.
+  const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
+  if (prevIsOpen !== isOpen) {
+    setPrevIsOpen(isOpen);
     if (!isOpen) setIsSubmitting(false);
-  }, [isOpen]);
+  }
 
   const handleConfirm = async () => {
     setIsSubmitting(true);
