@@ -1,5 +1,4 @@
 import { Calendar, Pencil, Trash2 } from "lucide-react";
-import { ProgressBar } from "./ProgressBar";
 import { Tooltip } from "./Tooltip";
 import { TruncatedText } from "./TruncatedText";
 import { cn } from "../../lib/cn";
@@ -14,6 +13,8 @@ export type ProductStatus =
 
 export interface ProductCardProps {
   name: string;
+  variant?: string | null;
+  brand?: string;
   category: string;
   price: number;
   stock: number;
@@ -41,6 +42,8 @@ const statusStyles: Record<ProductStatus, string> = {
 
 export function ProductCard({
   name,
+  variant,
+  brand,
   category,
   price,
   stock,
@@ -52,13 +55,6 @@ export function ProductCard({
   className,
   style,
 }: ProductCardProps) {
-  const maxReference = Math.max(minStock * 2, 20);
-  const stockPercentage = Math.round((stock / maxReference) * 100);
-
-  // La barra mide únicamente inventario físico; el vencimiento nunca pinta la barra.
-  const stockVariant: "red" | "amber" | "emerald" =
-    stock === 0 ? "red" : stock <= minStock ? "amber" : "emerald";
-
   // Única fuente de verdad: el estado de vencimiento y su texto relativo
   // se derivan juntos de evaluateExpiry para que el badge y el tooltip
   // jamás se contradigan (misma regla, misma zona horaria local).
@@ -75,58 +71,73 @@ export function ProductCard({
   const isExpiryBadge =
     resolvedStatus === "expired" || resolvedStatus === "expiring_soon";
 
+  const subtitulo = brand ? `${brand} · ${category}` : category;
+
   return (
     <div
       style={style}
       className={cn(
         "w-full h-14 sm:h-16 px-3 sm:px-4 rounded-2xl cursor-pointer border transition-colors duration-150 select-none shadow-xs overflow-hidden animate-entry-up",
-        "grid grid-cols-[1fr_auto_1fr] min-w-0 items-center gap-3 sm:gap-4",
+        "grid grid-cols-[minmax(0,1fr)_auto] min-w-0 items-center gap-3 sm:gap-4",
         statusStyles[resolvedStatus] || statusStyles.normal,
         className,
       )}
     >
-      {/* 1. Izquierda: Textos (prioridad de espacio en móvil/ancho chico) */}
+      {/* 1. Izquierda: Información del producto (nombre, variante, precio, marca · categoría) */}
       <div className="flex min-w-0 flex-col justify-center">
         <div className="flex min-w-0 items-center gap-1.5">
           <TruncatedText
             text={name}
-            className="text-xs font-bold text-slate-900 sm:text-sm dark:text-white"
+            className="min-w-0 text-xs font-bold text-slate-900 sm:text-sm dark:text-white"
           />
-          <span className="shrink-0 font-display text-[11px] font-bold text-emerald-600 sm:text-xs dark:text-emerald-400">
+          {variant && (
+            <>
+              <span
+                aria-hidden
+                className="shrink-0 text-slate-400 dark:text-slate-500"
+              >
+                ·
+              </span>
+              <TruncatedText
+                text={variant}
+                className="min-w-0 text-[11px] font-medium text-slate-500 sm:text-xs dark:text-slate-400"
+              />
+            </>
+          )}
+          <span className="shrink-0 font-display text-[11px] font-semibold text-emerald-600 sm:text-xs dark:text-emerald-400">
             ${price.toFixed(2)}
           </span>
         </div>
-        <TruncatedText
-          text={category}
-          className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 sm:text-[11px] dark:text-slate-500"
-        />
-      </div>
-
-      {/* 2. Centro: Columna de stock con ancho fijo, exactamente en el centro geométrico */}
-      <div className="flex w-36 shrink-0 flex-col justify-center gap-1 px-1 md:w-40">
-        <div className="flex items-center justify-between text-[10px] leading-none sm:text-[11px]">
-          <span className="hidden text-slate-400 md:inline dark:text-slate-500">
-            Stock
-          </span>
-          <span className="font-semibold text-slate-800 dark:text-slate-200">
-            {stock}
-            <span className="text-[9px] font-normal text-slate-400 sm:text-[10px]">
-              {" "}
-              / {minStock}
-            </span>
-          </span>
-        </div>
-        <div className="w-full min-w-0">
-          <ProgressBar
-            value={stock === 0 ? 0 : stockPercentage}
-            variant={stockVariant}
+        <div className="mt-0.5 min-w-0">
+          <TruncatedText
+            text={subtitulo}
+            className="text-[10px] font-medium uppercase tracking-wider text-slate-400 sm:text-xs dark:text-slate-500"
           />
         </div>
       </div>
 
-      {/* 3. Derecha: Información (fecha + badge) y acciones ancladas a la derecha */}
-      <div className="flex min-w-0 items-center justify-end gap-2.5 sm:gap-3">
-        {/* Bloque de información: fecha y badge */}
+      {/* 2. Derecha: métricas y acciones agrupadas */}
+      <div className="flex min-w-0 items-center justify-end gap-4 sm:gap-6 md:gap-8">
+        {/* Bloque de stock: número destacado + mínimo */}
+        <div className="flex shrink-0 flex-col items-end justify-center gap-0.5">
+          <span
+            className={cn(
+              "text-sm font-semibold leading-none tabular-nums",
+              stock === 0
+                ? "text-red-600 dark:text-red-400"
+                : stock <= minStock
+                  ? "text-amber-600 dark:text-amber-400"
+                  : "text-slate-200 dark:text-slate-100",
+            )}
+          >
+            {stock}
+          </span>
+          <span className="text-[10px] font-normal leading-none text-slate-500 dark:text-slate-400 sm:text-[11px]">
+            {minStock > 0 ? `Mín. ${minStock}` : "Sin mínimo"}
+          </span>
+        </div>
+
+        {/* Bloque de vencimiento: fecha + badge */}
         <div className="flex shrink-0 items-center justify-end gap-2">
           {/* Fecha suelta: siempre visible en normal; se oculta en pantallas chicas si hay badge */}
           {expiresAt && expiry && (

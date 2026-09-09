@@ -37,12 +37,13 @@ function isoToDisplay(iso: string): string {
 }
 
 function displayToIso(display: string): string {
-  const match = display.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  // Acepta DD/MM/YYYY (8 dígitos) y DD/MM/YY (6 dígitos, año expandido a 20XX)
+  const match = display.match(/^(\d{2})\/(\d{2})\/(\d{2}|\d{4})$/);
   if (match) {
-    const [, d, m, y] = match;
+    const [, d, m, yRaw] = match;
     const day = parseInt(d, 10);
     const month = parseInt(m, 10);
-    const year = parseInt(y, 10);
+    const year = yRaw.length === 2 ? 2000 + parseInt(yRaw, 10) : parseInt(yRaw, 10);
 
     if (
       month >= 1 &&
@@ -58,7 +59,7 @@ function displayToIso(display: string): string {
         date.getMonth() === month - 1 &&
         date.getDate() === day
       ) {
-        return `${y}-${m}-${d}`;
+        return `${year}-${m}-${d}`;
       }
     }
   }
@@ -85,9 +86,11 @@ function parseToDate(val: string): Date | undefined {
     const date = new Date(y, m - 1, d);
     return isNaN(date.getTime()) ? undefined : date;
   }
-  if (/^\d{2}\/\d{2}\/\d{4}$/.test(val)) {
-    const [d, m, y] = val.split("/").map(Number);
-    const date = new Date(y, m - 1, d);
+  const match = val.match(/^(\d{2})\/(\d{2})\/(\d{2}|\d{4})$/);
+  if (match) {
+    const [, d, m, yRaw] = match;
+    const y = yRaw.length === 2 ? 2000 + parseInt(yRaw, 10) : parseInt(yRaw, 10);
+    const date = new Date(y, parseInt(m, 10) - 1, parseInt(d, 10));
     return isNaN(date.getTime()) ? undefined : date;
   }
   return undefined;
@@ -220,21 +223,22 @@ export const DateInput = React.forwardRef<HTMLInputElement, DateInputProps>(
 
       setDisplayValue(formatted);
 
-      if (digits.length === 8) {
-        const iso = displayToIso(formatted);
+      // Emitir SIEMPRE el valor efectivo (ISO válido o "") cuando cambia.
+      // Si solo se emitiera con 8 dígitos completos, el form podía quedar
+      // desincronizado respecto de lo visible y la fecha se perdía al enviar
+      // (vencimiento llegaba vacío a la BD aunque el campo mostraba la fecha).
+      const iso = displayToIso(formatted);
+      if (iso !== lastSyncedValueRef.current) {
         lastSyncedValueRef.current = iso;
         onChange?.(iso);
-      } else if (digits.length === 0) {
-        lastSyncedValueRef.current = "";
-        onChange?.("");
       }
     };
 
     const handleDaySelect = (selectedDay: Date | undefined) => {
       if (!selectedDay) {
-        setDisplayValue("");
-        lastSyncedValueRef.current = "";
-        onChange?.("");
+        // Clic sobre el día ya seleccionado: react-day-picker lo deselecciona
+        // (onSelect(undefined)). NO borramos la fecha puesta, solo cerramos
+        // el popover; para vaciarla se usa Backspace en el campo.
         setIsOpen(false);
         return;
       }

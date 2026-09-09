@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   Boxes,
@@ -30,7 +30,9 @@ import {
   type ProductStatus,
 } from "../../components/ui/ProductCard";
 import { Tooltip } from "../../components/ui/Tooltip";
-import type { Categoria } from "../../../electron/db/types";
+import { productosService } from "../../services/productos.service";
+import { marcasService } from "../../services/marcas.service";
+import type { Categoria, Marca, Producto } from "../../../electron/db/types";
 
 type KpiFilter =
   | "all"
@@ -42,6 +44,8 @@ type KpiFilter =
 type ProductoInventario = {
   id: number;
   name: string;
+  variant: string | null;
+  brand: string;
   category: string;
   price: number;
   cost: number;
@@ -51,316 +55,41 @@ type ProductoInventario = {
   status: "vencido" | "por-vencer" | "ok";
 };
 
-const stockMock: ProductoInventario[] = [
-  {
-    id: 1,
-    name: "Shampoo Dove",
-    category: "Cuidado capilar",
-    price: 48,
-    cost: 30,
-    stock: 25,
-    minStock: 10,
-    expiresAt: "2027-01-15",
-    status: "ok",
-  },
-  {
-    id: 2,
-    name: "Acondicionador Herbal",
-    category: "Cuidado capilar",
-    price: 42,
-    cost: 25,
-    stock: 8,
-    minStock: 10,
-    expiresAt: "2026-09-05",
-    status: "por-vencer",
-  },
-  {
-    id: 3,
-    name: "Jabon Rosa Venus",
-    category: "Cuidado personal",
-    price: 15,
-    cost: 8,
-    stock: 60,
-    minStock: 20,
-    expiresAt: "2026-09-10",
-    status: "por-vencer",
-  },
-  {
-    id: 4,
-    name: "Crema facial Nivea",
-    category: "Cuidado facial",
-    price: 75,
-    cost: 48,
-    stock: 15,
-    minStock: 5,
-    expiresAt: "2026-08-25",
-    status: "vencido",
-  },
-  {
-    id: 5,
-    name: "Labial Rojo Mate",
-    category: "Maquillaje",
-    price: 55,
-    cost: 32,
-    stock: 12,
-    minStock: 5,
-    expiresAt: "2027-03-01",
-    status: "ok",
-  },
-  {
-    id: 6,
-    name: "Máscara de pestañas",
-    category: "Maquillaje",
-    price: 62,
-    cost: 38,
-    stock: 0,
-    minStock: 8,
-    expiresAt: "2026-11-20",
-    status: "ok",
-  },
-  {
-    id: 7,
-    name: "Base de maquillaje L'Oréal",
-    category: "Maquillaje",
-    price: 89,
-    cost: 55,
-    stock: 4,
-    minStock: 6,
-    expiresAt: "2027-05-12",
-    status: "ok",
-  },
-  {
-    id: 8,
-    name: "Delineador negro",
-    category: "Maquillaje",
-    price: 28,
-    cost: 14,
-    stock: 34,
-    minStock: 10,
-    expiresAt: "2026-12-30",
-    status: "ok",
-  },
-  {
-    id: 9,
-    name: "Sombra de ojos paleta",
-    category: "Maquillaje",
-    price: 120,
-    cost: 78,
-    stock: 7,
-    minStock: 4,
-    expiresAt: "2026-09-09",
-    status: "por-vencer",
-  },
-  {
-    id: 10,
-    name: "Protector solar FPS 50",
-    category: "Cuidado personal",
-    price: 95,
-    cost: 61,
-    stock: 18,
-    minStock: 12,
-    expiresAt: "2026-09-02",
-    status: "vencido",
-  },
-  {
-    id: 11,
-    name: "Desodorante Axe",
-    category: "Cuidado personal",
-    price: 32,
-    cost: 18,
-    stock: 40,
-    minStock: 15,
-    expiresAt: "2027-07-01",
-    status: "ok",
-  },
-  {
-    id: 12,
-    name: "Gel para el cabello",
-    category: "Cuidado capilar",
-    price: 22,
-    cost: 11,
-    stock: 3,
-    minStock: 10,
-    expiresAt: "2027-02-14",
-    status: "ok",
-  },
-  {
-    id: 13,
-    name: "Tónico facial",
-    category: "Cuidado facial",
-    price: 38,
-    cost: 22,
-    stock: 26,
-    minStock: 8,
-    expiresAt: "2026-09-11",
-    status: "por-vencer",
-  },
-  {
-    id: 14,
-    name: "Serum vitamina C",
-    category: "Cuidado facial",
-    price: 145,
-    cost: 98,
-    stock: 5,
-    minStock: 6,
-    expiresAt: "2026-08-30",
-    status: "vencido",
-  },
-  {
-    id: 15,
-    name: "Crema hidratante corporal",
-    category: "Cuidado personal",
-    price: 47,
-    cost: 28,
-    stock: 22,
-    minStock: 9,
-    expiresAt: "2027-08-05",
-    status: "ok",
-  },
-  {
-    id: 16,
-    name: "Champú sólido",
-    category: "Cuidado capilar",
-    price: 54,
-    cost: 33,
-    stock: 0,
-    minStock: 5,
-    expiresAt: "2026-12-10",
-    status: "ok",
-  },
-  {
-    id: 17,
-    name: "Perfume floral",
-    category: "Fragancias",
-    price: 210,
-    cost: 132,
-    stock: 9,
-    minStock: 4,
-    expiresAt: "2027-06-18",
-    status: "ok",
-  },
-  {
-    id: 18,
-    name: "Colonia para hombre",
-    category: "Fragancias",
-    price: 165,
-    cost: 104,
-    stock: 6,
-    minStock: 4,
-    expiresAt: "2026-09-06",
-    status: "por-vencer",
-  },
-  {
-    id: 19,
-    name: "Jabón de manos líquido",
-    category: "Limpieza",
-    price: 18,
-    cost: 9,
-    stock: 55,
-    minStock: 20,
-    expiresAt: "2027-04-22",
-    status: "ok",
-  },
-  {
-    id: 20,
-    name: "Limpiador multiuso",
-    category: "Limpieza",
-    price: 26,
-    cost: 13,
-    stock: 0,
-    minStock: 10,
-    expiresAt: "2027-01-30",
-    status: "ok",
-  },
-  {
-    id: 21,
-    name: "Lavandina 1L",
-    category: "Limpieza",
-    price: 12,
-    cost: 6,
-    stock: 70,
-    minStock: 25,
-    expiresAt: "2026-09-08",
-    status: "por-vencer",
-  },
-  {
-    id: 22,
-    name: "Esponja de cocina x3",
-    category: "Limpieza",
-    price: 8,
-    cost: 3,
-    stock: 100,
-    minStock: 30,
-    expiresAt: null,
-    status: "ok",
-  },
-  {
-    id: 23,
-    name: "Cepillo de dientes",
-    category: "Higiene bucal",
-    price: 14,
-    cost: 7,
-    stock: 2,
-    minStock: 12,
-    expiresAt: "2027-09-01",
-    status: "ok",
-  },
-  {
-    id: 24,
-    name: "Pasta dental 90g",
-    category: "Higiene bucal",
-    price: 21,
-    cost: 11,
-    stock: 33,
-    minStock: 15,
-    expiresAt: "2026-10-01",
-    status: "ok",
-  },
-  {
-    id: 25,
-    name: "Hilo dental",
-    category: "Higiene bucal",
-    price: 16,
-    cost: 8,
-    stock: 1,
-    minStock: 10,
-    expiresAt: "2027-11-11",
-    status: "ok",
-  },
-  {
-    id: 26,
-    name: "Enjuague bucal",
-    category: "Higiene bucal",
-    price: 30,
-    cost: 17,
-    stock: 14,
-    minStock: 8,
-    expiresAt: "2026-09-04",
-    status: "vencido",
-  },
-  {
-    id: 27,
-    name: "Toallitas desmaquillantes",
-    category: "Cuidado facial",
-    price: 35,
-    cost: 20,
-    stock: 11,
-    minStock: 6,
-    expiresAt: "2027-02-28",
-    status: "ok",
-  },
-  {
-    id: 28,
-    name: "Crema para manos",
-    category: "Cuidado personal",
-    price: 25,
-    cost: 14,
-    stock: 8,
-    minStock: 7,
-    expiresAt: "2026-09-12",
-    status: "por-vencer",
-  },
-];
+function derivarEstadoVencimiento(
+  vencimiento: string | null,
+  hoy: Date = new Date(),
+): "vencido" | "por-vencer" | "ok" {
+  if (!vencimiento) return "ok";
+  const fecha = new Date(vencimiento);
+  if (Number.isNaN(fecha.getTime())) return "ok";
+  if (fecha < hoy) return "vencido";
+  const limite = new Date(hoy);
+  limite.setDate(hoy.getDate() + 14);
+  return fecha <= limite ? "por-vencer" : "ok";
+}
+
+function mapearProducto(
+  producto: Producto,
+  categorias: Categoria[],
+  marcas: Marca[],
+  hoy: Date = new Date(),
+): ProductoInventario {
+  const categoria = categorias.find((c) => c.id === producto.categoriaId);
+  const marca = marcas.find((m) => m.id === producto.marcaId);
+  return {
+    id: producto.id,
+    name: producto.nombre,
+    variant: producto.variante,
+    brand: marca?.nombre ?? "",
+    category: categoria?.nombre ?? "",
+    price: producto.precioVenta,
+    cost: producto.costo,
+    stock: producto.stockActual,
+    minStock: producto.stockMinimo,
+    expiresAt: producto.vencimiento,
+    status: derivarEstadoVencimiento(producto.vencimiento, hoy),
+  };
+}
 
 function normalizar(texto: string): string {
   return texto
@@ -391,6 +120,68 @@ export function InventoryPage() {
   const { categories, addCategory, updateCategory, removeCategory } =
     useCategories();
 
+  const [productosCrudos, setProductosCrudos] = useState<Producto[]>([]);
+  const [marcas, setMarcas] = useState<Marca[]>([]);
+  const [cargandoProductos, setCargandoProductos] = useState(true);
+  const [errorProductos, setErrorProductos] = useState<string | null>(null);
+
+  const obtenerProductos = useCallback(async (): Promise<Producto[]> => {
+    const data = await productosService.getAll();
+    return data.filter((p) => p.activo);
+  }, []);
+
+  const obtenerMarcas = useCallback(async (): Promise<Marca[]> => {
+    return marcasService.getAll();
+  }, []);
+
+  // Fetch inicial al montar. Los setState viven en callbacks asíncronos (.then/.catch)
+  // y el flag "activo" evita setState después del desmontaje. Nunca setState síncrono
+  // en el cuerpo del effect (regla react-hooks/set-state-in-effect).
+  useEffect(() => {
+    let activo = true;
+    void Promise.all([obtenerProductos(), obtenerMarcas()])
+      .then(([data, marcasData]) => {
+        if (!activo) return;
+        setProductosCrudos(data);
+        setMarcas(marcasData);
+        setCargandoProductos(false);
+      })
+      .catch((err) => {
+        if (!activo) return;
+        setErrorProductos(
+          err instanceof Error ? err.message : "Error al cargar productos",
+        );
+        setCargandoProductos(false);
+      });
+    return () => {
+      activo = false;
+    };
+  }, [obtenerProductos, obtenerMarcas]);
+
+  const refreshProductos = useCallback(async () => {
+    setCargandoProductos(true);
+    setErrorProductos(null);
+    try {
+      const [data, marcasData] = await Promise.all([
+        obtenerProductos(),
+        obtenerMarcas(),
+      ]);
+      setProductosCrudos(data);
+      setMarcas(marcasData);
+    } catch (err) {
+      setErrorProductos(
+        err instanceof Error ? err.message : "Error al cargar productos",
+      );
+    } finally {
+      setCargandoProductos(false);
+    }
+  }, [obtenerProductos, obtenerMarcas]);
+
+  const productos = useMemo(
+    () => productosCrudos.map((p) => mapearProducto(p, categories, marcas)),
+    [productosCrudos, categories, marcas],
+  );
+
   const handleKpiClick = (filter: KpiFilter) => {
     setActiveKpiFilter((prev) => {
       const nuevo = prev === filter ? "all" : filter;
@@ -413,14 +204,14 @@ export function InventoryPage() {
 
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    stockMock.forEach((p) => {
+    productos.forEach((p) => {
       if (p.category) {
         counts[p.category] = (counts[p.category] || 0) + 1;
       }
     });
     return counts;
-  }, []);
-  const totalProducts = stockMock.length;
+  }, [productos]);
+  const totalProducts = productos.length;
 
   const filasFiltradas = useMemo(() => {
     const texto = normalizar(busqueda.trim());
@@ -452,10 +243,10 @@ export function InventoryPage() {
       }
     };
 
-    return stockMock.filter(
+    return productos.filter(
       (p) => coincideTexto(p) && coincideCategoria(p) && coincideKpi(p),
     );
-  }, [busqueda, selectedCategory, activeKpiFilter, categories]);
+  }, [busqueda, selectedCategory, activeKpiFilter, categories, productos]);
 
   const totalPaginas = Math.max(
     1,
@@ -471,13 +262,13 @@ export function InventoryPage() {
 
   const kpis = useMemo(
     () => ({
-      stockBajo: stockMock.filter((p) => p.stock <= p.minStock && p.stock > 0)
+      stockBajo: productos.filter((p) => p.stock <= p.minStock && p.stock > 0)
         .length,
-      porVencer: stockMock.filter((p) => p.status === "por-vencer").length,
-      agotados: stockMock.filter((p) => p.stock === 0).length,
-      vencidos: stockMock.filter((p) => p.status === "vencido").length,
+      porVencer: productos.filter((p) => p.status === "por-vencer").length,
+      agotados: productos.filter((p) => p.stock === 0).length,
+      vencidos: productos.filter((p) => p.status === "vencido").length,
     }),
-    [],
+    [productos],
   );
 
   return (
@@ -490,9 +281,9 @@ export function InventoryPage() {
           </h1>
           <span className="select-none rounded-full border border-slate-200 bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600 dark:border-slate-700/80 dark:bg-slate-800 dark:text-slate-300">
             <span className="font-display text-base font-bold text-emerald-600 dark:text-emerald-400">
-              {stockMock.length}
+              {productos.length}
             </span>{" "}
-            {stockMock.length === 1 ? "producto" : "productos"}
+            {productos.length === 1 ? "producto" : "productos"}
           </span>
         </div>
 
@@ -716,19 +507,53 @@ export function InventoryPage() {
       </div>
 
       {/* ── Cuadrícula de productos ── */}
-      {filasFiltradas.length === 0 ? (
+      {cargandoProductos && productos.length === 0 ? (
         <EmptyState
           icon={<Boxes className="h-12 w-12 stroke-[1.5]" />}
-          title="No se encontraron productos"
-          description="No hay productos que coincidan con tu búsqueda o filtros actuales. Probá con otra búsqueda o limpiá los filtros."
+          title="Cargando productos…"
+          description="Estamos trayendo el inventario desde la base de datos."
+        />
+      ) : errorProductos && productos.length === 0 ? (
+        <EmptyState
+          icon={<AlertTriangle className="h-12 w-12 stroke-[1.5]" />}
+          title="No se pudieron cargar los productos"
+          description={errorProductos}
           action={
-            hayFiltroActivo ? (
-              <Button variant="outline" onClick={limpiarFiltros}>
-                Limpiar filtros
-              </Button>
-            ) : undefined
+            <Button variant="outline" onClick={() => void refreshProductos()}>
+              Reintentar
+            </Button>
           }
         />
+      ) : filasFiltradas.length === 0 ? (
+        productos.length === 0 ? (
+          <EmptyState
+            icon={<Boxes className="h-12 w-12 stroke-[1.5]" />}
+            title="Todavía no hay productos"
+            description="Creá tu primer producto para empezar a controlar el inventario."
+            action={
+              <Button
+                variant="primary"
+                onClick={() => setIsCreateProductOpen(true)}
+              >
+                <PackagePlus className="h-4 w-4" />
+                Nuevo producto
+              </Button>
+            }
+          />
+        ) : (
+          <EmptyState
+            icon={<Boxes className="h-12 w-12 stroke-[1.5]" />}
+            title="No se encontraron productos"
+            description="No hay productos que coincidan con tu búsqueda o filtros actuales. Probá con otra búsqueda o limpiá los filtros."
+            action={
+              hayFiltroActivo ? (
+                <Button variant="outline" onClick={limpiarFiltros}>
+                  Limpiar filtros
+                </Button>
+              ) : undefined
+            }
+          />
+        )
       ) : (
         <div className="mt-2 px-0.5 flex w-full min-w-0 flex-col gap-2.5">
           {filasPagina.map((producto, index) => (
@@ -737,6 +562,8 @@ export function InventoryPage() {
               style={{ animationDelay: index < 8 ? `${index * 20}ms` : "0ms" }}
               category={producto.category}
               name={producto.name}
+              variant={producto.variant}
+              brand={producto.brand || undefined}
               stock={producto.stock}
               minStock={producto.minStock}
               price={producto.price}
@@ -819,6 +646,7 @@ export function InventoryPage() {
         isOpen={isCreateProductOpen}
         onClose={() => setIsCreateProductOpen(false)}
         categorias={categories}
+        onSuccess={() => void refreshProductos()}
       />
     </div>
   );

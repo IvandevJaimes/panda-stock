@@ -144,7 +144,7 @@ export function getMarcas(): Marca[] {
   return getDb()
     .select()
     .from(marcas)
-    .orderBy(asc(marcas.nombre))
+    .orderBy(desc(marcas.id))
     .all()
 }
 

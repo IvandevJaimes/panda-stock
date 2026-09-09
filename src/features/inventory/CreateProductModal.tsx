@@ -1,6 +1,11 @@
 import * as React from "react";
 import { Loader2, Sparkles } from "lucide-react";
-import { Controller, useForm, type DefaultValues } from "react-hook-form";
+import {
+  Controller,
+  useForm,
+  useWatch,
+  type DefaultValues,
+} from "react-hook-form";
 import { toast } from "sonner";
 import { Modal } from "../../components/ui/Modal";
 import { FieldError } from "../../components/ui/FieldError";
@@ -16,8 +21,10 @@ import {
 import { DateInput } from "../../components/ui/DateInput";
 import { cn } from "../../lib/cn";
 import { productosService } from "../../services/productos.service";
+import { marcasService } from "../../services/marcas.service";
 import type {
   Categoria,
+  Marca,
   Producto,
   TipoVenta,
   UnidadMedida,
@@ -39,11 +46,11 @@ export interface FormValues {
   marca: string;
   tipoVenta: TipoVenta;
   unidadMedida: UnidadMedida;
-  costo: number;
-  precioVenta: number;
-  precioMayoreo: number;
-  stockActual: number;
-  stockMinimo: number;
+  costo: string;
+  precioVenta: string;
+  precioMayoreo: string;
+  stockActual: string;
+  stockMinimo: string;
   vencimiento?: string;
 }
 
@@ -53,6 +60,8 @@ const OPCIONES_TIPO_VENTA: OptionGroupOption<TipoVenta>[] = [
   { value: "combo", label: "Combo" },
 ];
 
+const SUGERENCIAS_LIMITE = 8;
+
 const VALORES_INICIALES: DefaultValues<FormValues> = {
   nombre: "",
   variante: "",
@@ -61,11 +70,11 @@ const VALORES_INICIALES: DefaultValues<FormValues> = {
   marca: "",
   tipoVenta: "unidad",
   unidadMedida: "unidad",
-  costo: "" as unknown as number,
-  precioVenta: "" as unknown as number,
-  precioMayoreo: "" as unknown as number,
-  stockActual: "" as unknown as number,
-  stockMinimo: "" as unknown as number,
+  costo: "",
+  precioVenta: "",
+  precioMayoreo: "",
+  stockActual: "",
+  stockMinimo: "",
   vencimiento: "",
 };
 
@@ -91,6 +100,56 @@ export function CreateProductModal({
     if (isOpen) reset(VALORES_INICIALES);
   }, [isOpen, reset]);
 
+  const [marcas, setMarcas] = React.useState<Marca[]>([]);
+  const [marcasDropdown, setMarcasDropdown] = React.useState(false);
+  const marcasRef = React.useRef<HTMLDivElement>(null);
+  const valorMarca = useWatch({ control, name: "marca" }) ?? "";
+
+  const marcasSugeridas = React.useMemo(() => {
+    if (!marcasDropdown) return [];
+    const termino = valorMarca.trim().toLowerCase();
+    const coincidencias = termino
+      ? marcas.filter((m) => m.nombre.toLowerCase().includes(termino))
+      : marcas;
+    return coincidencias.slice(0, SUGERENCIAS_LIMITE);
+  }, [marcas, marcasDropdown, valorMarca]);
+
+  // Carga las marcas cada vez que se abre el modal (el backend ya las devuelve
+  // ordenadas por id descendente: las más recientes primero). Los setState viven
+  // en callbacks asíncronos (.then), respetando react-hooks/set-state-in-effect.
+  React.useEffect(() => {
+    if (!isOpen) return;
+    let activo = true;
+    void marcasService
+      .getAll()
+      .then((data) => {
+        if (!activo) return;
+        setMarcas(data);
+        setMarcasDropdown(false);
+      })
+      .catch(() => {
+        // El autocomplete es una ayuda: si falla, el alta sigue con texto libre
+      });
+    return () => {
+      activo = false;
+    };
+  }, [isOpen]);
+
+  // Cerrar el dropdown al hacer clic fuera del contenedor de marca. El setState
+  // vive dentro del callback del listener (asíncrono), no viola set-state-in-effect.
+  React.useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        marcasRef.current &&
+        !marcasRef.current.contains(event.target as Node)
+      ) {
+        setMarcasDropdown(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   const generarCodigoSugerido = () => {
     const codigoSugerido = String(Math.floor(1000 + Math.random() * 9000));
     setValue("codigo", codigoSugerido, { shouldValidate: true });
@@ -104,13 +163,29 @@ export function CreateProductModal({
 
   const onSubmit = async (data: FormValues) => {
     try {
+      // Normalización defensiva: garantiza ISO YYYY-MM-DD o null.
+      // Acepta DD/MM/YYYY y DD/MM/YY (año de 2 dígitos expandido a 20XX)
+      let vencimientoNormalizado: string | null = null;
+      if (data.vencimiento) {
+        const esIso = /^\d{4}-\d{2}-\d{2}$/.test(data.vencimiento);
+        if (esIso) {
+          vencimientoNormalizado = data.vencimiento;
+        } else {
+          const [dia, mes, anio] = data.vencimiento.split("/");
+          if (dia && mes && anio && anio.length >= 2 && anio.length <= 4) {
+            const anioCompleto = anio.length === 2 ? `20${anio}` : anio;
+            vencimientoNormalizado = `${anioCompleto}-${mes.padStart(2, "0")}-${dia.padStart(2, "0")}`;
+          }
+        }
+      }
+
       const payload = {
         ...data,
         nombre: data.nombre.trim(),
         variante: data.variante?.trim() || null,
         codigoInterno: data.codigo.trim(),
         codigosBarras: data.codigo.trim() || null,
-        vencimiento: data.vencimiento?.trim() || null,
+        vencimiento: vencimientoNormalizado,
         categoriaId:
           Number(data.categoriaId) > 0 ? Number(data.categoriaId) : null,
         marca: data.marca.trim() || null,
@@ -192,24 +267,61 @@ export function CreateProductModal({
             >
               Marca
             </label>
-            <CapitalizedInput
-              id="marca"
-              type="text"
-              disabled={isSubmitting}
-              placeholder="Ej. Dove, Nivea, L'Oréal"
-              {...register("marca", {
-                maxLength: {
-                  value: 40,
-                  message: "Máximo 40 caracteres",
-                },
-              })}
-              className={cn(
-                "h-10 w-full rounded-xl border bg-white px-3 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 dark:bg-[#0B1120] dark:text-slate-100 dark:placeholder:text-slate-600",
-                errors.marca
-                  ? "border-red-500 focus:border-red-500 focus:ring-4 focus:ring-red-500/10"
-                  : "border-slate-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700/80",
+            <div ref={marcasRef} className="relative">
+              <CapitalizedInput
+                id="marca"
+                type="text"
+                disabled={isSubmitting}
+                placeholder="Ej. Dove, Nivea, L'Oréal"
+                aria-expanded={marcasDropdown}
+                aria-autocomplete="list"
+                onFocus={() => setMarcasDropdown(true)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    setMarcasDropdown(false);
+                  }
+                }}
+                {...register("marca", {
+                  maxLength: {
+                    value: 40,
+                    message: "Máximo 40 caracteres",
+                  },
+                })}
+                className={cn(
+                  "h-10 w-full rounded-xl border bg-white px-3 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 dark:bg-[#0B1120] dark:text-slate-100 dark:placeholder:text-slate-600",
+                  errors.marca
+                    ? "border-red-500 focus:border-red-500 focus:ring-4 focus:ring-red-500/10"
+                    : "border-slate-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700/80",
+                )}
+              />
+              {marcasDropdown && marcasSugeridas.length > 0 && (
+                <div
+                  role="listbox"
+                  className="custom-scrollbar absolute left-0 top-[calc(100%+6px)] z-[100] max-h-56 w-full animate-entry-up overflow-y-auto rounded-xl border border-slate-200 bg-white py-1.5 shadow-xl dark:border-slate-800 dark:bg-[#0B1120]"
+                >
+                  {marcasSugeridas.map((marca) => (
+                    <button
+                      key={marca.id}
+                      type="button"
+                      role="option"
+                      aria-selected={marca.nombre === valorMarca}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        setValue("marca", marca.nombre, {
+                          shouldDirty: true,
+                          shouldValidate: true,
+                        });
+                        setMarcasDropdown(false);
+                      }}
+                      className="flex w-full cursor-pointer items-center px-3 py-2 text-left text-sm text-slate-700 transition-colors hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800/60"
+                    >
+                      <span className="truncate">{marca.nombre}</span>
+                    </button>
+                  ))}
+                </div>
               )}
-            />
+            </div>
             <FieldError error={errors.marca?.message} />
           </div>
         </div>
@@ -341,7 +453,7 @@ export function CreateProductModal({
               htmlFor="costo"
               className="ml-1 text-xs font-semibold text-slate-700 dark:text-slate-300"
             >
-              Costo unitario ($)
+              Costo unitario ($) <span className="text-red-500">*</span>
             </label>
             <input
               id="costo"
@@ -350,9 +462,14 @@ export function CreateProductModal({
               disabled={isSubmitting}
               onWheel={(e) => e.currentTarget.blur()}
               {...register("costo", {
-                valueAsNumber: true,
-                min: { value: 0, message: "No puede ser negativo" },
-                validate: (val) => !isNaN(val) || "Debe ser un número válido",
+                required: "El costo es obligatorio",
+                validate: {
+                  numeroValido: (val) =>
+                    !Number.isNaN(Number(val)) ||
+                    "Debe ser un número válido",
+                  noNegativo: (val) =>
+                    Number(val) >= 0 || "No puede ser negativo",
+                },
               })}
               className={cn(
                 "h-10 w-full rounded-xl border bg-white px-3 text-sm text-slate-900 outline-none transition-all dark:bg-[#0B1120] dark:text-slate-100 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none",
@@ -379,9 +496,13 @@ export function CreateProductModal({
               onWheel={(e) => e.currentTarget.blur()}
               {...register("precioVenta", {
                 required: "El precio de venta es obligatorio",
-                valueAsNumber: true,
-                min: { value: 0, message: "No puede ser negativo" },
-                validate: (val) => !isNaN(val) || "Debe ser un número válido",
+                validate: {
+                  numeroValido: (val) =>
+                    !Number.isNaN(Number(val)) ||
+                    "Debe ser un número válido",
+                  noNegativo: (val) =>
+                    Number(val) >= 0 || "No puede ser negativo",
+                },
               })}
               className={cn(
                 "h-10 w-full rounded-xl border bg-white px-3 text-sm text-slate-900 outline-none transition-all dark:bg-[#0B1120] dark:text-slate-100 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none",
@@ -407,9 +528,16 @@ export function CreateProductModal({
               disabled={isSubmitting}
               onWheel={(e) => e.currentTarget.blur()}
               {...register("precioMayoreo", {
-                valueAsNumber: true,
-                min: { value: 0, message: "No puede ser negativo" },
-                validate: (val) => !isNaN(val) || "Debe ser un número válido",
+                validate: {
+                  numeroValido: (val) =>
+                    val.trim() === "" ||
+                    !Number.isNaN(Number(val)) ||
+                    "Debe ser un número válido",
+                  noNegativo: (val) =>
+                    val.trim() === "" ||
+                    Number(val) >= 0 ||
+                    "No puede ser negativo",
+                },
               })}
               className={cn(
                 "h-10 w-full rounded-xl border bg-white px-3 text-sm text-slate-900 outline-none transition-all dark:bg-[#0B1120] dark:text-slate-100 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none",
@@ -439,9 +567,13 @@ export function CreateProductModal({
               onWheel={(e) => e.currentTarget.blur()}
               {...register("stockActual", {
                 required: "El stock inicial es obligatorio",
-                valueAsNumber: true,
-                min: { value: 0, message: "No puede ser negativo" },
-                validate: (val) => !isNaN(val) || "Debe ser un número válido",
+                validate: {
+                  numeroValido: (val) =>
+                    !Number.isNaN(Number(val)) ||
+                    "Debe ser un número válido",
+                  noNegativo: (val) =>
+                    Number(val) >= 0 || "No puede ser negativo",
+                },
               })}
               className={cn(
                 "h-10 w-full rounded-xl border bg-white px-3 text-sm text-slate-900 outline-none transition-all dark:bg-[#0B1120] dark:text-slate-100 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none",
@@ -467,9 +599,16 @@ export function CreateProductModal({
               disabled={isSubmitting}
               onWheel={(e) => e.currentTarget.blur()}
               {...register("stockMinimo", {
-                valueAsNumber: true,
-                min: { value: 0, message: "No puede ser negativo" },
-                validate: (val) => !isNaN(val) || "Debe ser un número válido",
+                validate: {
+                  numeroValido: (val) =>
+                    val.trim() === "" ||
+                    !Number.isNaN(Number(val)) ||
+                    "Debe ser un número válido",
+                  noNegativo: (val) =>
+                    val.trim() === "" ||
+                    Number(val) >= 0 ||
+                    "No puede ser negativo",
+                },
               })}
               className={cn(
                 "h-10 w-full rounded-xl border bg-white px-3 text-sm text-slate-900 outline-none transition-all dark:bg-[#0B1120] dark:text-slate-100 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none",
