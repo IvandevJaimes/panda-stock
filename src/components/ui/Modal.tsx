@@ -1,4 +1,5 @@
 import { useEffect, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { cn } from "../../lib/cn";
 
@@ -56,19 +57,21 @@ export function Modal({
 
   if (!isOpen) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
-      {/* Overlay */}
+  // createPortal hacia document.body: el modal queda fuera del árbol de la vista,
+  // así ningún contenedor con transform/filter/overflow puede desfasar su layout.
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex overflow-y-auto p-4 sm:p-6">
+      {/* Overlay: fixed inset-0, anclado al viewport visible sin importar el scroll */}
       <div
-        className="absolute inset-0 bg-black/40 backdrop-blur-xs animate-entry-fade"
+        className="fixed inset-0 bg-black/60 backdrop-blur-xs animate-entry-fade"
         onClick={onClose}
         aria-hidden="true"
       />
 
-      {/* Contenedor del Modal */}
+      {/* Contenedor del Modal: m-auto centra y evita clipping si el contenido supera el viewport */}
       <div
         className={cn(
-          "relative w-full flex max-h-[90vh] flex-col rounded-2xl border border-slate-200 bg-white shadow-xl dark:border-slate-800 dark:bg-[#111827] animate-entry-up",
+          "relative m-auto w-full flex max-h-[90vh] flex-col rounded-2xl border border-slate-200 bg-white shadow-xl dark:border-slate-800 dark:bg-[#111827] animate-entry-up",
           maxWidthClasses[maxWidth],
           className,
         )}
@@ -94,6 +97,7 @@ export function Modal({
         {/* Contenido scrolleable */}
         <div className="custom-scrollbar overflow-y-auto p-6">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
