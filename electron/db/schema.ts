@@ -43,6 +43,7 @@ export const productos = sqliteTable(
     nombre: text('nombre').notNull(),
     codigoInterno: text('codigo_interno').notNull(),
     codigosBarras: text('codigos_barras'),
+    variante: text('variante'),
     tipoVenta: text('tipo_venta').$type<TipoVenta>().notNull().default('unidad'),
     unidadMedida: text('unidad_medida').$type<UnidadMedida>().notNull().default('unidad'),
     costo: real('costo').notNull().default(0),

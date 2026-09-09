@@ -1,4 +1,4 @@
-export type TipoVenta = 'unidad' | 'granel' | 'kit'
+export type TipoVenta = 'unidad' | 'caja' | 'combo'
 export type UnidadMedida = 'unidad' | 'ml' | 'g'
 export type EstadoVenta = 'completada' | 'anulada'
 export type EstadoCaja = 'abierta' | 'cerrada'
@@ -52,6 +52,7 @@ export type Producto = {
   nombre: string
   codigoInterno: string
   codigosBarras: string | null
+  variante: string | null
   tipoVenta: TipoVenta
   unidadMedida: UnidadMedida
   costo: number
@@ -72,6 +73,7 @@ export type NuevoProducto = {
   nombre: string
   codigoInterno: string
   codigosBarras?: string | null
+  variante?: string | null
   tipoVenta?: TipoVenta
   unidadMedida?: UnidadMedida
   costo?: number

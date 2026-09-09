@@ -229,6 +229,32 @@ export function getProductoById(id: number): Producto | null {
     .get() ?? null
 }
 
+/**
+ * Find-or-create de marca por nombre (case-insensitive).
+ * Devuelve el id de la marca existente o crea una nueva si no existe.
+ */
+function resolverMarcaId(
+  db: ReturnType<typeof getDb>,
+  nombre: string | null | undefined,
+): number | null {
+  const nombreLimpio = nombre?.trim() ?? null
+  if (!nombreLimpio) return null
+
+  const existente = db
+    .select({ id: marcas.id })
+    .from(marcas)
+    .where(sql`lower(${marcas.nombre}) = lower(${nombreLimpio})`)
+    .get()
+
+  if (existente) return existente.id
+
+  return db
+    .insert(marcas)
+    .values({ nombre: nombreLimpio, activo: true })
+    .returning({ id: marcas.id })
+    .get().id
+}
+
 function mapNuevoProducto(data: Record<string, unknown>) {
   const ahora = new Date().toISOString()
   const stockInicial = Number(data.stockActual ?? data.stock ?? 0)
@@ -238,6 +264,7 @@ function mapNuevoProducto(data: Record<string, unknown>) {
     nombre: data.nombre as string,
     codigoInterno: data.codigoInterno as string,
     codigosBarras: (data.codigosBarras as string | null | undefined)?.trim() || null,
+    variante: (data.variante as string | null | undefined)?.trim() || null,
     tipoVenta: (data.tipoVenta as Producto['tipoVenta']) ?? 'unidad',
     unidadMedida: (data.unidadMedida as Producto['unidadMedida']) ?? 'unidad',
     costo: Number(data.costo ?? 0),
@@ -258,6 +285,9 @@ export function createProducto(data: Record<string, unknown>): Producto {
   const ahora = new Date().toISOString()
 
   return db.transaction((tx) => {
+    // Marca libre por nombre: busca existente o crea una nueva
+    valores.marcaId = resolverMarcaId(tx, data.marca as string | null | undefined)
+
     const producto = tx
       .insert(productos)
       .values(valores)
@@ -306,8 +336,13 @@ export function updateProducto(id: number, data: Record<string, unknown>): Produ
   if (data.nombre !== undefined) set.nombre = data.nombre
   if (data.codigoInterno !== undefined) set.codigoInterno = data.codigoInterno
   if (data.codigosBarras !== undefined) set.codigosBarras = (data.codigosBarras as string | null)?.trim() || null
+  if (data.variante !== undefined) set.variante = (data.variante as string | null)?.trim() || null
   if (data.categoriaId !== undefined) set.categoriaId = data.categoriaId
-  if (data.marcaId !== undefined) set.marcaId = data.marcaId
+  if (data.marca !== undefined) {
+    set.marcaId = resolverMarcaId(db, data.marca as string | null | undefined)
+  } else if (data.marcaId !== undefined) {
+    set.marcaId = data.marcaId
+  }
   if (data.tipoVenta !== undefined) set.tipoVenta = data.tipoVenta
   if (data.unidadMedida !== undefined) set.unidadMedida = data.unidadMedida
   if (data.costo !== undefined) set.costo = data.costo

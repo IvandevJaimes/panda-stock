@@ -1,559 +1,512 @@
-import { createRequire } from "node:module";
-import { BrowserWindow, Menu, app, ipcMain } from "electron";
-import { fileURLToPath } from "node:url";
-import path from "node:path";
-import { existsSync } from "node:fs";
-import { createHash } from "node:crypto";
-import Database from "better-sqlite3";
-import { drizzle } from "drizzle-orm/better-sqlite3";
-import { migrate } from "drizzle-orm/better-sqlite3/migrator";
-import { and, asc, count, desc, eq, gt, gte, isNotNull, like, lte, or, sql } from "drizzle-orm";
-import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { createRequire as e } from "node:module";
+import { BrowserWindow as t, Menu as n, app as r, ipcMain as i } from "electron";
+import { fileURLToPath as a } from "node:url";
+import o from "node:path";
+import { existsSync as s } from "node:fs";
+import { createHash as c } from "node:crypto";
+import ee from "better-sqlite3";
+import { drizzle as l } from "drizzle-orm/better-sqlite3";
+import { migrate as te } from "drizzle-orm/better-sqlite3/migrator";
+import { and as u, asc as d, count as ne, desc as f, eq as p, gt as m, gte as h, isNotNull as re, like as g, lte as _, or as v, sql as y } from "drizzle-orm";
+import { index as b, integer as x, real as S, sqliteTable as C, text as w, uniqueIndex as ie } from "drizzle-orm/sqlite-core";
 //#region \0rolldown/runtime.js
-var __defProp = Object.defineProperty;
-var __exportAll = (all, no_symbols) => {
-	let target = {};
-	for (var name in all) __defProp(target, name, {
-		get: all[name],
-		enumerable: true
+var T = Object.defineProperty, ae = /* @__PURE__ */ ((e, t) => {
+	let n = {};
+	for (var r in e) T(n, r, {
+		get: e[r],
+		enumerable: !0
 	});
-	if (!no_symbols) __defProp(target, Symbol.toStringTag, { value: "Module" });
-	return target;
-};
-//#endregion
-//#region electron/db/schema.ts
-var schema_exports = /* @__PURE__ */ __exportAll({
-	cajas: () => cajas,
-	categorias: () => categorias,
-	detalleVentas: () => detalleVentas,
-	empleados: () => empleados,
-	lotes: () => lotes,
-	marcas: () => marcas,
-	movimientosStock: () => movimientosStock,
-	pagos: () => pagos,
-	productos: () => productos,
-	seguridadReportes: () => seguridadReportes,
-	ventas: () => ventas
-});
-var seguridadReportes = sqliteTable("seguridad_reportes", {
-	id: integer("id").primaryKey(),
-	pinHash: text("pin_hash").notNull(),
-	actualizadoEn: text("actualizado_en").notNull()
-});
-var empleados = sqliteTable("empleados", {
-	id: integer("id").primaryKey({ autoIncrement: true }),
-	nombre: text("nombre").notNull(),
-	activo: integer("activo", { mode: "boolean" }).notNull().default(true),
-	creadoEn: text("creado_en").notNull()
-});
-var categorias = sqliteTable("categorias", {
-	id: integer("id").primaryKey({ autoIncrement: true }),
-	nombre: text("nombre").notNull().unique(),
-	activo: integer("activo", { mode: "boolean" }).notNull().default(true)
-});
-var marcas = sqliteTable("marcas", {
-	id: integer("id").primaryKey({ autoIncrement: true }),
-	nombre: text("nombre").notNull().unique(),
-	activo: integer("activo", { mode: "boolean" }).notNull().default(true)
-});
-var productos = sqliteTable("productos", {
-	id: integer("id").primaryKey({ autoIncrement: true }),
-	categoriaId: integer("categoria_id").references(() => categorias.id),
-	marcaId: integer("marca_id").references(() => marcas.id),
-	nombre: text("nombre").notNull(),
-	codigoInterno: text("codigo_interno").notNull(),
-	codigosBarras: text("codigos_barras"),
-	tipoVenta: text("tipo_venta").$type().notNull().default("unidad"),
-	unidadMedida: text("unidad_medida").$type().notNull().default("unidad"),
-	costo: real("costo").notNull().default(0),
-	porcentajeGanancia: real("porcentaje_ganancia").notNull().default(0),
-	precioVenta: real("precio_venta").notNull().default(0),
-	precioMayoreo: real("precio_mayoreo").notNull().default(0),
-	stockActual: real("stock_actual").notNull().default(0),
-	stockMinimo: real("stock_minimo").notNull().default(0),
-	vencimiento: text("vencimiento"),
-	activo: integer("activo", { mode: "boolean" }).notNull().default(true),
-	creadoEn: text("creado_en").notNull(),
-	actualizadoEn: text("actualizado_en")
-}, (table) => [uniqueIndex("productos_codigo_interno_unique").on(table.codigoInterno)]);
-var lotes = sqliteTable("lotes", {
-	id: integer("id").primaryKey({ autoIncrement: true }),
-	productoId: integer("producto_id").notNull().references(() => productos.id),
-	numeroLote: text("numero_lote"),
-	fechaIngreso: text("fecha_ingreso").notNull(),
-	fechaVence: text("fecha_vence"),
-	costoUnitario: real("costo_unitario").notNull().default(0),
-	cantidadInicial: real("cantidad_inicial").notNull(),
-	cantidadActual: real("cantidad_actual").notNull(),
-	creadoEn: text("creado_en").notNull()
-}, (table) => [index("lotes_producto_id_idx").on(table.productoId)]);
-var cajas = sqliteTable("cajas", {
-	id: integer("id").primaryKey({ autoIncrement: true }),
-	empleadoId: integer("empleado_id").notNull().references(() => empleados.id),
-	montoInicial: real("monto_inicial").notNull().default(0),
-	montoEsperado: real("monto_esperado"),
-	montoReal: real("monto_real"),
-	diferencia: real("diferencia"),
-	estado: text("estado").$type().notNull().default("abierta"),
-	fechaApertura: text("fecha_apertura"),
-	fechaCierre: text("fecha_cierre"),
-	observaciones: text("observaciones")
-});
-var ventas = sqliteTable("ventas", {
-	id: integer("id").primaryKey({ autoIncrement: true }),
-	cajaId: integer("caja_id").references(() => cajas.id),
-	empleadoId: integer("empleado_id").notNull().references(() => empleados.id),
-	subtotal: real("subtotal").notNull().default(0),
-	descuento: real("descuento").notNull().default(0),
-	impuesto: real("impuesto").notNull().default(0),
-	total: real("total").notNull(),
-	estado: text("estado").$type().notNull().default("completada"),
-	fechaHora: text("fecha_hora").notNull()
-});
-var detalleVentas = sqliteTable("detalle_ventas", {
-	id: integer("id").primaryKey({ autoIncrement: true }),
-	ventaId: integer("venta_id").notNull().references(() => ventas.id),
-	productoId: integer("producto_id").references(() => productos.id),
-	loteId: integer("lote_id").references(() => lotes.id),
-	tipoTarifa: text("tipo_tarifa").$type().notNull().default("minorista"),
-	descripcionItem: text("descripcion_item").notNull(),
-	cantidad: real("cantidad").notNull(),
-	precioUnitario: real("precio_unitario").notNull(),
-	costoUnitario: real("costo_unitario").notNull(),
-	subtotal: real("subtotal").notNull()
-});
-var pagos = sqliteTable("pagos", {
-	id: integer("id").primaryKey({ autoIncrement: true }),
-	ventaId: integer("venta_id").notNull().references(() => ventas.id),
-	metodo: text("metodo").$type().notNull(),
-	monto: real("monto").notNull(),
-	referencia: text("referencia"),
-	fechaHora: text("fecha_hora").notNull()
-});
-var movimientosStock = sqliteTable("movimientos_stock", {
-	id: integer("id").primaryKey({ autoIncrement: true }),
-	productoId: integer("producto_id").notNull().references(() => productos.id),
-	loteId: integer("lote_id").references(() => lotes.id),
-	ventaId: integer("venta_id").references(() => ventas.id),
-	tipo: text("tipo").$type().notNull(),
-	cantidad: real("cantidad").notNull(),
-	stockAnterior: real("stock_anterior"),
-	stockPosterior: real("stock_posterior"),
-	motivo: text("motivo"),
-	fechaHora: text("fecha_hora").notNull()
-}, (table) => [index("movimientos_stock_producto_id_idx").on(table.productoId)]);
-//#endregion
-//#region electron/db/index.ts
-var app$1 = createRequire(import.meta.url)("electron").app;
-var sqlite = null;
-var database = null;
-function sha256(text) {
-	return createHash("sha256").update(text).digest("hex");
+	return t || T(n, Symbol.toStringTag, { value: "Module" }), n;
+})({
+	cajas: () => M,
+	categorias: () => O,
+	detalleVentas: () => P,
+	empleados: () => D,
+	lotes: () => j,
+	marcas: () => k,
+	movimientosStock: () => I,
+	pagos: () => F,
+	productos: () => A,
+	seguridadReportes: () => E,
+	ventas: () => N
+}), E = C("seguridad_reportes", {
+	id: x("id").primaryKey(),
+	pinHash: w("pin_hash").notNull(),
+	actualizadoEn: w("actualizado_en").notNull()
+}), D = C("empleados", {
+	id: x("id").primaryKey({ autoIncrement: !0 }),
+	nombre: w("nombre").notNull(),
+	activo: x("activo", { mode: "boolean" }).notNull().default(!0),
+	creadoEn: w("creado_en").notNull()
+}), O = C("categorias", {
+	id: x("id").primaryKey({ autoIncrement: !0 }),
+	nombre: w("nombre").notNull().unique(),
+	activo: x("activo", { mode: "boolean" }).notNull().default(!0)
+}), k = C("marcas", {
+	id: x("id").primaryKey({ autoIncrement: !0 }),
+	nombre: w("nombre").notNull().unique(),
+	activo: x("activo", { mode: "boolean" }).notNull().default(!0)
+}), A = C("productos", {
+	id: x("id").primaryKey({ autoIncrement: !0 }),
+	categoriaId: x("categoria_id").references(() => O.id),
+	marcaId: x("marca_id").references(() => k.id),
+	nombre: w("nombre").notNull(),
+	codigoInterno: w("codigo_interno").notNull(),
+	codigosBarras: w("codigos_barras"),
+	variante: w("variante"),
+	tipoVenta: w("tipo_venta").$type().notNull().default("unidad"),
+	unidadMedida: w("unidad_medida").$type().notNull().default("unidad"),
+	costo: S("costo").notNull().default(0),
+	porcentajeGanancia: S("porcentaje_ganancia").notNull().default(0),
+	precioVenta: S("precio_venta").notNull().default(0),
+	precioMayoreo: S("precio_mayoreo").notNull().default(0),
+	stockActual: S("stock_actual").notNull().default(0),
+	stockMinimo: S("stock_minimo").notNull().default(0),
+	vencimiento: w("vencimiento"),
+	activo: x("activo", { mode: "boolean" }).notNull().default(!0),
+	creadoEn: w("creado_en").notNull(),
+	actualizadoEn: w("actualizado_en")
+}, (e) => [ie("productos_codigo_interno_unique").on(e.codigoInterno)]), j = C("lotes", {
+	id: x("id").primaryKey({ autoIncrement: !0 }),
+	productoId: x("producto_id").notNull().references(() => A.id),
+	numeroLote: w("numero_lote"),
+	fechaIngreso: w("fecha_ingreso").notNull(),
+	fechaVence: w("fecha_vence"),
+	costoUnitario: S("costo_unitario").notNull().default(0),
+	cantidadInicial: S("cantidad_inicial").notNull(),
+	cantidadActual: S("cantidad_actual").notNull(),
+	creadoEn: w("creado_en").notNull()
+}, (e) => [b("lotes_producto_id_idx").on(e.productoId)]), M = C("cajas", {
+	id: x("id").primaryKey({ autoIncrement: !0 }),
+	empleadoId: x("empleado_id").notNull().references(() => D.id),
+	montoInicial: S("monto_inicial").notNull().default(0),
+	montoEsperado: S("monto_esperado"),
+	montoReal: S("monto_real"),
+	diferencia: S("diferencia"),
+	estado: w("estado").$type().notNull().default("abierta"),
+	fechaApertura: w("fecha_apertura"),
+	fechaCierre: w("fecha_cierre"),
+	observaciones: w("observaciones")
+}), N = C("ventas", {
+	id: x("id").primaryKey({ autoIncrement: !0 }),
+	cajaId: x("caja_id").references(() => M.id),
+	empleadoId: x("empleado_id").notNull().references(() => D.id),
+	subtotal: S("subtotal").notNull().default(0),
+	descuento: S("descuento").notNull().default(0),
+	impuesto: S("impuesto").notNull().default(0),
+	total: S("total").notNull(),
+	estado: w("estado").$type().notNull().default("completada"),
+	fechaHora: w("fecha_hora").notNull()
+}), P = C("detalle_ventas", {
+	id: x("id").primaryKey({ autoIncrement: !0 }),
+	ventaId: x("venta_id").notNull().references(() => N.id),
+	productoId: x("producto_id").references(() => A.id),
+	loteId: x("lote_id").references(() => j.id),
+	tipoTarifa: w("tipo_tarifa").$type().notNull().default("minorista"),
+	descripcionItem: w("descripcion_item").notNull(),
+	cantidad: S("cantidad").notNull(),
+	precioUnitario: S("precio_unitario").notNull(),
+	costoUnitario: S("costo_unitario").notNull(),
+	subtotal: S("subtotal").notNull()
+}), F = C("pagos", {
+	id: x("id").primaryKey({ autoIncrement: !0 }),
+	ventaId: x("venta_id").notNull().references(() => N.id),
+	metodo: w("metodo").$type().notNull(),
+	monto: S("monto").notNull(),
+	referencia: w("referencia"),
+	fechaHora: w("fecha_hora").notNull()
+}), I = C("movimientos_stock", {
+	id: x("id").primaryKey({ autoIncrement: !0 }),
+	productoId: x("producto_id").notNull().references(() => A.id),
+	loteId: x("lote_id").references(() => j.id),
+	ventaId: x("venta_id").references(() => N.id),
+	tipo: w("tipo").$type().notNull(),
+	cantidad: S("cantidad").notNull(),
+	stockAnterior: S("stock_anterior"),
+	stockPosterior: S("stock_posterior"),
+	motivo: w("motivo"),
+	fechaHora: w("fecha_hora").notNull()
+}, (e) => [b("movimientos_stock_producto_id_idx").on(e.productoId)]), L = e(import.meta.url)("electron").app, R = null, z = null;
+function B(e) {
+	return c("sha256").update(e).digest("hex");
 }
-function getDb() {
-	if (!database) throw new Error("Base de datos no inicializada. Ejecuta initDatabase() primero.");
-	return database;
+function V() {
+	if (!z) throw Error("Base de datos no inicializada. Ejecuta initDatabase() primero.");
+	return z;
 }
-function getDbPath() {
-	if (process.env.PANDA_STOCK_DB) return process.env.PANDA_STOCK_DB;
-	if (!app$1?.getPath) return path.join(process.cwd(), "data", "panda_stock.db");
-	return path.join(app$1.getPath("userData"), "panda_stock.db");
+function oe() {
+	return process.env.PANDA_STOCK_DB ? process.env.PANDA_STOCK_DB : L?.getPath ? o.join(L.getPath("userData"), "panda_stock.db") : o.join(process.cwd(), "data", "panda_stock.db");
 }
-function initDatabase() {
-	if (sqlite) return;
-	const dbPath = getDbPath();
-	sqlite = new Database(dbPath);
-	sqlite.pragma("journal_mode = WAL");
-	sqlite.pragma("foreign_keys = ON");
-	database = drizzle(sqlite, { schema: schema_exports });
-	const migrationsBundled = path.join(import.meta.dirname, "../electron/db/migrations");
-	const migrationsFuente = path.join(import.meta.dirname, "migrations");
-	const migrationsFolder = existsSync(migrationsBundled) ? migrationsBundled : migrationsFuente;
-	migrate(database, { migrationsFolder });
-	const ahora = (/* @__PURE__ */ new Date()).toISOString();
-	if (!database.select({ id: seguridadReportes.id }).from(seguridadReportes).where(eq(seguridadReportes.id, 1)).get()) database.insert(seguridadReportes).values({
+function H() {
+	if (R) return;
+	let e = oe();
+	R = new ee(e), R.pragma("journal_mode = WAL"), R.pragma("foreign_keys = ON"), z = l(R, { schema: ae });
+	let t = o.join(import.meta.dirname, "../electron/db/migrations"), n = o.join(import.meta.dirname, "migrations"), r = s(t) ? t : n;
+	te(z, { migrationsFolder: r });
+	let i = (/* @__PURE__ */ new Date()).toISOString();
+	z.select({ id: E.id }).from(E).where(p(E.id, 1)).get() || z.insert(E).values({
 		id: 1,
-		pinHash: sha256("1234"),
-		actualizadoEn: ahora
+		pinHash: B("1234"),
+		actualizadoEn: i
 	}).run();
 }
 //#endregion
 //#region electron/db/repository.ts
-function verifyPin(pin) {
-	const fila = getDb().select({ pinHash: seguridadReportes.pinHash }).from(seguridadReportes).where(eq(seguridadReportes.id, 1)).get();
-	if (!fila) return false;
-	return sha256(pin) === fila.pinHash;
+function U(e) {
+	let t = V().select({ pinHash: E.pinHash }).from(E).where(p(E.id, 1)).get();
+	return t ? B(e) === t.pinHash : !1;
 }
-function changePin(pinActual, pinNuevo) {
-	const db = getDb();
-	if (!verifyPin(pinActual)) return false;
-	db.update(seguridadReportes).set({
-		pinHash: sha256(pinNuevo),
+function W(e, t) {
+	let n = V();
+	return U(e) ? (n.update(E).set({
+		pinHash: B(t),
 		actualizadoEn: (/* @__PURE__ */ new Date()).toISOString()
-	}).where(eq(seguridadReportes.id, 1)).run();
-	return true;
+	}).where(p(E.id, 1)).run(), !0) : !1;
 }
-function getEmpleados() {
-	return getDb().select().from(empleados).orderBy(asc(empleados.nombre)).all();
+function G() {
+	return V().select().from(D).orderBy(d(D.nombre)).all();
 }
-function createEmpleado(data) {
-	return getDb().insert(empleados).values({
-		nombre: data.nombre,
-		activo: true,
+function K(e) {
+	return V().insert(D).values({
+		nombre: e.nombre,
+		activo: !0,
 		creadoEn: (/* @__PURE__ */ new Date()).toISOString()
 	}).returning().get();
 }
-function toggleEmpleado(id, activo) {
-	getDb().update(empleados).set({ activo }).where(eq(empleados.id, id)).run();
+function q(e, t) {
+	V().update(D).set({ activo: t }).where(p(D.id, e)).run();
 }
-function getCategorias() {
-	return getDb().select().from(categorias).orderBy(asc(categorias.nombre)).all();
+function se() {
+	return V().select().from(O).orderBy(d(O.nombre)).all();
 }
-function createCategoria(nombre) {
-	return getDb().insert(categorias).values({
-		nombre,
-		activo: true
+function ce(e) {
+	return V().insert(O).values({
+		nombre: e,
+		activo: !0
 	}).returning().get();
 }
-function updateCategoria(id, nombre) {
-	getDb().update(categorias).set({ nombre }).where(eq(categorias.id, id)).run();
+function le(e, t) {
+	V().update(O).set({ nombre: t }).where(p(O.id, e)).run();
 }
-function deleteCategoria(id) {
-	const productosAsociados = getDb().select({ count: count() }).from(productos).where(eq(productos.categoriaId, id)).get();
-	if (productosAsociados && productosAsociados.count > 0) throw new Error("No se puede eliminar la categoría porque tiene productos asociados.");
-	getDb().delete(categorias).where(eq(categorias.id, id)).run();
+function ue(e) {
+	let t = V().select({ count: ne() }).from(A).where(p(A.categoriaId, e)).get();
+	if (t && t.count > 0) throw Error("No se puede eliminar la categoría porque tiene productos asociados.");
+	V().delete(O).where(p(O.id, e)).run();
 }
-function getMarcas() {
-	return getDb().select().from(marcas).orderBy(asc(marcas.nombre)).all();
+function de() {
+	return V().select().from(k).orderBy(d(k.nombre)).all();
 }
-function createMarca(nombre) {
-	return getDb().insert(marcas).values({
-		nombre,
-		activo: true
+function fe(e) {
+	return V().insert(k).values({
+		nombre: e,
+		activo: !0
 	}).returning().get();
 }
-function updateMarca(id, nombre) {
-	getDb().update(marcas).set({ nombre }).where(eq(marcas.id, id)).run();
+function pe(e, t) {
+	V().update(k).set({ nombre: t }).where(p(k.id, e)).run();
 }
-function deleteMarca(id) {
-	getDb().update(marcas).set({ activo: false }).where(eq(marcas.id, id)).run();
+function me(e) {
+	V().update(k).set({ activo: !1 }).where(p(k.id, e)).run();
 }
-function scanProductByCode(codigo) {
-	return getDb().select().from(productos).where(or(eq(productos.codigoInterno, codigo), sql`instr(',' || ${productos.codigosBarras} || ',', ',' || ${codigo} || ',') > 0`)).limit(1).get() ?? null;
+function he(e) {
+	return V().select().from(A).where(v(p(A.codigoInterno, e), y`instr(',' || ${A.codigosBarras} || ',', ',' || ${e} || ',') > 0`)).limit(1).get() ?? null;
 }
-function getProductos(filtros) {
-	const db = getDb();
-	const condiciones = [];
-	if (filtros?.search?.trim()) {
-		const q = `%${filtros.search.trim()}%`;
-		condiciones.push(or(like(productos.nombre, q), like(productos.codigoInterno, q), like(productos.codigosBarras, q)));
+function ge(e) {
+	let t = V(), n = [];
+	if (e?.search?.trim()) {
+		let t = `%${e.search.trim()}%`;
+		n.push(v(g(A.nombre, t), g(A.codigoInterno, t), g(A.codigosBarras, t)));
 	}
-	if (filtros?.categoriaId != null) condiciones.push(eq(productos.categoriaId, filtros.categoriaId));
-	if (filtros?.marcaId != null) condiciones.push(eq(productos.marcaId, filtros.marcaId));
-	if (filtros?.bajoStock) condiciones.push(lte(productos.stockActual, productos.stockMinimo));
-	const condicion = and(...condiciones);
-	return (condicion ? db.select().from(productos).where(condicion) : db.select().from(productos)).orderBy(asc(productos.nombre)).all();
+	e?.categoriaId != null && n.push(p(A.categoriaId, e.categoriaId)), e?.marcaId != null && n.push(p(A.marcaId, e.marcaId)), e?.bajoStock && n.push(_(A.stockActual, A.stockMinimo));
+	let r = u(...n);
+	return (r ? t.select().from(A).where(r) : t.select().from(A)).orderBy(d(A.nombre)).all();
 }
-function getProductoById(id) {
-	return getDb().select().from(productos).where(eq(productos.id, id)).get() ?? null;
+function _e(e) {
+	return V().select().from(A).where(p(A.id, e)).get() ?? null;
 }
-function mapNuevoProducto(data) {
-	const ahora = (/* @__PURE__ */ new Date()).toISOString();
+function J(e, t) {
+	let n = t?.trim() ?? null;
+	if (!n) return null;
+	let r = e.select({ id: k.id }).from(k).where(y`lower(${k.nombre}) = lower(${n})`).get();
+	return r ? r.id : e.insert(k).values({
+		nombre: n,
+		activo: !0
+	}).returning({ id: k.id }).get().id;
+}
+function ve(e) {
+	let t = (/* @__PURE__ */ new Date()).toISOString(), n = Number(e.stockActual ?? e.stock ?? 0);
 	return {
-		categoriaId: data.categoriaId ?? null,
-		marcaId: data.marcaId ?? null,
-		nombre: data.nombre,
-		codigoInterno: data.codigoInterno,
-		codigosBarras: data.codigosBarras?.trim() || null,
-		tipoVenta: data.tipoVenta ?? "unidad",
-		unidadMedida: data.unidadMedida ?? "unidad",
-		costo: data.costo ?? 0,
-		porcentajeGanancia: data.porcentajeGanancia ?? 0,
-		precioVenta: data.precioVenta ?? 0,
-		precioMayoreo: data.precioMayoreo ?? 0,
-		stockMinimo: data.stockMinimo ?? 0,
-		vencimiento: data.vencimiento ?? null,
-		activo: true,
-		creadoEn: ahora
+		categoriaId: e.categoriaId ?? null,
+		marcaId: e.marcaId ?? null,
+		nombre: e.nombre,
+		codigoInterno: e.codigoInterno,
+		codigosBarras: e.codigosBarras?.trim() || null,
+		variante: e.variante?.trim() || null,
+		tipoVenta: e.tipoVenta ?? "unidad",
+		unidadMedida: e.unidadMedida ?? "unidad",
+		costo: Number(e.costo ?? 0),
+		porcentajeGanancia: Number(e.porcentajeGanancia ?? 0),
+		precioVenta: Number(e.precioVenta ?? e.precio ?? 0),
+		precioMayoreo: Number(e.precioMayoreo ?? 0),
+		stockActual: n >= 0 ? n : 0,
+		stockMinimo: Number(e.stockMinimo ?? 0),
+		vencimiento: e.vencimiento ?? null,
+		activo: !0,
+		creadoEn: t
 	};
 }
-function createProducto(data) {
-	return getDb().insert(productos).values(mapNuevoProducto(data)).returning().get();
+function ye(e) {
+	let t = V(), n = ve(e), r = (/* @__PURE__ */ new Date()).toISOString();
+	return t.transaction((t) => {
+		n.marcaId = J(t, e.marca);
+		let i = t.insert(A).values(n).returning().get();
+		if (n.stockActual > 0) {
+			let e = t.insert(j).values({
+				productoId: i.id,
+				numeroLote: null,
+				fechaIngreso: r,
+				fechaVence: n.vencimiento ?? null,
+				costoUnitario: n.costo,
+				cantidadInicial: n.stockActual,
+				cantidadActual: n.stockActual,
+				creadoEn: r
+			}).returning().get();
+			t.insert(I).values({
+				productoId: i.id,
+				loteId: e.id,
+				ventaId: null,
+				tipo: "entrada",
+				cantidad: n.stockActual,
+				stockAnterior: 0,
+				stockPosterior: n.stockActual,
+				motivo: "Stock inicial al crear producto",
+				fechaHora: r
+			}).run();
+		}
+		return i;
+	});
 }
-function updateProducto(id, data) {
-	const db = getDb();
-	const set = { actualizadoEn: (/* @__PURE__ */ new Date()).toISOString() };
-	if (data.nombre !== void 0) set.nombre = data.nombre;
-	if (data.codigoInterno !== void 0) set.codigoInterno = data.codigoInterno;
-	if (data.codigosBarras !== void 0) set.codigosBarras = data.codigosBarras?.trim() || null;
-	if (data.categoriaId !== void 0) set.categoriaId = data.categoriaId;
-	if (data.marcaId !== void 0) set.marcaId = data.marcaId;
-	if (data.tipoVenta !== void 0) set.tipoVenta = data.tipoVenta;
-	if (data.unidadMedida !== void 0) set.unidadMedida = data.unidadMedida;
-	if (data.costo !== void 0) set.costo = data.costo;
-	if (data.porcentajeGanancia !== void 0) set.porcentajeGanancia = data.porcentajeGanancia;
-	if (data.precioVenta !== void 0) set.precioVenta = data.precioVenta;
-	if (data.precioMayoreo !== void 0) set.precioMayoreo = data.precioMayoreo;
-	if (data.stockMinimo !== void 0) set.stockMinimo = data.stockMinimo;
-	if (data.vencimiento !== void 0) set.vencimiento = data.vencimiento ?? null;
-	const fila = db.update(productos).set(set).where(eq(productos.id, id)).returning().get();
-	if (!fila) throw new Error("Producto no encontrado");
-	return fila;
+function be(e, t) {
+	let n = V(), r = { actualizadoEn: (/* @__PURE__ */ new Date()).toISOString() };
+	t.nombre !== void 0 && (r.nombre = t.nombre), t.codigoInterno !== void 0 && (r.codigoInterno = t.codigoInterno), t.codigosBarras !== void 0 && (r.codigosBarras = t.codigosBarras?.trim() || null), t.variante !== void 0 && (r.variante = t.variante?.trim() || null), t.categoriaId !== void 0 && (r.categoriaId = t.categoriaId), t.marca === void 0 ? t.marcaId !== void 0 && (r.marcaId = t.marcaId) : r.marcaId = J(n, t.marca), t.tipoVenta !== void 0 && (r.tipoVenta = t.tipoVenta), t.unidadMedida !== void 0 && (r.unidadMedida = t.unidadMedida), t.costo !== void 0 && (r.costo = t.costo), t.porcentajeGanancia !== void 0 && (r.porcentajeGanancia = t.porcentajeGanancia), t.precioVenta !== void 0 && (r.precioVenta = t.precioVenta), t.precioMayoreo !== void 0 && (r.precioMayoreo = t.precioMayoreo), t.stockMinimo !== void 0 && (r.stockMinimo = t.stockMinimo), t.vencimiento !== void 0 && (r.vencimiento = t.vencimiento ?? null);
+	let i = n.update(A).set(r).where(p(A.id, e)).returning().get();
+	if (!i) throw Error("Producto no encontrado");
+	return i;
 }
-function deleteProducto(id) {
-	getDb().update(productos).set({
-		activo: false,
+function xe(e) {
+	V().update(A).set({
+		activo: !1,
 		actualizadoEn: (/* @__PURE__ */ new Date()).toISOString()
-	}).where(eq(productos.id, id)).run();
+	}).where(p(A.id, e)).run();
 }
-function getAlertasStock() {
-	return getDb().select().from(productos).where(and(lte(productos.stockActual, productos.stockMinimo), eq(productos.activo, true))).orderBy(asc(productos.stockActual)).all();
+function Se() {
+	return V().select().from(A).where(u(_(A.stockActual, A.stockMinimo), p(A.activo, !0))).orderBy(d(A.stockActual)).all();
 }
-function getLotesByProducto(productoId) {
-	return getDb().select().from(lotes).where(eq(lotes.productoId, productoId)).orderBy(asc(lotes.fechaIngreso)).all();
+function Ce(e) {
+	return V().select().from(j).where(p(j.productoId, e)).orderBy(d(j.fechaIngreso)).all();
 }
-function createLote(data) {
-	const db = getDb();
-	const ahora = (/* @__PURE__ */ new Date()).toISOString();
-	return db.transaction((tx) => {
-		const filaProducto = tx.select({ stockActual: productos.stockActual }).from(productos).where(eq(productos.id, data.productoId)).get();
-		if (!filaProducto) throw new Error("Producto no encontrado");
-		const stockAnterior = filaProducto.stockActual;
-		const stockPosterior = stockAnterior + data.cantidadInicial;
-		const lote = tx.insert(lotes).values({
-			productoId: data.productoId,
-			numeroLote: data.numeroLote ?? null,
-			fechaIngreso: data.fechaIngreso,
-			fechaVence: data.fechaVence ?? null,
-			costoUnitario: data.costoUnitario ?? 0,
-			cantidadInicial: data.cantidadInicial,
-			cantidadActual: data.cantidadInicial,
-			creadoEn: ahora
+function we(e) {
+	let t = V(), n = (/* @__PURE__ */ new Date()).toISOString();
+	return t.transaction((t) => {
+		let r = t.select({ stockActual: A.stockActual }).from(A).where(p(A.id, e.productoId)).get();
+		if (!r) throw Error("Producto no encontrado");
+		let i = r.stockActual, a = i + e.cantidadInicial, o = t.insert(j).values({
+			productoId: e.productoId,
+			numeroLote: e.numeroLote ?? null,
+			fechaIngreso: e.fechaIngreso,
+			fechaVence: e.fechaVence ?? null,
+			costoUnitario: e.costoUnitario ?? 0,
+			cantidadInicial: e.cantidadInicial,
+			cantidadActual: e.cantidadInicial,
+			creadoEn: n
 		}).returning().get();
-		tx.update(productos).set({
-			stockActual: stockPosterior,
-			actualizadoEn: ahora
-		}).where(eq(productos.id, data.productoId)).run();
-		tx.insert(movimientosStock).values({
-			productoId: data.productoId,
-			loteId: lote.id,
+		return t.update(A).set({
+			stockActual: a,
+			actualizadoEn: n
+		}).where(p(A.id, e.productoId)).run(), t.insert(I).values({
+			productoId: e.productoId,
+			loteId: o.id,
 			ventaId: null,
 			tipo: "entrada",
-			cantidad: data.cantidadInicial,
-			stockAnterior,
-			stockPosterior,
+			cantidad: e.cantidadInicial,
+			stockAnterior: i,
+			stockPosterior: a,
 			motivo: "Ingreso de mercadería",
-			fechaHora: ahora
-		}).run();
-		return lote;
+			fechaHora: n
+		}).run(), o;
 	});
 }
-function getLotesPorVencer(diasLimite) {
-	const limite = new Date(Date.now() + diasLimite * 24 * 60 * 60 * 1e3).toISOString();
-	return getDb().select().from(lotes).where(and(isNotNull(lotes.fechaVence), lte(lotes.fechaVence, limite), gt(lotes.cantidadActual, 0))).orderBy(asc(lotes.fechaVence)).all();
+function Te(e) {
+	let t = new Date(Date.now() + e * 24 * 60 * 60 * 1e3).toISOString();
+	return V().select().from(j).where(u(re(j.fechaVence), _(j.fechaVence, t), m(j.cantidadActual, 0))).orderBy(d(j.fechaVence)).all();
 }
-function getActiveCaja() {
-	return getDb().select().from(cajas).where(eq(cajas.estado, "abierta")).orderBy(desc(cajas.id)).get() ?? null;
+function Y() {
+	return V().select().from(M).where(p(M.estado, "abierta")).orderBy(f(M.id)).get() ?? null;
 }
-function openCaja(data) {
-	const db = getDb();
-	if (getActiveCaja()) throw new Error("Ya existe una caja abierta");
-	return db.insert(cajas).values({
-		empleadoId: data.empleadoId,
-		montoInicial: data.montoInicial ?? 0,
+function Ee(e) {
+	let t = V();
+	if (Y()) throw Error("Ya existe una caja abierta");
+	return t.insert(M).values({
+		empleadoId: e.empleadoId,
+		montoInicial: e.montoInicial ?? 0,
 		estado: "abierta",
 		fechaApertura: (/* @__PURE__ */ new Date()).toISOString(),
-		observaciones: data.observaciones ?? null
+		observaciones: e.observaciones ?? null
 	}).returning().get();
 }
-function getCajaSummary(cajaId) {
-	const db = getDb();
-	const resumenVentas = db.select({ totalVentas: sql`coalesce(sum(${ventas.total}), 0)` }).from(ventas).where(and(eq(ventas.cajaId, cajaId), eq(ventas.estado, "completada"))).get();
-	const filasMetodo = db.select({
-		metodo: pagos.metodo,
-		monto: sql`coalesce(sum(${pagos.monto}), 0)`
-	}).from(pagos).innerJoin(ventas, eq(pagos.ventaId, ventas.id)).where(and(eq(ventas.cajaId, cajaId), eq(ventas.estado, "completada"))).groupBy(pagos.metodo).all();
-	let totalEfectivo = 0;
-	let totalTransferencia = 0;
-	let totalTarjeta = 0;
-	for (const fila of filasMetodo) if (fila.metodo === "efectivo") totalEfectivo = fila.monto;
-	else if (fila.metodo === "transferencia") totalTransferencia = fila.monto;
-	else if (fila.metodo === "debito" || fila.metodo === "credito") totalTarjeta += fila.monto;
+function De(e) {
+	let t = V(), n = t.select({ totalVentas: y`coalesce(sum(${N.total}), 0)` }).from(N).where(u(p(N.cajaId, e), p(N.estado, "completada"))).get(), r = t.select({
+		metodo: F.metodo,
+		monto: y`coalesce(sum(${F.monto}), 0)`
+	}).from(F).innerJoin(N, p(F.ventaId, N.id)).where(u(p(N.cajaId, e), p(N.estado, "completada"))).groupBy(F.metodo).all(), i = 0, a = 0, o = 0;
+	for (let e of r) e.metodo === "efectivo" ? i = e.monto : e.metodo === "transferencia" ? a = e.monto : (e.metodo === "debito" || e.metodo === "credito") && (o += e.monto);
 	return {
-		totalVentas: resumenVentas?.totalVentas ?? 0,
-		totalEfectivo,
-		totalTransferencia,
-		totalTarjeta
+		totalVentas: n?.totalVentas ?? 0,
+		totalEfectivo: i,
+		totalTransferencia: a,
+		totalTarjeta: o
 	};
 }
-function closeCaja(data) {
-	return getDb().transaction((tx) => {
-		const filaCaja = tx.select().from(cajas).where(eq(cajas.id, data.cajaId)).get();
-		if (!filaCaja) throw new Error("Caja no encontrada");
-		if (filaCaja.estado === "cerrada") throw new Error("La caja ya está cerrada");
-		const resumen = tx.select({ total: sql`coalesce(sum(${ventas.total}), 0)` }).from(ventas).where(and(eq(ventas.cajaId, data.cajaId), eq(ventas.estado, "completada"))).get();
-		const montoEsperado = filaCaja.montoInicial + (resumen?.total ?? 0);
-		return tx.update(cajas).set({
-			montoEsperado,
-			montoReal: data.montoReal,
-			diferencia: data.montoReal - montoEsperado,
+function Oe(e) {
+	return V().transaction((t) => {
+		let n = t.select().from(M).where(p(M.id, e.cajaId)).get();
+		if (!n) throw Error("Caja no encontrada");
+		if (n.estado === "cerrada") throw Error("La caja ya está cerrada");
+		let r = t.select({ total: y`coalesce(sum(${N.total}), 0)` }).from(N).where(u(p(N.cajaId, e.cajaId), p(N.estado, "completada"))).get(), i = n.montoInicial + (r?.total ?? 0);
+		return t.update(M).set({
+			montoEsperado: i,
+			montoReal: e.montoReal,
+			diferencia: e.montoReal - i,
 			estado: "cerrada",
 			fechaCierre: (/* @__PURE__ */ new Date()).toISOString(),
-			observaciones: data.observaciones ?? filaCaja.observaciones
-		}).where(eq(cajas.id, data.cajaId)).returning().get();
+			observaciones: e.observaciones ?? n.observaciones
+		}).where(p(M.id, e.cajaId)).returning().get();
 	});
 }
-function processSale(venta) {
-	const db = getDb();
-	const ahora = (/* @__PURE__ */ new Date()).toISOString();
+function ke(e) {
+	let t = V(), n = (/* @__PURE__ */ new Date()).toISOString();
 	return {
-		success: true,
-		ventaId: db.transaction((tx) => {
-			const idVenta = tx.insert(ventas).values({
-				cajaId: venta.cajaId,
-				empleadoId: venta.empleadoId,
-				subtotal: venta.subtotal,
-				descuento: venta.descuento,
-				impuesto: venta.impuesto,
-				total: venta.total,
+		success: !0,
+		ventaId: t.transaction((t) => {
+			let r = t.insert(N).values({
+				cajaId: e.cajaId,
+				empleadoId: e.empleadoId,
+				subtotal: e.subtotal,
+				descuento: e.descuento,
+				impuesto: e.impuesto,
+				total: e.total,
 				estado: "completada",
-				fechaHora: ahora
-			}).returning({ id: ventas.id }).get().id;
-			for (const item of venta.items) {
-				tx.insert(detalleVentas).values({
-					ventaId: idVenta,
-					productoId: item.productoId,
-					tipoTarifa: item.tipoTarifa,
-					descripcionItem: item.descripcionItem,
-					cantidad: item.cantidad,
-					precioUnitario: item.precioUnitario,
-					costoUnitario: item.costoUnitario,
-					subtotal: item.precioUnitario * item.cantidad
-				}).run();
-				if (item.productoId == null) continue;
-				let stock = tx.select({ stockActual: productos.stockActual }).from(productos).where(eq(productos.id, item.productoId)).get()?.stockActual ?? 0;
-				const filasLote = tx.select().from(lotes).where(and(eq(lotes.productoId, item.productoId), gt(lotes.cantidadActual, 0))).orderBy(asc(lotes.fechaIngreso), asc(lotes.fechaVence)).all();
-				let restante = item.cantidad;
-				for (const lote of filasLote) {
-					if (restante <= 0) break;
-					const descontado = Math.min(lote.cantidadActual, restante);
-					tx.update(lotes).set({ cantidadActual: lote.cantidadActual - descontado }).where(eq(lotes.id, lote.id)).run();
-					tx.insert(movimientosStock).values({
-						productoId: item.productoId,
-						loteId: lote.id,
-						ventaId: idVenta,
+				fechaHora: n
+			}).returning({ id: N.id }).get().id;
+			for (let i of e.items) {
+				if (t.insert(P).values({
+					ventaId: r,
+					productoId: i.productoId,
+					tipoTarifa: i.tipoTarifa,
+					descripcionItem: i.descripcionItem,
+					cantidad: i.cantidad,
+					precioUnitario: i.precioUnitario,
+					costoUnitario: i.costoUnitario,
+					subtotal: i.precioUnitario * i.cantidad
+				}).run(), i.productoId == null) continue;
+				let e = t.select({ stockActual: A.stockActual }).from(A).where(p(A.id, i.productoId)).get()?.stockActual ?? 0, a = t.select().from(j).where(u(p(j.productoId, i.productoId), m(j.cantidadActual, 0))).orderBy(d(j.fechaIngreso), d(j.fechaVence)).all(), o = i.cantidad;
+				for (let s of a) {
+					if (o <= 0) break;
+					let a = Math.min(s.cantidadActual, o);
+					t.update(j).set({ cantidadActual: s.cantidadActual - a }).where(p(j.id, s.id)).run(), t.insert(I).values({
+						productoId: i.productoId,
+						loteId: s.id,
+						ventaId: r,
 						tipo: "venta",
-						cantidad: descontado,
-						stockAnterior: stock,
-						stockPosterior: stock - descontado,
+						cantidad: a,
+						stockAnterior: e,
+						stockPosterior: e - a,
 						motivo: null,
-						fechaHora: ahora
-					}).run();
-					stock -= descontado;
-					restante -= descontado;
+						fechaHora: n
+					}).run(), e -= a, o -= a;
 				}
-				if (restante > 0) {
-					tx.insert(movimientosStock).values({
-						productoId: item.productoId,
-						loteId: null,
-						ventaId: idVenta,
-						tipo: "venta",
-						cantidad: restante,
-						stockAnterior: stock,
-						stockPosterior: stock - restante,
-						motivo: null,
-						fechaHora: ahora
-					}).run();
-					stock -= restante;
-				}
-				tx.update(productos).set({
-					stockActual: stock,
-					actualizadoEn: ahora
-				}).where(eq(productos.id, item.productoId)).run();
+				o > 0 && (t.insert(I).values({
+					productoId: i.productoId,
+					loteId: null,
+					ventaId: r,
+					tipo: "venta",
+					cantidad: o,
+					stockAnterior: e,
+					stockPosterior: e - o,
+					motivo: null,
+					fechaHora: n
+				}).run(), e -= o), t.update(A).set({
+					stockActual: e,
+					actualizadoEn: n
+				}).where(p(A.id, i.productoId)).run();
 			}
-			for (const pago of venta.pagos) tx.insert(pagos).values({
-				ventaId: idVenta,
-				metodo: pago.metodo,
-				monto: pago.monto,
-				referencia: pago.referencia ?? null,
-				fechaHora: ahora
+			for (let i of e.pagos) t.insert(F).values({
+				ventaId: r,
+				metodo: i.metodo,
+				monto: i.monto,
+				referencia: i.referencia ?? null,
+				fechaHora: n
 			}).run();
-			return idVenta;
+			return r;
 		})
 	};
 }
-function getVentas(filtros) {
-	const db = getDb();
-	const condiciones = [];
-	if (filtros?.desde) condiciones.push(gte(ventas.fechaHora, filtros.desde));
-	if (filtros?.hasta) condiciones.push(lte(ventas.fechaHora, filtros.hasta));
-	if (filtros?.cajaId != null) condiciones.push(eq(ventas.cajaId, filtros.cajaId));
-	const condicion = and(...condiciones);
-	return (condicion ? db.select().from(ventas).where(condicion) : db.select().from(ventas)).orderBy(desc(ventas.fechaHora)).all();
+function Ae(e) {
+	let t = V(), n = [];
+	e?.desde && n.push(h(N.fechaHora, e.desde)), e?.hasta && n.push(_(N.fechaHora, e.hasta)), e?.cajaId != null && n.push(p(N.cajaId, e.cajaId));
+	let r = u(...n);
+	return (r ? t.select().from(N).where(r) : t.select().from(N)).orderBy(f(N.fechaHora)).all();
 }
-function getVentaDetalle(idVenta) {
-	const db = getDb();
-	const filaVenta = db.select().from(ventas).where(eq(ventas.id, idVenta)).get();
-	if (!filaVenta) return null;
-	return {
-		venta: filaVenta,
-		items: db.select().from(detalleVentas).where(eq(detalleVentas.ventaId, idVenta)).orderBy(asc(detalleVentas.id)).all(),
-		pagos: db.select().from(pagos).where(eq(pagos.ventaId, idVenta)).orderBy(asc(pagos.id)).all()
-	};
+function X(e) {
+	let t = V(), n = t.select().from(N).where(p(N.id, e)).get();
+	return n ? {
+		venta: n,
+		items: t.select().from(P).where(p(P.ventaId, e)).orderBy(d(P.id)).all(),
+		pagos: t.select().from(F).where(p(F.ventaId, e)).orderBy(d(F.id)).all()
+	} : null;
 }
-function getMovimientosStock(filtros) {
-	const base = getDb().select().from(movimientosStock);
-	const ordenado = (filtros?.productoId != null ? base.where(eq(movimientosStock.productoId, filtros.productoId)) : base).orderBy(desc(movimientosStock.fechaHora));
-	return (filtros?.limit != null ? ordenado.limit(filtros.limit) : ordenado).all();
+function je(e) {
+	let t = V().select().from(I), n = (e?.productoId == null ? t : t.where(p(I.productoId, e.productoId))).orderBy(f(I.fechaHora));
+	return (e?.limit == null ? n : n.limit(e.limit)).all();
 }
-function createAjusteStock(data) {
-	const db = getDb();
-	const ahora = (/* @__PURE__ */ new Date()).toISOString();
-	db.transaction((tx) => {
-		const filaProducto = tx.select({ stockActual: productos.stockActual }).from(productos).where(eq(productos.id, data.productoId)).get();
-		if (!filaProducto) throw new Error("Producto no encontrado");
-		const stockAnterior = filaProducto.stockActual;
-		const stockPosterior = stockAnterior + (data.tipo === "ajuste_positivo" ? data.cantidad : -data.cantidad);
-		if (stockPosterior < 0) throw new Error("El ajuste dejaría stock negativo");
-		tx.update(productos).set({
-			stockActual: stockPosterior,
-			actualizadoEn: ahora
-		}).where(eq(productos.id, data.productoId)).run();
-		tx.insert(movimientosStock).values({
-			productoId: data.productoId,
+function Me(e) {
+	let t = V(), n = (/* @__PURE__ */ new Date()).toISOString();
+	t.transaction((t) => {
+		let r = t.select({ stockActual: A.stockActual }).from(A).where(p(A.id, e.productoId)).get();
+		if (!r) throw Error("Producto no encontrado");
+		let i = r.stockActual, a = i + (e.tipo === "ajuste_positivo" ? e.cantidad : -e.cantidad);
+		if (a < 0) throw Error("El ajuste dejaría stock negativo");
+		t.update(A).set({
+			stockActual: a,
+			actualizadoEn: n
+		}).where(p(A.id, e.productoId)).run(), t.insert(I).values({
+			productoId: e.productoId,
 			loteId: null,
 			ventaId: null,
-			tipo: data.tipo,
-			cantidad: data.cantidad,
-			stockAnterior,
-			stockPosterior,
-			motivo: data.motivo,
-			fechaHora: ahora
+			tipo: e.tipo,
+			cantidad: e.cantidad,
+			stockAnterior: i,
+			stockPosterior: a,
+			motivo: e.motivo,
+			fechaHora: n
 		}).run();
 	});
 }
-function getReportesSummary(filtros) {
-	const db = getDb();
-	const condiciones = [eq(ventas.estado, "completada")];
-	if (filtros?.desde) condiciones.push(gte(ventas.fechaHora, filtros.desde));
-	if (filtros?.hasta) condiciones.push(lte(ventas.fechaHora, filtros.hasta));
-	const condicion = and(...condiciones);
-	const ventasTotales = db.select({
-		total: sql`coalesce(sum(${ventas.total}), 0)`,
-		cantidad: sql`count(*)`
-	}).from(ventas).where(condicion).get();
-	const filasMetodo = db.select({
-		metodo: pagos.metodo,
-		monto: sql`coalesce(sum(${pagos.monto}), 0)`
-	}).from(pagos).innerJoin(ventas, eq(pagos.ventaId, ventas.id)).where(condicion).groupBy(pagos.metodo).all();
-	const masVendidos = db.select({
-		productoId: detalleVentas.productoId,
-		nombre: productos.nombre,
-		cantidad: sql`coalesce(sum(${detalleVentas.cantidad}), 0)`,
-		monto: sql`coalesce(sum(${detalleVentas.subtotal}), 0)`
-	}).from(detalleVentas).innerJoin(ventas, eq(detalleVentas.ventaId, ventas.id)).innerJoin(productos, eq(detalleVentas.productoId, productos.id)).where(condicion).groupBy(detalleVentas.productoId, productos.nombre).orderBy(desc(sql`sum(${detalleVentas.cantidad})`)).limit(5).all();
-	const cajaActiva = db.select().from(cajas).where(eq(cajas.estado, "abierta")).orderBy(desc(cajas.id)).get();
-	let caja = {
+function Ne(e) {
+	let t = V(), n = [p(N.estado, "completada")];
+	e?.desde && n.push(h(N.fechaHora, e.desde)), e?.hasta && n.push(_(N.fechaHora, e.hasta));
+	let r = u(...n), i = t.select({
+		total: y`coalesce(sum(${N.total}), 0)`,
+		cantidad: y`count(*)`
+	}).from(N).where(r).get(), a = t.select({
+		metodo: F.metodo,
+		monto: y`coalesce(sum(${F.monto}), 0)`
+	}).from(F).innerJoin(N, p(F.ventaId, N.id)).where(r).groupBy(F.metodo).all(), o = t.select({
+		productoId: P.productoId,
+		nombre: A.nombre,
+		cantidad: y`coalesce(sum(${P.cantidad}), 0)`,
+		monto: y`coalesce(sum(${P.subtotal}), 0)`
+	}).from(P).innerJoin(N, p(P.ventaId, N.id)).innerJoin(A, p(P.productoId, A.id)).where(r).groupBy(P.productoId, A.nombre).orderBy(f(y`sum(${P.cantidad})`)).limit(5).all(), s = t.select().from(M).where(p(M.estado, "abierta")).orderBy(f(M.id)).get(), c = {
 		cajaId: null,
 		montoInicial: 0,
 		montoEsperado: 0,
@@ -561,103 +514,59 @@ function getReportesSummary(filtros) {
 		diferencia: null,
 		ventas: 0
 	};
-	if (cajaActiva) {
-		const resumenCaja = db.select({
-			monto: sql`coalesce(sum(${ventas.total}), 0)`,
-			cantidad: sql`count(*)`
-		}).from(ventas).where(and(eq(ventas.cajaId, cajaActiva.id), eq(ventas.estado, "completada"))).get();
-		caja = {
-			cajaId: cajaActiva.id,
-			montoInicial: cajaActiva.montoInicial,
-			montoEsperado: cajaActiva.montoInicial + (resumenCaja?.monto ?? 0),
-			montoReal: cajaActiva.montoReal,
-			diferencia: cajaActiva.diferencia,
-			ventas: resumenCaja?.cantidad ?? 0
+	if (s) {
+		let e = t.select({
+			monto: y`coalesce(sum(${N.total}), 0)`,
+			cantidad: y`count(*)`
+		}).from(N).where(u(p(N.cajaId, s.id), p(N.estado, "completada"))).get();
+		c = {
+			cajaId: s.id,
+			montoInicial: s.montoInicial,
+			montoEsperado: s.montoInicial + (e?.monto ?? 0),
+			montoReal: s.montoReal,
+			diferencia: s.diferencia,
+			ventas: e?.cantidad ?? 0
 		};
 	}
 	return {
-		caja,
-		ventasPorMetodo: filasMetodo,
-		productosMasVendidos: masVendidos,
-		totalVentas: ventasTotales?.total ?? 0,
-		cantVentas: ventasTotales?.cantidad ?? 0
+		caja: c,
+		ventasPorMetodo: a,
+		productosMasVendidos: o,
+		totalVentas: i?.total ?? 0,
+		cantVentas: i?.cantidad ?? 0
 	};
 }
 //#endregion
 //#region electron/main.ts
-var __dirname = path.dirname(fileURLToPath(import.meta.url));
-var isDev = !app.isPackaged;
-function createWindow() {
-	const win = new BrowserWindow({
+var Z = o.dirname(a(import.meta.url)), Q = !r.isPackaged;
+function $() {
+	let e = new t({
 		width: 1440,
 		height: 900,
 		minWidth: 480,
 		minHeight: 700,
-		resizable: true,
-		autoHideMenuBar: true,
+		resizable: !0,
+		autoHideMenuBar: !0,
 		webPreferences: {
-			preload: path.join(__dirname, "../dist-electron/preload.cjs"),
-			contextIsolation: true,
-			nodeIntegration: false,
-			sandbox: true
+			preload: o.join(Z, "../dist-electron/preload.cjs"),
+			contextIsolation: !0,
+			nodeIntegration: !1,
+			sandbox: !0
 		}
 	});
-	win.setMenu(null);
-	win.webContents.on("before-input-event", (_event, input) => {
-		if (input.type === "keyDown" && input.key === "F12" && isDev) {
-			_event.preventDefault();
-			win.webContents.toggleDevTools();
-		}
-	});
-	if (isDev) win.loadURL("http://localhost:5173");
-	else win.loadFile(path.join(__dirname, "../dist/index.html"));
+	e.setMenu(null), e.webContents.on("before-input-event", (t, n) => {
+		n.type === "keyDown" && n.key === "F12" && Q && (t.preventDefault(), e.webContents.toggleDevTools());
+	}), Q ? e.loadURL("http://localhost:5173") : e.loadFile(o.join(Z, "../dist/index.html"));
 }
-function registerIpcHandlers() {
-	ipcMain.handle("seguridad:verify-pin", (_event, pin) => verifyPin(pin));
-	ipcMain.handle("seguridad:change-pin", (_event, pinActual, pinNuevo) => changePin(pinActual, pinNuevo));
-	ipcMain.handle("empleados:get-all", () => getEmpleados());
-	ipcMain.handle("empleados:create", (_event, data) => createEmpleado(data));
-	ipcMain.handle("empleados:toggle", (_event, id, activo) => toggleEmpleado(id, activo));
-	ipcMain.handle("categorias:get-all", () => getCategorias());
-	ipcMain.handle("categorias:create", (_event, nombre) => createCategoria(nombre));
-	ipcMain.handle("categorias:update", (_event, id, nombre) => updateCategoria(id, nombre));
-	ipcMain.handle("categorias:delete", (_event, id) => deleteCategoria(id));
-	ipcMain.handle("marcas:get-all", () => getMarcas());
-	ipcMain.handle("marcas:create", (_event, nombre) => createMarca(nombre));
-	ipcMain.handle("marcas:update", (_event, id, nombre) => updateMarca(id, nombre));
-	ipcMain.handle("marcas:delete", (_event, id) => deleteMarca(id));
-	ipcMain.handle("productos:scan", (_event, codigo) => scanProductByCode(codigo));
-	ipcMain.handle("productos:get-all", (_event, filtros) => getProductos(filtros));
-	ipcMain.handle("productos:get-by-id", (_event, id) => getProductoById(id));
-	ipcMain.handle("productos:create", (_event, data) => createProducto(data));
-	ipcMain.handle("productos:update", (_event, id, data) => updateProducto(id, data));
-	ipcMain.handle("productos:delete", (_event, id) => deleteProducto(id));
-	ipcMain.handle("productos:get-alerts", () => getAlertasStock());
-	ipcMain.handle("lotes:get-by-producto", (_event, productoId) => getLotesByProducto(productoId));
-	ipcMain.handle("lotes:create", (_event, data) => createLote(data));
-	ipcMain.handle("lotes:get-expiring", (_event, diasLimite) => getLotesPorVencer(diasLimite));
-	ipcMain.handle("cajas:get-active", () => getActiveCaja());
-	ipcMain.handle("cajas:open", (_event, data) => openCaja(data));
-	ipcMain.handle("cajas:get-summary", (_event, cajaId) => getCajaSummary(cajaId));
-	ipcMain.handle("cajas:close", (_event, data) => closeCaja(data));
-	ipcMain.handle("ventas:process", (_event, venta) => processSale(venta));
-	ipcMain.handle("ventas:get-all", (_event, filtros) => getVentas(filtros));
-	ipcMain.handle("ventas:get-detail", (_event, idVenta) => getVentaDetalle(idVenta));
-	ipcMain.handle("movimientos:get-all", (_event, filtros) => getMovimientosStock(filtros));
-	ipcMain.handle("movimientos:ajuste", (_event, data) => createAjusteStock(data));
-	ipcMain.handle("reportes:summary", (_event, filtros) => getReportesSummary(filtros));
+function Pe() {
+	i.handle("seguridad:verify-pin", (e, t) => U(t)), i.handle("seguridad:change-pin", (e, t, n) => W(t, n)), i.handle("empleados:get-all", () => G()), i.handle("empleados:create", (e, t) => K(t)), i.handle("empleados:toggle", (e, t, n) => q(t, n)), i.handle("categorias:get-all", () => se()), i.handle("categorias:create", (e, t) => ce(t)), i.handle("categorias:update", (e, t, n) => le(t, n)), i.handle("categorias:delete", (e, t) => ue(t)), i.handle("marcas:get-all", () => de()), i.handle("marcas:create", (e, t) => fe(t)), i.handle("marcas:update", (e, t, n) => pe(t, n)), i.handle("marcas:delete", (e, t) => me(t)), i.handle("productos:scan", (e, t) => he(t)), i.handle("productos:get-all", (e, t) => ge(t)), i.handle("productos:get-by-id", (e, t) => _e(t)), i.handle("productos:create", (e, t) => ye(t)), i.handle("productos:update", (e, t, n) => be(t, n)), i.handle("productos:delete", (e, t) => xe(t)), i.handle("productos:get-alerts", () => Se()), i.handle("lotes:get-by-producto", (e, t) => Ce(t)), i.handle("lotes:create", (e, t) => we(t)), i.handle("lotes:get-expiring", (e, t) => Te(t)), i.handle("cajas:get-active", () => Y()), i.handle("cajas:open", (e, t) => Ee(t)), i.handle("cajas:get-summary", (e, t) => De(t)), i.handle("cajas:close", (e, t) => Oe(t)), i.handle("ventas:process", (e, t) => ke(t)), i.handle("ventas:get-all", (e, t) => Ae(t)), i.handle("ventas:get-detail", (e, t) => X(t)), i.handle("movimientos:get-all", (e, t) => je(t)), i.handle("movimientos:ajuste", (e, t) => Me(t)), i.handle("reportes:summary", (e, t) => Ne(t));
 }
-app.whenReady().then(() => {
-	initDatabase();
-	registerIpcHandlers();
-	Menu.setApplicationMenu(null);
-	createWindow();
-	app.on("activate", () => {
-		if (BrowserWindow.getAllWindows().length === 0) createWindow();
+r.whenReady().then(() => {
+	H(), Pe(), n.setApplicationMenu(null), $(), r.on("activate", () => {
+		t.getAllWindows().length === 0 && $();
 	});
-});
-app.on("window-all-closed", () => {
-	if (process.platform !== "darwin") app.quit();
+}), r.on("window-all-closed", () => {
+	process.platform !== "darwin" && r.quit();
 });
 //#endregion
 export {};
