@@ -18,6 +18,7 @@ import { Button } from "../../components/ui/Button";
 import { ConfirmModal } from "../../components/ui/ConfirmModal";
 import { CreateCategoryModal } from "../../components/inventory/CreateCategoryModal";
 import { EditCategoryModal } from "../../components/inventory/EditCategoryModal";
+import { CreateProductModal } from "./CreateProductModal";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { useCategories } from "../../hooks/useCategories";
 import { Input } from "../../components/ui/Input";
@@ -384,6 +385,7 @@ export function InventoryPage() {
   const [paginaActual, setPaginaActual] = useState(1);
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [isCreateCategoryOpen, setIsCreateCategoryOpen] = useState(false);
+  const [isCreateProductOpen, setIsCreateProductOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Categoria | null>(null);
   const [deletingCategory, setDeletingCategory] = useState<Categoria | null>(null);
   const { categories, addCategory, updateCategory, removeCategory } =
@@ -497,7 +499,7 @@ export function InventoryPage() {
         {/* Botón Grande Esquinado */}
         <Button
           variant="primary"
-          onClick={() => toast.info("Alta de producto en desarrollo")}
+          onClick={() => setIsCreateProductOpen(true)}
           className="h-10 shrink-0 gap-2 rounded-2xl px-4 text-sm font-bold shadow-xs sm:h-12 sm:px-6 sm:text-base"
         >
           <PackagePlus className="h-5 w-5" />
@@ -811,6 +813,12 @@ export function InventoryPage() {
         }}
         title="Eliminar categoría"
         description={`¿Estás seguro de que deseas eliminar la categoría "${deletingCategory?.nombre}"? Esta acción no se puede deshacer.`}
+      />
+
+      <CreateProductModal
+        isOpen={isCreateProductOpen}
+        onClose={() => setIsCreateProductOpen(false)}
+        categorias={categories}
       />
     </div>
   );

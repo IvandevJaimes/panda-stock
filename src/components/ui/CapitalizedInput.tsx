@@ -1,8 +1,7 @@
 import { forwardRef, type ChangeEvent, type InputHTMLAttributes } from "react";
 import { cn } from "../../lib/cn";
 
-export interface CapitalizedInputProps
-  extends InputHTMLAttributes<HTMLInputElement> {}
+export type CapitalizedInputProps = InputHTMLAttributes<HTMLInputElement>;
 
 export const CapitalizedInput = forwardRef<
   HTMLInputElement,

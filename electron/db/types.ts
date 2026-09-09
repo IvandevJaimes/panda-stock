@@ -78,6 +78,7 @@ export type NuevoProducto = {
   porcentajeGanancia?: number
   precioVenta?: number
   precioMayoreo?: number
+  stockActual?: number
   stockMinimo?: number
   vencimiento?: string | null
 }

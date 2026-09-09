@@ -231,6 +231,7 @@ export function getProductoById(id: number): Producto | null {
 
 function mapNuevoProducto(data: Record<string, unknown>) {
   const ahora = new Date().toISOString()
+  const stockInicial = Number(data.stockActual ?? data.stock ?? 0)
   return {
     categoriaId: (data.categoriaId as number | null | undefined) ?? null,
     marcaId: (data.marcaId as number | null | undefined) ?? null,
@@ -239,11 +240,12 @@ function mapNuevoProducto(data: Record<string, unknown>) {
     codigosBarras: (data.codigosBarras as string | null | undefined)?.trim() || null,
     tipoVenta: (data.tipoVenta as Producto['tipoVenta']) ?? 'unidad',
     unidadMedida: (data.unidadMedida as Producto['unidadMedida']) ?? 'unidad',
-    costo: (data.costo as number | undefined) ?? 0,
-    porcentajeGanancia: (data.porcentajeGanancia as number | undefined) ?? 0,
-    precioVenta: (data.precioVenta as number | undefined) ?? 0,
-    precioMayoreo: (data.precioMayoreo as number | undefined) ?? 0,
-    stockMinimo: (data.stockMinimo as number | undefined) ?? 0,
+    costo: Number(data.costo ?? 0),
+    porcentajeGanancia: Number(data.porcentajeGanancia ?? 0),
+    precioVenta: Number(data.precioVenta ?? data.precio ?? 0),
+    precioMayoreo: Number(data.precioMayoreo ?? 0),
+    stockActual: stockInicial >= 0 ? stockInicial : 0,
+    stockMinimo: Number(data.stockMinimo ?? 0),
     vencimiento: (data.vencimiento as string | null | undefined) ?? null,
     activo: true,
     creadoEn: ahora,
@@ -251,11 +253,50 @@ function mapNuevoProducto(data: Record<string, unknown>) {
 }
 
 export function createProducto(data: Record<string, unknown>): Producto {
-  return getDb()
-    .insert(productos)
-    .values(mapNuevoProducto(data))
-    .returning()
-    .get()
+  const db = getDb()
+  const valores = mapNuevoProducto(data)
+  const ahora = new Date().toISOString()
+
+  return db.transaction((tx) => {
+    const producto = tx
+      .insert(productos)
+      .values(valores)
+      .returning()
+      .get()
+
+    if (valores.stockActual > 0) {
+      const lote = tx
+        .insert(lotes)
+        .values({
+          productoId: producto.id,
+          numeroLote: null,
+          fechaIngreso: ahora,
+          fechaVence: valores.vencimiento ?? null,
+          costoUnitario: valores.costo,
+          cantidadInicial: valores.stockActual,
+          cantidadActual: valores.stockActual,
+          creadoEn: ahora,
+        })
+        .returning()
+        .get()
+
+      tx.insert(movimientosStock)
+        .values({
+          productoId: producto.id,
+          loteId: lote.id,
+          ventaId: null,
+          tipo: 'entrada',
+          cantidad: valores.stockActual,
+          stockAnterior: 0,
+          stockPosterior: valores.stockActual,
+          motivo: 'Stock inicial al crear producto',
+          fechaHora: ahora,
+        })
+        .run()
+    }
+
+    return producto
+  })
 }
 
 export function updateProducto(id: number, data: Record<string, unknown>): Producto {
