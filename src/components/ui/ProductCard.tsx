@@ -1,6 +1,7 @@
-import { Calendar, Pencil, Trash2 } from "lucide-react";
+import { Barcode, Calendar, Pencil, Trash2 } from "lucide-react";
 import { Tooltip } from "./Tooltip";
 import { TruncatedText } from "./TruncatedText";
+import { HighlightMatch } from "./HighlightMatch";
 import { cn } from "../../lib/cn";
 import { evaluateExpiry } from "../../lib/dateUtils";
 
@@ -21,8 +22,12 @@ export interface ProductCardProps {
   minStock: number;
   expiresAt?: string;
   status?: ProductStatus;
+  codigoInterno?: string;
+  codigosBarras?: string;
+  highlightQuery?: string;
   onEdit?: () => void;
   onDelete?: () => void;
+  onOpenDetail?: () => void;
   className?: string;
   style?: React.CSSProperties;
 }
@@ -50,8 +55,12 @@ export function ProductCard({
   minStock,
   expiresAt,
   status = "normal",
+  codigoInterno,
+  codigosBarras,
+  highlightQuery,
   onEdit,
   onDelete,
+  onOpenDetail,
   className,
   style,
 }: ProductCardProps) {
@@ -73,9 +82,19 @@ export function ProductCard({
 
   const subtitulo = brand ? `${brand} · ${category}` : category;
 
+  const terminoConsulta = highlightQuery?.trim() ?? "";
+  const codigoResaltado =
+    terminoConsulta.length >= 2
+      ? [codigoInterno, codigosBarras].find(
+          (codigo) => codigo?.toLowerCase().includes(terminoConsulta.toLowerCase()),
+        )
+      : undefined;
+
   return (
     <div
       style={style}
+      onClick={onOpenDetail}
+      aria-label={name}
       className={cn(
         "w-full h-14 sm:h-16 px-3 sm:px-4 rounded-2xl cursor-pointer border transition-colors duration-150 select-none shadow-xs overflow-hidden animate-entry-up",
         "grid grid-cols-[minmax(0,1fr)_auto] min-w-0 items-center gap-3 sm:gap-4",
@@ -89,7 +108,9 @@ export function ProductCard({
           <TruncatedText
             text={name}
             className="min-w-0 text-xs font-bold text-slate-900 sm:text-sm dark:text-white"
-          />
+          >
+            <HighlightMatch text={name} query={terminoConsulta} />
+          </TruncatedText>
           {variant && (
             <>
               <span
@@ -101,8 +122,19 @@ export function ProductCard({
               <TruncatedText
                 text={variant}
                 className="min-w-0 text-[11px] font-medium text-slate-500 sm:text-xs dark:text-slate-400"
-              />
+              >
+                <HighlightMatch text={variant} query={terminoConsulta} />
+              </TruncatedText>
             </>
+          )}
+          {codigoResaltado && (
+            <span className="inline-flex shrink-0 items-center gap-0.5 rounded-md border border-emerald-500/25 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-400">
+              <Barcode className="h-3 w-3 opacity-70" />
+              <HighlightMatch
+                text={codigoResaltado}
+                query={terminoConsulta}
+              />
+            </span>
           )}
           <span className="shrink-0 font-display text-[11px] font-semibold text-emerald-600 sm:text-xs dark:text-emerald-400">
             ${price.toFixed(2)}
@@ -112,7 +144,21 @@ export function ProductCard({
           <TruncatedText
             text={subtitulo}
             className="text-[10px] font-medium uppercase tracking-wider text-slate-400 sm:text-xs dark:text-slate-500"
-          />
+          >
+            {brand ? (
+              <>
+                <HighlightMatch text={brand} query={terminoConsulta} />
+                {category && (
+                  <span aria-hidden className="shrink-0">
+                    {" · "}
+                    {category}
+                  </span>
+                )}
+              </>
+            ) : (
+              category
+            )}
+          </TruncatedText>
         </div>
       </div>
 
@@ -202,7 +248,10 @@ export function ProductCard({
               <Tooltip content="Editar producto" placement="top">
                 <button
                   type="button"
-                  onClick={onEdit}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEdit?.();
+                  }}
                   aria-label="Editar"
                   className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-black/5 hover:text-slate-800 sm:h-8 sm:w-8 sm:rounded-xl dark:hover:bg-white/5 dark:hover:text-slate-100"
                 >
@@ -214,7 +263,10 @@ export function ProductCard({
               <Tooltip content="Eliminar producto" placement="top">
                 <button
                   type="button"
-                  onClick={onDelete}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete?.();
+                  }}
                   aria-label="Eliminar"
                   className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 sm:h-8 sm:w-8 sm:rounded-xl dark:hover:bg-red-950/40 dark:hover:text-red-400"
                 >

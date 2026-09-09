@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { TippyProps } from '@tippyjs/react'
 import { Tooltip } from './Tooltip'
 import { cn } from '../../lib/cn'
@@ -7,9 +7,10 @@ interface TruncatedTextProps {
   text: string
   className?: string
   placement?: TippyProps['placement']
+  children?: ReactNode
 }
 
-export function TruncatedText({ text, className, placement }: TruncatedTextProps) {
+export function TruncatedText({ text, className, placement, children }: TruncatedTextProps) {
   const ref = useRef<HTMLSpanElement>(null)
   const [isTruncated, setIsTruncated] = useState(false)
 
@@ -31,7 +32,7 @@ export function TruncatedText({ text, className, placement }: TruncatedTextProps
       onMouseEnter={checkTruncated}
       className={cn('block truncate', className)}
     >
-      {text}
+      {children ?? text}
     </span>
   )
 
