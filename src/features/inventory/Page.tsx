@@ -19,6 +19,7 @@ import { ConfirmModal } from "../../components/ui/ConfirmModal";
 import { CreateCategoryModal } from "../../components/inventory/CreateCategoryModal";
 import { EditCategoryModal } from "../../components/inventory/EditCategoryModal";
 import { CreateProductModal } from "./CreateProductModal";
+import { ProductDetailModal } from "./ProductDetailModal";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { useCategories } from "../../hooks/useCategories";
 import { Input } from "../../components/ui/Input";
@@ -52,6 +53,8 @@ type ProductoInventario = {
   stock: number;
   minStock: number;
   expiresAt: string | null;
+  codigoInterno: string;
+  codigosBarras: string;
   status: "vencido" | "por-vencer" | "ok";
 };
 
@@ -87,6 +90,8 @@ function mapearProducto(
     stock: producto.stockActual,
     minStock: producto.stockMinimo,
     expiresAt: producto.vencimiento,
+    codigoInterno: producto.codigoInterno,
+    codigosBarras: producto.codigosBarras ?? "",
     status: derivarEstadoVencimiento(producto.vencimiento, hoy),
   };
 }
@@ -115,6 +120,7 @@ export function InventoryPage() {
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [isCreateCategoryOpen, setIsCreateCategoryOpen] = useState(false);
   const [isCreateProductOpen, setIsCreateProductOpen] = useState(false);
+  const [selectedProductForDetail, setSelectedProductForDetail] = useState<Producto | null>(null);
   const [editingCategory, setEditingCategory] = useState<Categoria | null>(null);
   const [deletingCategory, setDeletingCategory] = useState<Categoria | null>(null);
   const { categories, addCategory, updateCategory, removeCategory } =
@@ -218,7 +224,10 @@ export function InventoryPage() {
     const coincideTexto = (p: ProductoInventario) =>
       !texto ||
       normalizar(p.name).includes(texto) ||
-      normalizar(p.category).includes(texto);
+      normalizar(p.brand).includes(texto) ||
+      normalizar(p.variant ?? "").includes(texto) ||
+      normalizar(p.codigoInterno).includes(texto) ||
+      normalizar(p.codigosBarras).includes(texto);
 
     const coincideCategoria = (p: ProductoInventario) => {
       if (selectedCategory === "all") return true;
@@ -434,7 +443,7 @@ export function InventoryPage() {
                 setBusqueda(e.target.value);
                 setPaginaActual(1);
               }}
-              placeholder="Buscar producto…"
+              placeholder="Buscar por producto, marca, variante o código..."
               leftIcon={<Search size={16} />}
               className="w-full"
               wrapperClassName="flex-1 min-w-[240px]"
@@ -569,10 +578,17 @@ export function InventoryPage() {
               price={producto.price}
               expiresAt={producto.expiresAt ?? undefined}
               status={derivarStatus(producto)}
+              codigoInterno={producto.codigoInterno}
+              codigosBarras={producto.codigosBarras}
+              highlightQuery={busqueda}
               onEdit={() => toast.info(`Editar ${producto.name} en desarrollo`)}
               onDelete={() =>
                 toast.info(`Eliminar ${producto.name} en desarrollo`)
               }
+              onOpenDetail={() => {
+                const raw = productosCrudos.find((p) => p.id === producto.id);
+                if (raw) setSelectedProductForDetail(raw);
+              }}
             />
           ))}
 
@@ -648,6 +664,29 @@ export function InventoryPage() {
         categorias={categories}
         onSuccess={() => void refreshProductos()}
       />
+
+      {selectedProductForDetail && (
+        <ProductDetailModal
+          isOpen={!!selectedProductForDetail}
+          product={selectedProductForDetail}
+          marcaNombre={
+            marcas.find(
+              (marca) => marca.id === selectedProductForDetail.marcaId,
+            )?.nombre ?? ""
+          }
+          categoriaNombre={
+            categories.find(
+              (categoria) =>
+                categoria.id === selectedProductForDetail.categoriaId,
+            )?.nombre ?? ""
+          }
+          onClose={() => setSelectedProductForDetail(null)}
+          onEdit={() => {
+            setSelectedProductForDetail(null);
+            toast.info("Editar producto en desarrollo");
+          }}
+        />
+      )}
     </div>
   );
 }
