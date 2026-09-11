@@ -22,6 +22,11 @@ import { Button } from "../../components/ui/Button";
 import { cn } from "../../lib/cn";
 import { evaluateExpiry } from "../../lib/dateUtils";
 import { lotesService } from "../../services/lotes.service";
+import {
+  DETALLE_DIAS_VENCER,
+  estadoLoteBadge,
+  tintPanelLote,
+} from "./loteHelpers";
 import type { Lote, Producto, TipoVenta } from "../../../electron/db/types";
 
 // Preparación para el historial de auditoría (kardex) de la sección Movimientos:
@@ -37,6 +42,7 @@ export interface ProductDetailModalProps {
   product: Producto;
   marcaNombre: string;
   categoriaNombre: string;
+  defaultTabId?: string;
   onClose: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -47,8 +53,6 @@ const TIPO_VENTA_LABEL: Record<TipoVenta, string> = {
   caja: "Por caja",
   combo: "Por combo",
 };
-
-const DETALLE_DIAS_VENCER = 30;
 
 function formatearPrecio(valor: number): string {
   return `$${valor.toFixed(2)}`;
@@ -71,38 +75,6 @@ function tintSubheader(fechaVence: string | null): string {
     return "border-amber-500/20 bg-amber-500/10 dark:border-amber-500/40 dark:bg-amber-950/30";
   }
   return "";
-}
-
-function estadoLoteBadge(
-  fechaVence: string | null,
-): { label: string; clases: string } {
-  if (!fechaVence) {
-    return {
-      label: "Sin vencimiento",
-      clases:
-        "bg-slate-500/10 text-slate-400 border-slate-500/20 dark:border-slate-500/30 dark:text-slate-400",
-    };
-  }
-  const evaluacion = evaluateExpiry(fechaVence, DETALLE_DIAS_VENCER);
-  if (evaluacion?.status === "expired") {
-    return {
-      label: "Vencido",
-      clases:
-        "bg-red-500/10 text-red-500 border-red-500/20 dark:border-red-500/30 dark:text-red-400",
-    };
-  }
-  if (evaluacion?.status === "expiring_soon") {
-    return {
-      label: "Por vencer",
-      clases:
-        "bg-amber-500/10 text-amber-500 border-amber-500/20 dark:border-amber-500/30 dark:text-amber-400",
-    };
-  }
-  return {
-    label: "Vigente",
-    clases:
-      "bg-emerald-500/10 text-emerald-500 border-emerald-500/20 dark:border-emerald-500/30 dark:text-emerald-400",
-  };
 }
 
 function formatearFechaHora(iso?: string | null): string {
@@ -237,6 +209,7 @@ export function ProductDetailModal({
   product,
   marcaNombre,
   categoriaNombre,
+  defaultTabId,
   onClose,
   onEdit,
   onDelete,
@@ -390,32 +363,70 @@ export function ProductDetailModal({
           {/* Sección: Lote activo y vencimiento */}
           <section className="py-4">
             <SectionTitle icon={Layers}>Lote activo y vencimiento</SectionTitle>
-            <dl className="grid grid-cols-2 gap-y-3 gap-x-6">
-              <Dato etiqueta="Identificador de lote">
-                {loteIdentidad ?? "—"}
-              </Dato>
-              <Dato etiqueta="Fecha de vencimiento" className="tabular-nums">
-                {loteActivo?.fechaVence
-                  ? formatearFecha(loteActivo.fechaVence)
-                  : "Sin vencimiento"}
-              </Dato>
-              <Dato etiqueta="Estado del lote">
-                <span
-                  className={cn(
-                    "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold",
-                    loteBadge.clases,
-                  )}
-                >
-                  {loteBadge.label}
-                </span>
-              </Dato>
-              <Dato
-                etiqueta="Disponibilidad en este lote"
-                className="tabular-nums"
+            {loteActivo ? (
+              <div
+                className={cn(
+                  "rounded-xl border p-4 transition-colors",
+                  tintPanelLote(loteActivo.fechaVence),
+                )}
               >
-                {loteActivo ? loteActivo.cantidadActual : "—"}
-              </Dato>
-            </dl>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-white/70 text-slate-500 dark:bg-slate-800/70 dark:text-slate-300">
+                      <Boxes className="h-5 w-5" strokeWidth={2} aria-hidden />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                        Lote activo
+                      </span>
+                      <span className="block truncate font-mono text-base font-bold tracking-wide text-slate-900 dark:text-white">
+                        {loteIdentidad}
+                      </span>
+                    </div>
+                  </div>
+                  <span
+                    className={cn(
+                      "inline-flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-semibold",
+                      loteBadge.clases,
+                    )}
+                  >
+                    {loteBadge.label}
+                  </span>
+                </div>
+
+                <div className="mt-4 grid grid-cols-2 gap-3 border-t border-slate-200/60 pt-3 dark:border-slate-800">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                      Vencimiento
+                    </span>
+                    <span className="text-sm font-semibold tabular-nums text-slate-800 dark:text-slate-100">
+                      {loteActivo.fechaVence
+                        ? formatearFecha(loteActivo.fechaVence)
+                        : "Sin vencimiento"}
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                      Disponible en el lote
+                    </span>
+                    <span className="text-sm font-semibold tabular-nums text-slate-800 dark:text-slate-100">
+                      {loteActivo.cantidadActual}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-start gap-1 rounded-xl border border-dashed border-slate-200 bg-slate-50/40 p-4 dark:border-slate-700/60 dark:bg-slate-900/20">
+                <span className="flex items-center gap-1.5 text-sm font-semibold text-slate-500 dark:text-slate-400">
+                  <Boxes className="h-4 w-4" aria-hidden />
+                  Sin lote activo
+                </span>
+                <span className="text-xs text-slate-400 dark:text-slate-500">
+                  Registrá un lote para controlar vencimientos y costos por
+                  partida.
+                </span>
+              </div>
+            )}
           </section>
 
           {/* Sección 4: Precios y costos */}
@@ -554,6 +565,7 @@ export function ProductDetailModal({
       onClose={onClose}
       title="Detalle del producto"
       tabs={pestanas}
+      defaultTabId={defaultTabId}
       maxWidth="max-w-2xl"
       subheaderClassName={
         loteActivo ? tintSubheader(loteActivo.fechaVence) : ""

@@ -18,6 +18,7 @@ export interface TabsModalProps {
   subheaderClassName?: string;
   tabs: TabsModalTab[];
   footer?: ReactNode;
+  defaultTabId?: string;
   maxWidth?: string;
   className?: string;
 }
@@ -36,10 +37,16 @@ export function TabsModal({
   subheaderClassName,
   tabs,
   footer,
+  defaultTabId,
   maxWidth = "max-w-2xl",
   className,
 }: TabsModalProps) {
-  const [tabActiva, setTabActiva] = useState(() => tabs[0]?.id ?? "");
+  const [tabActiva, setTabActiva] = useState(
+    () =>
+      tabs.find((tab) => tab.id === defaultTabId)?.id ??
+      tabs[0]?.id ??
+      "",
+  );
 
   useEffect(() => {
     if (!isOpen) return;

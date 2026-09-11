@@ -7,6 +7,8 @@ export interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
   title?: string;
+  subtitle?: string;
+  headerIcon?: ReactNode;
   children: ReactNode;
   className?: string;
   maxWidth?: "sm" | "md" | "lg" | "xl" | "2xl";
@@ -24,6 +26,8 @@ export function Modal({
   isOpen,
   onClose,
   title,
+  subtitle,
+  headerIcon,
   children,
   className,
   maxWidth = "md",
@@ -81,9 +85,23 @@ export function Modal({
         {/* Cabecera */}
         <div className="flex shrink-0 items-center border-b border-slate-100 px-6 py-4 dark:border-slate-800/60">
           {title && (
-            <h2 className="font-display text-lg font-semibold text-slate-900 dark:text-white">
-              {title}
-            </h2>
+            <div className="flex min-w-0 items-center gap-2.5">
+              {headerIcon && (
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                  {headerIcon}
+                </span>
+              )}
+              <div className="min-w-0">
+                <h2 className="truncate font-display text-lg font-semibold text-slate-900 dark:text-white">
+                  {title}
+                </h2>
+                {subtitle && (
+                  <p className="mt-0.5 truncate text-xs font-medium text-slate-400 dark:text-slate-500">
+                    {subtitle}
+                  </p>
+                )}
+              </div>
+            </div>
           )}
           <button
             onClick={onClose}

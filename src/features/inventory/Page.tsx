@@ -20,6 +20,7 @@ import { CreateCategoryModal } from "../../components/inventory/CreateCategoryMo
 import { EditCategoryModal } from "../../components/inventory/EditCategoryModal";
 import { CreateProductModal } from "./CreateProductModal";
 import { ProductDetailModal } from "./ProductDetailModal";
+import { ProductQuickActionsModal } from "./ProductQuickActionsModal";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { useCategories } from "../../hooks/useCategories";
 import { Input } from "../../components/ui/Input";
@@ -121,6 +122,8 @@ export function InventoryPage() {
   const [isCreateCategoryOpen, setIsCreateCategoryOpen] = useState(false);
   const [isCreateProductOpen, setIsCreateProductOpen] = useState(false);
   const [selectedProductForDetail, setSelectedProductForDetail] = useState<Producto | null>(null);
+  const [productForQuickActions, setProductForQuickActions] = useState<Producto | null>(null);
+  const [detailInitialTab, setDetailInitialTab] = useState<string>("informacion");
   const [editingCategory, setEditingCategory] = useState<Categoria | null>(null);
   const [deletingCategory, setDeletingCategory] = useState<Categoria | null>(null);
   const { categories, addCategory, updateCategory, removeCategory } =
@@ -206,6 +209,12 @@ export function InventoryPage() {
     setActiveKpiFilter("all");
     setSelectedCategory("all");
     setPaginaActual(1);
+  };
+
+  const handleOpenLotesDetail = (producto: Producto) => {
+    setProductForQuickActions(null);
+    setDetailInitialTab("lotes");
+    setSelectedProductForDetail(producto);
   };
 
   const categoryCounts = useMemo(() => {
@@ -434,7 +443,7 @@ export function InventoryPage() {
         </div>
 
         {/* ── Barra de herramientas ── */}
-        <div className="flex pt-0.5 w-full min-w-0 flex-col items-stretch justify-between gap-3 lg:flex-row lg:items-center">
+        <div className="flex pt-0.5 w-full  min-w-0 flex-col items-stretch justify-between gap-3 lg:flex-row lg:items-center">
           {/* GRUPO BÚSQUEDA: siempre juntos, ancho completo en todos los breakpoints */}
           <div className="flex min-w-0 flex-1 shrink-0 items-center gap-1.5 lg:flex-1">
             <Input
@@ -581,13 +590,19 @@ export function InventoryPage() {
               codigoInterno={producto.codigoInterno}
               codigosBarras={producto.codigosBarras}
               highlightQuery={busqueda}
-              onEdit={() => toast.info(`Editar ${producto.name} en desarrollo`)}
+              onEdit={() => {
+                const raw = productosCrudos.find((p) => p.id === producto.id);
+                if (raw) setProductForQuickActions(raw);
+              }}
               onDelete={() =>
                 toast.info(`Eliminar ${producto.name} en desarrollo`)
               }
               onOpenDetail={() => {
                 const raw = productosCrudos.find((p) => p.id === producto.id);
-                if (raw) setSelectedProductForDetail(raw);
+                if (raw) {
+                  setDetailInitialTab("informacion");
+                  setSelectedProductForDetail(raw);
+                }
               }}
             />
           ))}
@@ -669,6 +684,7 @@ export function InventoryPage() {
         <ProductDetailModal
           isOpen={!!selectedProductForDetail}
           product={selectedProductForDetail}
+          defaultTabId={detailInitialTab}
           marcaNombre={
             marcas.find(
               (marca) => marca.id === selectedProductForDetail.marcaId,
@@ -682,8 +698,8 @@ export function InventoryPage() {
           }
           onClose={() => setSelectedProductForDetail(null)}
           onEdit={() => {
+            setProductForQuickActions(selectedProductForDetail);
             setSelectedProductForDetail(null);
-            toast.info("Editar producto en desarrollo");
           }}
           onDelete={() => {
             setSelectedProductForDetail(null);
@@ -691,6 +707,39 @@ export function InventoryPage() {
           }}
         />
       )}
+
+      <ProductQuickActionsModal
+        isOpen={productForQuickActions !== null}
+        product={productForQuickActions}
+        marcaNombre={
+          productForQuickActions
+            ? (marcas.find(
+                (marca) => marca.id === productForQuickActions.marcaId,
+              )?.nombre ?? "")
+            : ""
+        }
+        categoriaNombre={
+          productForQuickActions
+            ? (categories.find(
+                (categoria) =>
+                  categoria.id === productForQuickActions.categoriaId,
+              )?.nombre ?? "")
+            : ""
+        }
+        onClose={() => setProductForQuickActions(null)}
+        onOpenLotes={() => {
+          if (productForQuickActions) {
+            handleOpenLotesDetail(productForQuickActions);
+          }
+        }}
+        onFullEdit={() => {
+          if (!productForQuickActions) return;
+          toast.info(
+            `Editar toda la información de "${productForQuickActions.nombre}" en desarrollo`,
+          );
+          setProductForQuickActions(null);
+        }}
+      />
     </div>
   );
 }
