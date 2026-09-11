@@ -58,7 +58,6 @@ export type Producto = {
   costo: number
   porcentajeGanancia: number
   precioVenta: number
-  precioMayoreo: number
   stockActual: number
   stockMinimo: number
   vencimiento: string | null
@@ -79,7 +78,6 @@ export type NuevoProducto = {
   costo?: number
   porcentajeGanancia?: number
   precioVenta?: number
-  precioMayoreo?: number
   stockActual?: number
   stockMinimo?: number
   vencimiento?: string | null

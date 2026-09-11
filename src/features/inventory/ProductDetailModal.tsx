@@ -202,7 +202,7 @@ export function ProductDetailModal({
           </div>
 
           {/* Grilla de precios */}
-          <div className="grid grid-cols-3 gap-3 rounded-xl border border-slate-200/80 bg-slate-50/50 p-4 dark:border-slate-800/80 dark:bg-slate-900/40">
+          <div className="grid grid-cols-2 gap-3 rounded-xl border border-slate-200/80 bg-slate-50/50 p-4 dark:border-slate-800/80 dark:bg-slate-900/40">
             <Panel etiqueta="Costo unitario">
               <span className="text-slate-500 dark:text-slate-400">
                 {formatearPrecio(product.costo)}
@@ -211,13 +211,6 @@ export function ProductDetailModal({
             <Panel etiqueta="Precio de venta">
               <span className="font-bold text-emerald-600 dark:text-emerald-400">
                 {formatearPrecio(product.precioVenta)}
-              </span>
-            </Panel>
-            <Panel etiqueta="Precio mayoreo">
-              <span className="text-slate-500 dark:text-slate-400">
-                {product.precioMayoreo > 0
-                  ? formatearPrecio(product.precioMayoreo)
-                  : "—"}
               </span>
             </Panel>
           </div>

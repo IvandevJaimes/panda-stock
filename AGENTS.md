@@ -80,8 +80,9 @@ Todos los commits deben seguir el estándar de **Conventional Commits traducido 
    - `productos.codigos_barras` almacena una lista CSV (ej: `"779001,779002"`).
    - Las consultas de escáner deben usar coincidencia exacta o coincidencia por delimitadores en texto para descontar del stock general.
 2. **Precios vs. Costos:**
-   - `productos` contiene `precio_venta` y `precio_mayoreo`.
+   - `productos` contiene `precio_venta`.
    - `lotes` contiene el `costo_unitario` histórico inmutable y la fecha de vencimiento de cada tanda de compra.
+   - **Regla de mayoreo derivado:** el precio mayorista es universal: a partir de 3 unidades se aplica un 10% de descuento sobre `precio_venta`. **No** se almacena `precio_mayoreo` (columna eliminada); se calcula en el POS al vender (`precioUnitario = precioVenta * 0.9`, `tipoTarifa = 'mayoreo'`).
 3. **Seguridad de Reportes:**
    - La validación de reportes se hace por PIN maestro guardado como hash SHA-256 en la fila única de `seguridad_reportes`.
    - No inventes sistemas jerárquicos de roles/permisos complejos salvo indicación explícita.

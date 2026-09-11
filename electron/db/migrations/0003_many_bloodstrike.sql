@@ -1,0 +1,1 @@
+ALTER TABLE `productos` DROP COLUMN `precio_mayoreo`;

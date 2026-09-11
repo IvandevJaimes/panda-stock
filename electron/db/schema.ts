@@ -49,7 +49,6 @@ export const productos = sqliteTable(
     costo: real('costo').notNull().default(0),
     porcentajeGanancia: real('porcentaje_ganancia').notNull().default(0),
     precioVenta: real('precio_venta').notNull().default(0),
-    precioMayoreo: real('precio_mayoreo').notNull().default(0),
     stockActual: real('stock_actual').notNull().default(0),
     stockMinimo: real('stock_minimo').notNull().default(0),
     vencimiento: text('vencimiento'),

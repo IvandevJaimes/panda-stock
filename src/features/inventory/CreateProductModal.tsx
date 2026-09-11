@@ -48,7 +48,6 @@ export interface FormValues {
   unidadMedida: UnidadMedida;
   costo: string;
   precioVenta: string;
-  precioMayoreo: string;
   stockActual: string;
   stockMinimo: string;
   vencimiento?: string;
@@ -72,7 +71,6 @@ const VALORES_INICIALES: DefaultValues<FormValues> = {
   unidadMedida: "unidad",
   costo: "",
   precioVenta: "",
-  precioMayoreo: "",
   stockActual: "",
   stockMinimo: "",
   vencimiento: "",
@@ -446,8 +444,8 @@ export function CreateProductModal({
           <FieldError error={errors.tipoVenta?.message} />
         </div>
 
-        {/* Fila 5 (tres columnas): Precios (Costo, Venta y Mayoreo) */}
-        <div className="grid grid-cols-3 gap-3.5">
+        {/* Fila 5 (dos columnas): Precios (Costo y Venta) */}
+        <div className="grid grid-cols-2 gap-3.5">
           <div className="flex flex-col gap-1.5">
             <label
               htmlFor="costo"
@@ -512,41 +510,6 @@ export function CreateProductModal({
               )}
             />
             <FieldError error={errors.precioVenta?.message} />
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <label
-              htmlFor="precioMayoreo"
-              className="ml-1 text-xs font-semibold text-slate-700 dark:text-slate-300"
-            >
-              Precio mayoreo ($)
-            </label>
-            <input
-              id="precioMayoreo"
-              type="number"
-              step="0.01"
-              disabled={isSubmitting}
-              onWheel={(e) => e.currentTarget.blur()}
-              {...register("precioMayoreo", {
-                validate: {
-                  numeroValido: (val) =>
-                    val.trim() === "" ||
-                    !Number.isNaN(Number(val)) ||
-                    "Debe ser un número válido",
-                  noNegativo: (val) =>
-                    val.trim() === "" ||
-                    Number(val) >= 0 ||
-                    "No puede ser negativo",
-                },
-              })}
-              className={cn(
-                "h-10 w-full rounded-xl border bg-white px-3 text-sm text-slate-900 outline-none transition-all dark:bg-[#0B1120] dark:text-slate-100 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none",
-                errors.precioMayoreo
-                  ? "border-red-500 focus:border-red-500 focus:ring-4 focus:ring-red-500/10"
-                  : "border-slate-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700/80",
-              )}
-            />
-            <FieldError error={errors.precioMayoreo?.message} />
           </div>
         </div>
 

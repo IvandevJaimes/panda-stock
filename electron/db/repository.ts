@@ -270,7 +270,6 @@ function mapNuevoProducto(data: Record<string, unknown>) {
     costo: Number(data.costo ?? 0),
     porcentajeGanancia: Number(data.porcentajeGanancia ?? 0),
     precioVenta: Number(data.precioVenta ?? data.precio ?? 0),
-    precioMayoreo: Number(data.precioMayoreo ?? 0),
     stockActual: stockInicial >= 0 ? stockInicial : 0,
     stockMinimo: Number(data.stockMinimo ?? 0),
     vencimiento: (data.vencimiento as string | null | undefined) ?? null,
@@ -348,7 +347,6 @@ export function updateProducto(id: number, data: Record<string, unknown>): Produ
   if (data.costo !== undefined) set.costo = data.costo
   if (data.porcentajeGanancia !== undefined) set.porcentajeGanancia = data.porcentajeGanancia
   if (data.precioVenta !== undefined) set.precioVenta = data.precioVenta
-  if (data.precioMayoreo !== undefined) set.precioMayoreo = data.precioMayoreo
   if (data.stockMinimo !== undefined) set.stockMinimo = data.stockMinimo
   if (data.vencimiento !== undefined) set.vencimiento = (data.vencimiento as string | null | undefined) ?? null
 
