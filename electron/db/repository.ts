@@ -853,7 +853,7 @@ export function crearMovimientoStock(data: CrearMovimientoInput): void {
   db.transaction((tx) => {
     // 1. Get product stock
     const filaProducto = tx
-      .select({ stockActual: productos.stockActual })
+      .select({ stockActual: productos.stockActual, costo: productos.costo })
       .from(productos)
       .where(eq(productos.id, data.productoId))
       .get()
@@ -879,7 +879,7 @@ export function crearMovimientoStock(data: CrearMovimientoInput): void {
         numeroLote: data.numeroLote || null,
         cantidadInicial: data.cantidad,
         cantidadActual: data.cantidad,
-        costoUnitario: data.costoUnitario || 0,
+        costoUnitario: data.costoUnitario ?? filaProducto.costo,
         fechaIngreso: ahora,
         fechaVence: data.fechaVencimiento || null,
         creadoEn: ahora

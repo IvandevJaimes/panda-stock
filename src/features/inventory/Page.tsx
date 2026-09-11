@@ -7,6 +7,7 @@ import {
   PackagePlus,
   PackageX,
   Plus,
+  Minus,
   Search,
   SlidersHorizontal,
   X,
@@ -20,7 +21,7 @@ import { CreateCategoryModal } from "../../components/inventory/CreateCategoryMo
 import { EditCategoryModal } from "../../components/inventory/EditCategoryModal";
 import { CreateProductModal } from "./CreateProductModal";
 import { ProductDetailModal } from "./ProductDetailModal";
-import { ProductQuickActionsModal } from "./ProductQuickActionsModal";
+import { ProductQuickActionsModal } from "./quick-actions";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { useCategories } from "../../hooks/useCategories";
 import { Input } from "../../components/ui/Input";
@@ -167,7 +168,7 @@ export function InventoryPage() {
     };
   }, [obtenerProductos, obtenerMarcas]);
 
-  const refreshProductos = useCallback(async () => {
+  const refreshProductos = useCallback(async (): Promise<Producto[]> => {
     setCargandoProductos(true);
     setErrorProductos(null);
     try {
@@ -177,10 +178,12 @@ export function InventoryPage() {
       ]);
       setProductosCrudos(data);
       setMarcas(marcasData);
+      return data;
     } catch (err) {
       setErrorProductos(
         err instanceof Error ? err.message : "Error al cargar productos",
       );
+      return [];
     } finally {
       setCargandoProductos(false);
     }
@@ -369,11 +372,11 @@ export function InventoryPage() {
       </div>
 
       {/* ── Contenedor sticky: categorías + toolbar se anclan al top al scrollear ── */}
-      <div className="sticky top-0 z-20 flex w-full min-w-0 flex-col gap-2.5 border-b border-slate-200/80 bg-[#f4f6f8] pt-3 pb-3 transition-colors select-none relative after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-3 after:bg-gradient-to-b after:from-slate-900/10 after:to-transparent after:content-[''] dark:border-slate-800/60 dark:bg-[#0b0f17] dark:after:from-black/45">
+      <div className="sticky top-0 z-20 flex w-full min-w-0 flex-col gap-2.5 border-slate-200/80 bg-[#f4f6f8] pt-3 pb-3 transition-colors select-none relative after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-3 after:bg-gradient-to-b after:from-slate-900/10 after:to-transparent after:content-[''] dark:border-slate-800/60 dark:bg-[#0b0f17] dark:after:from-black/45">
         {/* ── Barra de categorías: anclaje fijo + carrusel desplazable ── */}
         <div className="flex w-full items-center select-none">
           {/* 1. Anclaje fijo: botón Nueva + separador + fondo opaco + máscara degradada */}
-          <div className="relative z-10 flex shrink-0 items-center bg-[#f4f6f8] pr-3 pb-2 dark:bg-[#0b0f17]">
+          <div className="relative z-10 flex shrink-0 items-center bg-[#f4f6f8]  pb-2 dark:bg-[#0b0f17]">
             <Tooltip content="Crear una nueva categoría" placement="top">
               <button
                 type="button"
@@ -514,7 +517,7 @@ export function InventoryPage() {
             </Button>
             <Button
               variant="danger"
-              icon={<Plus size={16} />}
+              icon={<Minus size={16} />}
               onClick={() => toast.info("Registro de pérdida en desarrollo")}
               className="whitespace-nowrap"
             >
@@ -727,6 +730,15 @@ export function InventoryPage() {
             : ""
         }
         onClose={() => setProductForQuickActions(null)}
+        onSuccess={() => {
+          void refreshProductos().then((dataActualizada) => {
+            setProductForQuickActions((prev) =>
+              prev
+                ? (dataActualizada.find((p) => p.id === prev.id) ?? prev)
+                : prev,
+            );
+          });
+        }}
         onOpenLotes={() => {
           if (productForQuickActions) {
             handleOpenLotesDetail(productForQuickActions);
