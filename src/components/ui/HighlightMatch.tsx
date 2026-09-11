@@ -5,6 +5,7 @@ interface HighlightMatchProps {
   text: string;
   query: string;
   className?: string;
+  compact?: boolean;
 }
 
 function escaparRegex(input: string): string {
@@ -15,6 +16,7 @@ export function HighlightMatch({
   text,
   query,
   className,
+  compact = false,
 }: HighlightMatchProps) {
   const termino = query.trim();
   if (!termino || termino.length < 2 || !text) return <>{text}</>;
@@ -30,6 +32,8 @@ export function HighlightMatch({
             key={index}
             className={cn(
               "rounded-xs bg-emerald-500/15 px-0.5 font-semibold text-emerald-600 dark:text-emerald-400",
+              compact &&
+                "px-0 font-normal text-emerald-700 dark:text-emerald-400",
               className,
             )}
           >

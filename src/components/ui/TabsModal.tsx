@@ -14,6 +14,8 @@ export interface TabsModalProps {
   isOpen: boolean;
   onClose: () => void;
   title?: string;
+  subheader?: ReactNode;
+  subheaderClassName?: string;
   tabs: TabsModalTab[];
   footer?: ReactNode;
   maxWidth?: string;
@@ -30,6 +32,8 @@ export function TabsModal({
   isOpen,
   onClose,
   title,
+  subheader,
+  subheaderClassName,
   tabs,
   footer,
   maxWidth = "max-w-2xl",
@@ -122,6 +126,18 @@ export function TabsModal({
               <X className="h-4 w-4" />
             </button>
           </div>
+
+          {/* Subheader contextual: anclado entre la cabecera y el cuerpo, sin scroll */}
+          {subheader && (
+            <div
+              className={cn(
+                "shrink-0 border-b border-slate-200 bg-slate-50 px-5 py-2.5 dark:border-slate-800 dark:bg-[#0f172a]",
+                subheaderClassName,
+              )}
+            >
+              {subheader}
+            </div>
+          )}
 
           {/* Cuerpo scrolleable */}
           <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto p-5">

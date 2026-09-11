@@ -128,12 +128,15 @@ export function ProductCard({
             </>
           )}
           {codigoResaltado && (
-            <span className="inline-flex shrink-0 items-center gap-0.5 rounded-md border border-emerald-500/25 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-400">
-              <Barcode className="h-3 w-3 opacity-70" />
-              <HighlightMatch
-                text={codigoResaltado}
-                query={terminoConsulta}
-              />
+            <span className="inline-flex shrink-0 items-center gap-0.5 rounded-md border border-emerald-500/25 bg-emerald-500/10 px-2 py-1 text-[11px] font-medium text-emerald-700 dark:text-emerald-400 sm:text-xs">
+              <Barcode className="h-3.5 w-3.5 opacity-70" />
+              <span>
+                <HighlightMatch
+                  text={codigoResaltado}
+                  query={terminoConsulta}
+                  compact
+                />
+              </span>
             </span>
           )}
           <span className="shrink-0 font-display text-[11px] font-semibold text-emerald-600 sm:text-xs dark:text-emerald-400">
@@ -173,7 +176,7 @@ export function ProductCard({
                 ? "text-red-600 dark:text-red-400"
                 : stock <= minStock
                   ? "text-amber-600 dark:text-amber-400"
-                  : "text-slate-200 dark:text-slate-100",
+                  : "text-slate-900 dark:text-slate-100",
             )}
           >
             {stock}

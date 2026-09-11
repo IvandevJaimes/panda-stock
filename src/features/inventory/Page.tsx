@@ -685,6 +685,10 @@ export function InventoryPage() {
             setSelectedProductForDetail(null);
             toast.info("Editar producto en desarrollo");
           }}
+          onDelete={() => {
+            setSelectedProductForDetail(null);
+            toast.info("Eliminar producto en desarrollo");
+          }}
         />
       )}
     </div>
