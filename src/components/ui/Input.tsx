@@ -1,5 +1,6 @@
 import { forwardRef, type InputHTMLAttributes, type ReactNode } from 'react'
 import { cn } from '../../lib/cn'
+import { FieldError } from './FieldError'
 
 type InputProps = InputHTMLAttributes<HTMLInputElement> & {
   label?: string
@@ -58,9 +59,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
             </span>
           )}
         </div>
-        {error && (
-          <p className="text-xs text-red-500 dark:text-red-400">{error}</p>
-        )}
+        <FieldError error={error} />
       </div>
     )
   },

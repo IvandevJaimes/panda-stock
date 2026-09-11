@@ -3,6 +3,7 @@ import type {
   AjusteStockInput,
   AperturaCajaInput,
   CierreCajaInput,
+  CrearMovimientoInput,
   FiltrosMovimientos,
   FiltrosProducto,
   FiltrosReportes,
@@ -87,6 +88,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.invoke("movimientos:get-all", filtros),
     ajuste: (data: AjusteStockInput) =>
       ipcRenderer.invoke("movimientos:ajuste", data),
+    crear: (data: CrearMovimientoInput) =>
+      ipcRenderer.invoke("movimientos:crear", data),
   },
   reportes: {
     getSummary: (filtros?: FiltrosReportes) =>

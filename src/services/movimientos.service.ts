@@ -1,10 +1,23 @@
-import type { AjusteStockInput, FiltrosMovimientos, MovimientoStock } from '../../electron/db/types'
+import type {
+  AjusteStockInput,
+  CrearMovimientoInput,
+  FiltrosMovimientos,
+  MovimientoStock,
+} from '../../electron/db/types'
 import { toErrorMessage } from './errors'
 
 export const movimientosService = {
   async getAll(filtros?: FiltrosMovimientos): Promise<MovimientoStock[]> {
     try {
       return await window.electronAPI.movimientos.getAll(filtros)
+    } catch (error) {
+      throw new Error(toErrorMessage(error), { cause: error })
+    }
+  },
+
+  async crearMovimiento(data: CrearMovimientoInput): Promise<void> {
+    try {
+      await window.electronAPI.movimientos.crear(data)
     } catch (error) {
       throw new Error(toErrorMessage(error), { cause: error })
     }

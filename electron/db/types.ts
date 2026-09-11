@@ -244,6 +244,17 @@ export type AjusteStockInput = {
   tipo: TipoAjusteStock
 }
 
+export type CrearMovimientoInput = {
+  productoId: number
+  loteId?: number | null
+  tipo: TipoMovimientoStock
+  cantidad: number
+  motivo?: string | null
+  costoUnitario?: number
+  numeroLote?: string | null
+  fechaVencimiento?: string | null
+}
+
 export type FiltrosMovimientos = {
   productoId?: number
   limit?: number

@@ -5,6 +5,7 @@ import type {
   CajaSummary,
   Categoria,
   CierreCajaInput,
+  CrearMovimientoInput,
   Empleado,
   FiltrosMovimientos,
   FiltrosProducto,
@@ -78,6 +79,7 @@ declare global {
       movimientos: {
         getAll: (filtros?: FiltrosMovimientos) => Promise<MovimientoStock[]>
         ajuste: (data: AjusteStockInput) => Promise<void>
+      crear: (data: CrearMovimientoInput) => Promise<void>
       }
       reportes: {
         getSummary: (filtros?: FiltrosReportes) => Promise<ReportesSummary>

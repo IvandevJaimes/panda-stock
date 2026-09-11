@@ -11,6 +11,7 @@ import {
   changePin,
   closeCaja,
   createAjusteStock,
+  crearMovimientoStock,
   createCategoria,
   createEmpleado,
   createLote,
@@ -184,6 +185,10 @@ function registerIpcHandlers() {
   );
   ipcMain.handle("movimientos:ajuste", (_event, data: AjusteStockInput) =>
     createAjusteStock(data),
+  );
+
+  ipcMain.handle("movimientos:crear", (_event, data) =>
+    crearMovimientoStock(data),
   );
 
   ipcMain.handle("reportes:summary", (_event, filtros?: FiltrosReportes) =>

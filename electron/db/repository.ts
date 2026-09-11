@@ -49,6 +49,7 @@ import type {
   VentaCompletaInput,
   VentaDetalle,
   VentaResult,
+  CrearMovimientoInput,
 } from './types.ts'
 
 export function verifyPin(pin: string): boolean {
@@ -844,4 +845,86 @@ export function getReportesSummary(filtros?: FiltrosReportes): ReportesSummary {
     totalVentas: ventasTotales?.total ?? 0,
     cantVentas: ventasTotales?.cantidad ?? 0,
   }
+}
+export function crearMovimientoStock(data: CrearMovimientoInput): void {
+  const db = getDb()
+  const ahora = new Date().toISOString()
+
+  db.transaction((tx) => {
+    // 1. Get product stock
+    const filaProducto = tx
+      .select({ stockActual: productos.stockActual })
+      .from(productos)
+      .where(eq(productos.id, data.productoId))
+      .get()
+
+    if (!filaProducto) throw new Error('Producto no encontrado')
+
+    const stockAnteriorProducto = filaProducto.stockActual
+    let stockPosteriorProducto = stockAnteriorProducto
+    
+    const isEntrada = data.tipo === 'entrada' || data.tipo === 'ajuste_positivo'
+    const delta = isEntrada ? data.cantidad : -data.cantidad
+    
+    stockPosteriorProducto += delta
+    if (stockPosteriorProducto < 0) throw new Error('El movimiento dejaría stock negativo en el producto')
+
+    let loteDestinoId = data.loteId || null
+
+    // 2. Handle Lot logic
+    if (data.tipo === 'entrada') {
+      // Siempre crear lote nuevo en entrada
+      const resultadoLote = tx.insert(lotes).values({
+        productoId: data.productoId,
+        numeroLote: data.numeroLote || null,
+        cantidadInicial: data.cantidad,
+        cantidadActual: data.cantidad,
+        costoUnitario: data.costoUnitario || 0,
+        fechaIngreso: ahora,
+        fechaVence: data.fechaVencimiento || null,
+        creadoEn: ahora
+      }).run()
+
+      loteDestinoId = Number(resultadoLote.lastInsertRowid)
+    } else if (loteDestinoId) {
+      // Ajustes/Mermas en lote existente
+      const filaLote = tx
+        .select({ cantidadActual: lotes.cantidadActual })
+        .from(lotes)
+        .where(eq(lotes.id, loteDestinoId))
+        .get()
+
+      if (!filaLote) throw new Error('Lote no encontrado')
+
+      const stockPosteriorLote = filaLote.cantidadActual + delta
+
+      if (stockPosteriorLote < 0) throw new Error('El movimiento dejaría stock negativo en el lote')
+
+      tx.update(lotes)
+        .set({ cantidadActual: stockPosteriorLote })
+        .where(eq(lotes.id, loteDestinoId))
+        .run()
+    }
+
+    // 3. Update Product stock
+    tx.update(productos)
+      .set({ stockActual: stockPosteriorProducto, actualizadoEn: ahora })
+      .where(eq(productos.id, data.productoId))
+      .run()
+
+    // 4. Record Movimiento
+    tx.insert(movimientosStock)
+      .values({
+        productoId: data.productoId,
+        loteId: loteDestinoId,
+        ventaId: null,
+        tipo: data.tipo,
+        cantidad: data.cantidad,
+        stockAnterior: stockAnteriorProducto,
+        stockPosterior: stockPosteriorProducto,
+        motivo: data.motivo || null,
+        fechaHora: ahora,
+      })
+      .run()
+  })
 }
