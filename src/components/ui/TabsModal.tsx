@@ -94,7 +94,7 @@ export function TabsModal({
                 className={cn(
                   "relative z-10 -mb-px flex -translate-y-0 cursor-pointer items-center gap-1.5 rounded-t-xl border border-b-0 px-4 py-2 text-sm font-medium transition-colors duration-150 select-none",
                   activa
-                    ? "border-slate-200 bg-white font-semibold text-emerald-600 dark:border-slate-800 dark:bg-[#0B1120] dark:text-emerald-400"
+                    ? "border-slate-200 bg-white  text-emerald-600 dark:border-slate-800 dark:bg-[#0B1120] dark:text-emerald-400"
                     : "border-slate-200 bg-slate-100 text-slate-500 hover:text-slate-700 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-400 dark:hover:text-slate-200",
                 )}
               >

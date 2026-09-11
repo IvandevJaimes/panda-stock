@@ -20,6 +20,7 @@
 
 * {
   user-select: none;
+
 }
 
 /* Reset del tooltip de Tippy: sin fondo ni padding nativos, estilizado por Tailwind */
