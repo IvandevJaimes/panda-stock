@@ -4,6 +4,7 @@ import {
   count,
   desc,
   eq,
+  getTableColumns,
   gt,
   gte,
   isNotNull,
@@ -44,6 +45,7 @@ import type {
   NuevoEmpleado,
   NuevoLote,
   Producto,
+  ProductoConLoteActivo,
   ReportesSummary,
   Venta,
   VentaCompletaInput,
@@ -190,7 +192,7 @@ export function scanProductByCode(codigo: string): Producto | null {
   return fila ?? null
 }
 
-export function getProductos(filtros?: FiltrosProducto): Producto[] {
+export function getProductos(filtros?: FiltrosProducto): ProductoConLoteActivo[] {
   const db = getDb()
   const condiciones: ReturnType<typeof and>[] = []
 
@@ -215,11 +217,30 @@ export function getProductos(filtros?: FiltrosProducto): Producto[] {
   }
 
   const condicion = and(...condiciones)
-  const consulta = condicion
-    ? db.select().from(productos).where(condicion)
-    : db.select().from(productos)
 
-  return consulta.orderBy(asc(productos.nombre)).all()
+  // Vencimiento del lote activo (FIFO): primer lote con stock ordenado por fecha
+  // de ingreso y luego por vencimiento, mismo criterio que processSale.
+  const loteActivoSubquery = sql<string | null>`
+    (
+      select ${lotes.fechaVence}
+      from ${lotes}
+      where ${lotes.productoId} = ${productos.id}
+        and ${lotes.cantidadActual} > 0
+      order by ${lotes.fechaIngreso} asc, ${lotes.fechaVence} asc
+      limit 1
+    )
+  `
+
+  const selectProductos = {
+    ...getTableColumns(productos),
+    loteActivoVencimiento: loteActivoSubquery,
+  }
+
+  const consulta = condicion
+    ? db.select(selectProductos).from(productos).where(condicion)
+    : db.select(selectProductos).from(productos)
+
+  return consulta.orderBy(asc(productos.nombre)).all() as ProductoConLoteActivo[]
 }
 
 export function getProductoById(id: number): Producto | null {

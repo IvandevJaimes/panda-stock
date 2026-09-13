@@ -35,7 +35,12 @@ import {
 import { Tooltip } from "../../components/ui/Tooltip";
 import { productosService } from "../../services/productos.service";
 import { marcasService } from "../../services/marcas.service";
-import type { Categoria, Marca, Producto } from "../../../electron/db/types";
+import type {
+  Categoria,
+  Marca,
+  Producto,
+  ProductoConLoteActivo,
+} from "../../../electron/db/types";
 
 type KpiFilter =
   | "all"
@@ -74,13 +79,15 @@ function derivarEstadoVencimiento(
 }
 
 function mapearProducto(
-  producto: Producto,
+  producto: ProductoConLoteActivo,
   categorias: Categoria[],
   marcas: Marca[],
   hoy: Date = new Date(),
 ): ProductoInventario {
   const categoria = categorias.find((c) => c.id === producto.categoriaId);
   const marca = marcas.find((m) => m.id === producto.marcaId);
+  // El vencimiento de la card sigue la regla FIFO: el del lote activo.
+  const vencimientoFifo = producto.loteActivoVencimiento ?? producto.vencimiento;
   return {
     id: producto.id,
     name: producto.nombre,
@@ -91,10 +98,10 @@ function mapearProducto(
     cost: producto.costo,
     stock: producto.stockActual,
     minStock: producto.stockMinimo,
-    expiresAt: producto.vencimiento,
+    expiresAt: vencimientoFifo,
     codigoInterno: producto.codigoInterno,
     codigosBarras: producto.codigosBarras ?? "",
-    status: derivarEstadoVencimiento(producto.vencimiento, hoy),
+    status: derivarEstadoVencimiento(vencimientoFifo, hoy),
   };
 }
 
@@ -130,12 +137,12 @@ export function InventoryPage() {
   const { categories, addCategory, updateCategory, removeCategory } =
     useCategories();
 
-  const [productosCrudos, setProductosCrudos] = useState<Producto[]>([]);
+  const [productosCrudos, setProductosCrudos] = useState<ProductoConLoteActivo[]>([]);
   const [marcas, setMarcas] = useState<Marca[]>([]);
   const [cargandoProductos, setCargandoProductos] = useState(true);
   const [errorProductos, setErrorProductos] = useState<string | null>(null);
 
-  const obtenerProductos = useCallback(async (): Promise<Producto[]> => {
+  const obtenerProductos = useCallback(async (): Promise<ProductoConLoteActivo[]> => {
     const data = await productosService.getAll();
     return data.filter((p) => p.activo);
   }, []);
@@ -168,7 +175,7 @@ export function InventoryPage() {
     };
   }, [obtenerProductos, obtenerMarcas]);
 
-  const refreshProductos = useCallback(async (): Promise<Producto[]> => {
+  const refreshProductos = useCallback(async (): Promise<ProductoConLoteActivo[]> => {
     setCargandoProductos(true);
     setErrorProductos(null);
     try {

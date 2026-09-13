@@ -17,6 +17,7 @@ import type {
   NuevoEmpleado,
   NuevoLote,
   Producto,
+  ProductoConLoteActivo,
   ReportesSummary,
   Venta,
   VentaCompletaInput,
@@ -53,7 +54,7 @@ declare global {
       }
       productos: {
         scan: (codigo: string) => Promise<Producto | null>
-        getAll: (filtros?: FiltrosProducto) => Promise<Producto[]>
+        getAll: (filtros?: FiltrosProducto) => Promise<ProductoConLoteActivo[]>
         getById: (id: number) => Promise<Producto | null>
         create: (data: Record<string, unknown>) => Promise<Producto>
         update: (id: number, data: Record<string, unknown>) => Promise<Producto>

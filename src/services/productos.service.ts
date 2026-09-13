@@ -1,4 +1,8 @@
-import type { FiltrosProducto, Producto } from '../../electron/db/types'
+import type {
+  FiltrosProducto,
+  Producto,
+  ProductoConLoteActivo,
+} from '../../electron/db/types'
 import { toErrorMessage } from './errors'
 
 function limpiarBarras(codigosBarra: string | null | undefined): string | null {
@@ -22,7 +26,7 @@ export const productosService = {
     }
   },
 
-  async getAll(filtros?: FiltrosProducto): Promise<Producto[]> {
+  async getAll(filtros?: FiltrosProducto): Promise<ProductoConLoteActivo[]> {
     try {
       return await window.electronAPI.productos.getAll(filtros)
     } catch (error) {

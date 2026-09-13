@@ -45,6 +45,12 @@ export type FiltrosProducto = {
   bajoStock?: boolean
 }
 
+/** Producto enriquecido con el vencimiento del lote activo (FIFO) para el listado. */
+export type ProductoConLoteActivo = Producto & {
+  /** Vencimiento del lote activo: primer lote con stock ordenado por fecha de ingreso. */
+  loteActivoVencimiento: string | null
+}
+
 export type Producto = {
   id: number
   categoriaId: number | null
