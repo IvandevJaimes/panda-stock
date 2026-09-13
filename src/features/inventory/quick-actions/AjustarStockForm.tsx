@@ -3,8 +3,9 @@ import { toast } from "sonner";
 import { Input } from "../../../components/ui/Input";
 import { movimientosService } from "../../../services/movimientos.service";
 import { cn } from "../../../lib/cn";
-import type { Producto } from "../../../../electron/db/types";
+import type { Lote, Producto } from "../../../../electron/db/types";
 import { HeaderMini } from "./HeaderMini";
+import { BotonGestionarLotes, PanelLoteAfectado } from "./LoteAfectado";
 import { ACCION_LABEL, FORM_ID, noSpinnersClass } from "./types";
 
 interface AjustarStockValues {
@@ -19,13 +20,14 @@ const VALORES_INICIALES_AJUSTAR = {
 
 interface AjustarStockFormProps {
   producto: Producto;
-  loteId: number | null;
+  lote: Lote | null;
   onCancel: () => void;
   onSuccess: () => void;
   onSubmittingChange: (submitting: boolean) => void;
+  onOpenLotes: () => void;
 }
 
-export function AjustarStockForm({ producto, loteId, onCancel, onSuccess, onSubmittingChange }: AjustarStockFormProps) {
+export function AjustarStockForm({ producto, lote, onCancel, onSuccess, onSubmittingChange, onOpenLotes }: AjustarStockFormProps) {
   const {
     register,
     handleSubmit,
@@ -53,7 +55,7 @@ export function AjustarStockForm({ producto, loteId, onCancel, onSuccess, onSubm
 
       await movimientosService.crearMovimiento({
         productoId: producto.id,
-        loteId,
+        loteId: lote?.id ?? null,
         tipo,
         cantidad: Math.abs(diff),
         motivo: data.motivo.trim(),
@@ -80,6 +82,7 @@ export function AjustarStockForm({ producto, loteId, onCancel, onSuccess, onSubm
         onBack={onCancel}
       />
       <div className="space-y-4">
+        <PanelLoteAfectado lote={lote} />
         <div>
           <Input
             label={`Stock registrado en sistema: ${producto.stockActual}`}
@@ -124,6 +127,8 @@ export function AjustarStockForm({ producto, loteId, onCancel, onSuccess, onSubm
           })}
         />
       </div>
+      <hr className="my-4 border-slate-100 dark:border-slate-800" />
+      <BotonGestionarLotes onOpenLotes={onOpenLotes} />
     </form>
   );
 }

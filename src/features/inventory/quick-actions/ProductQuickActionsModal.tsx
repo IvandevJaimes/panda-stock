@@ -135,20 +135,22 @@ export function ProductQuickActionsModal({
         {vistaActual === "ajustar-stock" && (
           <AjustarStockForm
             producto={product}
-            loteId={loteActivo?.id ?? null}
+            lote={loteActivo}
             onCancel={() => setVistaActual("menu")}
             onSuccess={handleActionComplete}
             onSubmittingChange={setSubmitting}
+            onOpenLotes={onOpenLotes}
           />
         )}
 
         {vistaActual === "registrar-perdida" && (
           <RegistrarPerdidaForm
             producto={product}
-            loteId={loteActivo?.id ?? null}
+            lote={loteActivo}
             onCancel={() => setVistaActual("menu")}
             onSuccess={handleActionComplete}
             onSubmittingChange={setSubmitting}
+            onOpenLotes={onOpenLotes}
           />
         )}
 

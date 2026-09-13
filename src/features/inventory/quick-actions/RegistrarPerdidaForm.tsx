@@ -2,31 +2,31 @@ import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { Input } from "../../../components/ui/Input";
 import { movimientosService } from "../../../services/movimientos.service";
-import type { Producto } from "../../../../electron/db/types";
+import type { Lote, Producto } from "../../../../electron/db/types";
 import { HeaderMini } from "./HeaderMini";
+import { BotonGestionarLotes, PanelLoteAfectado } from "./LoteAfectado";
 import { ACCION_LABEL, FORM_ID, noSpinnersClass } from "./types";
 
 interface RegistrarPerdidaValues {
   cantidad: string;
   motivo: string;
-  observaciones: string;
 }
 
 const VALORES_INICIALES_PERDIDA = {
   cantidad: "",
   motivo: "",
-  observaciones: "",
 } as const;
 
 interface RegistrarPerdidaFormProps {
   producto: Producto;
-  loteId: number | null;
+  lote: Lote | null;
   onCancel: () => void;
   onSuccess: () => void;
   onSubmittingChange: (submitting: boolean) => void;
+  onOpenLotes: () => void;
 }
 
-export function RegistrarPerdidaForm({ producto, loteId, onCancel, onSuccess, onSubmittingChange }: RegistrarPerdidaFormProps) {
+export function RegistrarPerdidaForm({ producto, lote, onCancel, onSuccess, onSubmittingChange, onOpenLotes }: RegistrarPerdidaFormProps) {
   const {
     register,
     handleSubmit,
@@ -40,12 +40,10 @@ export function RegistrarPerdidaForm({ producto, loteId, onCancel, onSuccess, on
     try {
       await movimientosService.crearMovimiento({
         productoId: producto.id,
-        loteId,
+        loteId: lote?.id ?? null,
         tipo: "merma",
         cantidad: Number(data.cantidad),
-        motivo:
-          data.motivo.trim() +
-          (data.observaciones.trim() ? ` - ${data.observaciones.trim()}` : ""),
+        motivo: data.motivo.trim(),
       });
       toast.success("Pérdida registrada correctamente");
       onSuccess();
@@ -69,6 +67,7 @@ export function RegistrarPerdidaForm({ producto, loteId, onCancel, onSuccess, on
         onBack={onCancel}
       />
       <div className="space-y-4">
+        <PanelLoteAfectado lote={lote} />
         <Input
           label="Cantidad Perdida"
           type="number"
@@ -101,14 +100,9 @@ export function RegistrarPerdidaForm({ producto, loteId, onCancel, onSuccess, on
             required: "Ingrese el motivo de la pérdida",
           })}
         />
-        <Input
-          label="Observaciones (Opcional)"
-          type="text"
-          disabled={isSubmitting}
-          error={errors.observaciones?.message}
-          {...register("observaciones", {})}
-        />
       </div>
+      <hr className="my-4 border-slate-100 dark:border-slate-800" />
+      <BotonGestionarLotes onOpenLotes={onOpenLotes} />
     </form>
   );
 }
