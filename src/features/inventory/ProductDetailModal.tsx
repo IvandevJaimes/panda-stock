@@ -11,6 +11,7 @@ import {
   Info,
   Layers,
   Package,
+  PackageX,
   Pencil,
   QrCode,
   Trash2,
@@ -22,12 +23,12 @@ import { Button } from "../../components/ui/Button";
 import { cn } from "../../lib/cn";
 import { evaluateExpiry } from "../../lib/dateUtils";
 import { lotesService } from "../../services/lotes.service";
+import { ConfirmarPerdidaModal } from "./ConfirmarPerdidaModal";
 import {
   DETALLE_DIAS_VENCER,
   estadoLoteBadge,
   tintPanelLote,
 } from "./loteHelpers";
-import { ProductLotsTab } from "./ProductLotsTab";
 import type { Lote, Producto, TipoVenta } from "../../../electron/db/types";
 
 // Preparación para el historial de auditoría (kardex) de la sección Movimientos:
@@ -43,10 +44,11 @@ export interface ProductDetailModalProps {
   product: Producto;
   marcaNombre: string;
   categoriaNombre: string;
-  defaultTabId?: string;
   onClose: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  /** Abre el modal independiente de gestión de lotes (cierra el detalle) */
+  onOpenLotes?: () => void;
   /** Se invoca cuando una mutación en lotes/acciones rápidas altera datos del producto */
   onMutated?: () => void;
 }
@@ -78,6 +80,11 @@ function tintSubheader(fechaVence: string | null): string {
     return "border-amber-500/20 bg-amber-500/10 dark:border-amber-500/40 dark:bg-amber-950/30";
   }
   return "";
+}
+
+function esLoteVencido(fechaVence: string | null): boolean {
+  if (!fechaVence) return false;
+  return evaluateExpiry(fechaVence)?.status === "expired";
 }
 
 function formatearFechaHora(iso?: string | null): string {
@@ -169,13 +176,14 @@ export function ProductDetailModal({
   product,
   marcaNombre,
   categoriaNombre,
-  defaultTabId,
   onClose,
   onEdit,
   onDelete,
+  onOpenLotes,
   onMutated,
 }: ProductDetailModalProps) {
   const [lotes, setLotes] = useState<Lote[] | null>(null);
+  const [perdidaSeleccion, setPerdidaSeleccion] = useState<Lote | null>(null);
 
   // Los lotes se cargan al abrir el modal. null = cargando; los setState viven
   // en callbacks asíncronos (.then/.catch), respetando react-hooks/set-state-in-effect.
@@ -199,14 +207,8 @@ export function ProductDetailModal({
     };
   }, [isOpen, product.id]);
 
-  /** Refresca lotes y notifica al padre para que recargue el producto */
-  const refreshData = () => {
-    void lotesService
-      .getByProducto(product.id)
-      .then(setLotes)
-      .catch(() => setLotes([]));
-    onMutated?.();
-  };
+  // Nota: los setState viven en callbacks asíncronos (.then/.catch), respetando
+  // react-hooks/set-state-in-effect (ver useEffect de carga de lotes más abajo).
 
   const codigosBarras = (product.codigosBarras ?? "")
     .split(",")
@@ -224,7 +226,13 @@ export function ProductDetailModal({
     : product.codigoInterno;
 
   const loteActivo = lotes
-    ? (lotes.find((lote) => lote.cantidadActual > 0) ?? lotes[0] ?? null)
+    ? (lotes
+        .filter((lote) => lote.cantidadActual > 0)
+        .sort((a, b) => {
+          if (!a.fechaVence) return 1;
+          if (!b.fechaVence) return -1;
+          return a.fechaVence.localeCompare(b.fechaVence);
+        })[0] ?? null)
     : null;
   const loteBadge = loteActivo
     ? estadoLoteBadge(loteActivo.fechaVence)
@@ -236,6 +244,15 @@ export function ProductDetailModal({
   const loteIdentidad = loteActivo
     ? (loteActivo.numeroLote ?? `Lote #${loteActivo.id}`)
     : null;
+
+  const handlePerdidaSuccess = () => {
+    setPerdidaSeleccion(null);
+    onMutated?.();
+    void lotesService
+      .getByProducto(product.id)
+      .then(setLotes)
+      .catch(() => setLotes([]));
+  };
 
   const pestanas: TabsModalTab[] = [
     {
@@ -354,14 +371,26 @@ export function ProductDetailModal({
                       </span>
                     </div>
                   </div>
-                  <span
-                    className={cn(
-                      "inline-flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-semibold",
-                      loteBadge.clases,
+                  <div className="flex shrink-0 items-center gap-2">
+                    <span
+                      className={cn(
+                        "inline-flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-semibold",
+                        loteBadge.clases,
+                      )}
+                    >
+                      {loteBadge.label}
+                    </span>
+                    {onOpenLotes && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        icon={<Layers className="h-4 w-4" aria-hidden />}
+                        onClick={onOpenLotes}
+                      >
+                        Gestionar lotes
+                      </Button>
                     )}
-                  >
-                    {loteBadge.label}
-                  </span>
+                  </div>
                 </div>
 
                 <div className="mt-4 grid grid-cols-2 gap-3 border-t border-slate-200/60 pt-3 dark:border-slate-800">
@@ -384,6 +413,20 @@ export function ProductDetailModal({
                     </span>
                   </div>
                 </div>
+
+                {esLoteVencido(loteActivo.fechaVence) && (
+                  <div className="mt-3 border-t border-slate-200/60 pt-3 dark:border-slate-800">
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      className="w-full"
+                      icon={<PackageX className="h-3.5 w-3.5" aria-hidden />}
+                      onClick={() => setPerdidaSeleccion(loteActivo)}
+                    >
+                      Confirmar pérdida
+                    </Button>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="flex flex-col items-start gap-1 rounded-xl border border-dashed border-slate-200 bg-slate-50/40 p-4 dark:border-slate-700/60 dark:bg-slate-900/20">
@@ -395,6 +438,17 @@ export function ProductDetailModal({
                   Registrá un lote para controlar vencimientos y costos por
                   partida.
                 </span>
+                {onOpenLotes && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    icon={<Layers className="h-4 w-4" aria-hidden />}
+                    onClick={onOpenLotes}
+                    className="mt-1"
+                  >
+                    Gestionar lotes
+                  </Button>
+                )}
               </div>
             )}
           </section>
@@ -437,18 +491,6 @@ export function ProductDetailModal({
       ),
     },
     {
-      id: "lotes",
-      label: "Lotes",
-      icon: Layers,
-      content: (
-        <ProductLotsTab
-          product={product}
-          lotes={lotes}
-          onMutated={refreshData}
-        />
-      ),
-    },
-    {
       id: "movimientos",
       label: "Movimientos",
       icon: History,
@@ -473,12 +515,12 @@ export function ProductDetailModal({
   ];
 
   return (
-    <TabsModal
-      isOpen={isOpen}
-      onClose={onClose}
+    <>
+      <TabsModal
+        isOpen={isOpen}
+        onClose={onClose}
       title="Detalle del producto"
       tabs={pestanas}
-      defaultTabId={defaultTabId}
       maxWidth="max-w-2xl"
       subheaderClassName={
         loteActivo ? tintSubheader(loteActivo.fechaVence) : ""
@@ -544,6 +586,15 @@ export function ProductDetailModal({
           </button>
         </>
       }
-    />
+      />
+
+      <ConfirmarPerdidaModal
+        isOpen={perdidaSeleccion !== null}
+        lote={perdidaSeleccion}
+        producto={product}
+        onClose={() => setPerdidaSeleccion(null)}
+        onSuccess={handlePerdidaSuccess}
+      />
+    </>
   );
 }

@@ -12,6 +12,10 @@ export interface ModalProps {
   children: ReactNode;
   className?: string;
   maxWidth?: "sm" | "md" | "lg" | "xl" | "2xl";
+  /** Altura fija del modal (ej: "h-[70vh]"). Con tiempo, el contenido scrollea internamente. */
+  height?: string;
+  /** Barra inferior fija. El contenido scrollea entre cabecera y footer. */
+  footer?: ReactNode;
 }
 
 const maxWidthClasses = {
@@ -31,6 +35,8 @@ export function Modal({
   children,
   className,
   maxWidth = "md",
+  height,
+  footer,
 }: ModalProps) {
   useEffect(() => {
     if (!isOpen) return;
@@ -77,6 +83,7 @@ export function Modal({
         className={cn(
           "relative m-auto w-full flex max-h-[90vh] flex-col rounded-2xl border border-slate-200 bg-white shadow-xl dark:border-slate-800 dark:bg-[#111827] animate-entry-up",
           maxWidthClasses[maxWidth],
+          height,
           className,
         )}
         role="dialog"
@@ -113,7 +120,21 @@ export function Modal({
         </div>
 
         {/* Contenido scrolleable */}
-        <div className="custom-scrollbar overflow-y-auto p-6">{children}</div>
+        <div
+          className={cn(
+            "custom-scrollbar overflow-y-auto p-6",
+            footer && "min-h-0 flex-1",
+          )}
+        >
+          {children}
+        </div>
+
+        {/* Footer fijo */}
+        {footer && (
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-slate-100 px-6 py-4 dark:border-slate-800/60">
+            {footer}
+          </div>
+        )}
       </div>
     </div>,
     document.body,

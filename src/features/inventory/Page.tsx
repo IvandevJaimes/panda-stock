@@ -15,12 +15,15 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "../../lib/cn";
+import { evaluateExpiry } from "../../lib/dateUtils";
 import { Button } from "../../components/ui/Button";
 import { ConfirmModal } from "../../components/ui/ConfirmModal";
 import { CreateCategoryModal } from "../../components/inventory/CreateCategoryModal";
 import { EditCategoryModal } from "../../components/inventory/EditCategoryModal";
 import { CreateProductModal } from "./CreateProductModal";
 import { ProductDetailModal } from "./ProductDetailModal";
+import { LotesModal } from "./LotesModal";
+import { ConfirmarPerdidaModal } from "./ConfirmarPerdidaModal";
 import { ProductQuickActionsModal } from "./quick-actions";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { useCategories } from "../../hooks/useCategories";
@@ -35,8 +38,10 @@ import {
 import { Tooltip } from "../../components/ui/Tooltip";
 import { productosService } from "../../services/productos.service";
 import { marcasService } from "../../services/marcas.service";
+import { lotesService } from "../../services/lotes.service";
 import type {
   Categoria,
+  Lote,
   Marca,
   Producto,
   ProductoConLoteActivo,
@@ -67,27 +72,24 @@ type ProductoInventario = {
 
 function derivarEstadoVencimiento(
   vencimiento: string | null,
-  hoy: Date = new Date(),
 ): "vencido" | "por-vencer" | "ok" {
   if (!vencimiento) return "ok";
-  const fecha = new Date(vencimiento);
-  if (Number.isNaN(fecha.getTime())) return "ok";
-  if (fecha < hoy) return "vencido";
-  const limite = new Date(hoy);
-  limite.setDate(hoy.getDate() + 14);
-  return fecha <= limite ? "por-vencer" : "ok";
+  const result = evaluateExpiry(vencimiento);
+  if (!result) return "ok";
+  if (result.status === "expired") return "vencido";
+  if (result.status === "expiring_soon") return "por-vencer";
+  return "ok";
 }
 
 function mapearProducto(
   producto: ProductoConLoteActivo,
   categorias: Categoria[],
   marcas: Marca[],
-  hoy: Date = new Date(),
 ): ProductoInventario {
   const categoria = categorias.find((c) => c.id === producto.categoriaId);
   const marca = marcas.find((m) => m.id === producto.marcaId);
-  // El vencimiento de la card sigue la regla FIFO: el del lote activo.
-  const vencimientoFifo = producto.loteActivoVencimiento ?? producto.vencimiento;
+  // El vencimiento de la card sigue la regla FIFO: primer lote activo con stock.
+  const vencimientoFifo = producto.loteActivoVencimiento;
   return {
     id: producto.id,
     name: producto.nombre,
@@ -101,7 +103,7 @@ function mapearProducto(
     expiresAt: vencimientoFifo,
     codigoInterno: producto.codigoInterno,
     codigosBarras: producto.codigosBarras ?? "",
-    status: derivarEstadoVencimiento(vencimientoFifo, hoy),
+    status: derivarEstadoVencimiento(vencimientoFifo),
   };
 }
 
@@ -120,6 +122,11 @@ function derivarStatus(p: ProductoInventario): ProductStatus {
   return "normal";
 }
 
+function esLoteVencido(fechaVence: string | null): boolean {
+  if (!fechaVence) return false;
+  return evaluateExpiry(fechaVence)?.status === "expired";
+}
+
 const PAGE_SIZE = 20;
 
 export function InventoryPage() {
@@ -131,7 +138,11 @@ export function InventoryPage() {
   const [isCreateProductOpen, setIsCreateProductOpen] = useState(false);
   const [selectedProductForDetail, setSelectedProductForDetail] = useState<Producto | null>(null);
   const [productForQuickActions, setProductForQuickActions] = useState<Producto | null>(null);
-  const [detailInitialTab, setDetailInitialTab] = useState<string>("informacion");
+  const [lotesProducto, setLotesProducto] = useState<Producto | null>(null);
+  const [perdidaSeleccion, setPerdidaSeleccion] = useState<{
+    producto: Producto;
+    lote: Lote;
+  } | null>(null);
   const [editingCategory, setEditingCategory] = useState<Categoria | null>(null);
   const [deletingCategory, setDeletingCategory] = useState<Categoria | null>(null);
   const { categories, addCategory, updateCategory, removeCategory } =
@@ -221,10 +232,26 @@ export function InventoryPage() {
     setPaginaActual(1);
   };
 
-  const handleOpenLotesDetail = (producto: Producto) => {
-    setProductForQuickActions(null);
-    setDetailInitialTab("lotes");
-    setSelectedProductForDetail(producto);
+  const handleOpenLotes = (producto: Producto) => {
+    setSelectedProductForDetail(null);
+    setLotesProducto(producto);
+  };
+
+  const handleConfirmarPerdida = async (producto: Producto) => {
+    try {
+      const lotes = await lotesService.getByProducto(producto.id);
+      const loteActivo =
+        lotes
+          .filter(
+            (l): l is Lote & { fechaVence: string } =>
+              l.cantidadActual > 0 && l.fechaVence !== null,
+          )
+          .sort((a, b) => a.fechaVence.localeCompare(b.fechaVence))[0] ?? null;
+      if (!loteActivo || !esLoteVencido(loteActivo.fechaVence)) return;
+      setPerdidaSeleccion({ producto, lote: loteActivo });
+    } catch {
+      toast.error("No se pudieron cargar los lotes del producto");
+    }
   };
 
   const categoryCounts = useMemo(() => {
@@ -609,18 +636,22 @@ export function InventoryPage() {
               }
               onOpenDetail={() => {
                 const raw = productosCrudos.find((p) => p.id === producto.id);
-                if (raw) {
-                  setDetailInitialTab("informacion");
-                  setSelectedProductForDetail(raw);
-                }
+                if (raw) setSelectedProductForDetail(raw);
               }}
               onOpenLotes={() => {
                 const raw = productosCrudos.find((p) => p.id === producto.id);
-                if (raw) {
-                  setDetailInitialTab("lotes");
-                  setSelectedProductForDetail(raw);
-                }
+                if (raw) handleOpenLotes(raw);
               }}
+              onConfirmarPerdida={
+                producto.status === "vencido" && producto.stock > 0
+                  ? () => {
+                      const raw = productosCrudos.find(
+                        (p) => p.id === producto.id,
+                      );
+                      if (raw) void handleConfirmarPerdida(raw);
+                    }
+                  : undefined
+              }
             />
           ))}
 
@@ -701,7 +732,6 @@ export function InventoryPage() {
         <ProductDetailModal
           isOpen={!!selectedProductForDetail}
           product={selectedProductForDetail}
-          defaultTabId={detailInitialTab}
           marcaNombre={
             marcas.find(
               (marca) => marca.id === selectedProductForDetail.marcaId,
@@ -714,6 +744,10 @@ export function InventoryPage() {
             )?.nombre ?? ""
           }
           onClose={() => setSelectedProductForDetail(null)}
+          onOpenLotes={() => {
+            setSelectedProductForDetail(null);
+            setLotesProducto(selectedProductForDetail);
+          }}
           onEdit={() => {
             setProductForQuickActions(selectedProductForDetail);
             setSelectedProductForDetail(null);
@@ -722,7 +756,15 @@ export function InventoryPage() {
             setSelectedProductForDetail(null);
             toast.info("Eliminar producto en desarrollo");
           }}
-          onMutated={() => void refreshProductos()}
+          onMutated={() => {
+            void refreshProductos().then((dataActualizada) => {
+              setSelectedProductForDetail((prev) =>
+                prev
+                  ? (dataActualizada.find((p) => p.id === prev.id) ?? prev)
+                  : prev,
+              );
+            });
+          }}
         />
       )}
 
@@ -756,7 +798,8 @@ export function InventoryPage() {
         }}
         onOpenLotes={() => {
           if (productForQuickActions) {
-            handleOpenLotesDetail(productForQuickActions);
+            setProductForQuickActions(null);
+            handleOpenLotes(productForQuickActions);
           }
         }}
         onFullEdit={() => {
@@ -765,6 +808,33 @@ export function InventoryPage() {
             `Editar toda la información de "${productForQuickActions.nombre}" en desarrollo`,
           );
           setProductForQuickActions(null);
+        }}
+      />
+
+      {lotesProducto && (
+        <LotesModal
+          isOpen={lotesProducto !== null}
+          product={lotesProducto}
+          marcaNombre={
+            marcas.find((m) => m.id === lotesProducto.marcaId)?.nombre ?? ""
+          }
+          categoriaNombre={
+            categories.find((c) => c.id === lotesProducto.categoriaId)
+              ?.nombre ?? ""
+          }
+          onClose={() => setLotesProducto(null)}
+          onMutated={() => void refreshProductos()}
+        />
+      )}
+
+      <ConfirmarPerdidaModal
+        isOpen={perdidaSeleccion !== null}
+        lote={perdidaSeleccion?.lote ?? null}
+        producto={perdidaSeleccion?.producto ?? null}
+        onClose={() => setPerdidaSeleccion(null)}
+        onSuccess={() => {
+          setPerdidaSeleccion(null);
+          void refreshProductos();
         }}
       />
     </div>

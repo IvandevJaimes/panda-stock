@@ -1,7 +1,8 @@
-import { Barcode, Calendar, Layers, Pencil, Trash2 } from "lucide-react";
+import { Barcode, Calendar, Layers, PackageX, Pencil, Trash2 } from "lucide-react";
 import { Tooltip } from "./Tooltip";
 import { TruncatedText } from "./TruncatedText";
 import { HighlightMatch } from "./HighlightMatch";
+import { Button } from "./Button";
 import { cn } from "../../lib/cn";
 import { evaluateExpiry } from "../../lib/dateUtils";
 
@@ -29,6 +30,7 @@ export interface ProductCardProps {
   onDelete?: () => void;
   onOpenDetail?: () => void;
   onOpenLotes?: () => void;
+  onConfirmarPerdida?: () => void;
   className?: string;
   style?: React.CSSProperties;
 }
@@ -63,6 +65,7 @@ export function ProductCard({
   onDelete,
   onOpenDetail,
   onOpenLotes,
+  onConfirmarPerdida,
   className,
   style,
 }: ProductCardProps) {
@@ -190,18 +193,16 @@ export function ProductCard({
 
         {/* Bloque de vencimiento: fecha + badge */}
         <div className="flex shrink-0 items-center justify-end gap-2">
-          {/* Fecha suelta: siempre visible en normal; se oculta en pantallas chicas si hay badge */}
-          {expiresAt && expiry && (
+          {/* Fecha suelta: siempre visible en normal; se oculta en pantallas chicas si hay badge; se omite si está vencido (el badge ya lo comunica) */}
+          {expiresAt && expiry && resolvedStatus !== "expired" && (
             <Tooltip content={expiry.relativeText} placement="top">
               <div
                 className={cn(
                   "flex shrink-0 cursor-default select-none items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium sm:text-[11px]",
                   resolvedStatus !== "normal" && "hidden md:flex",
-                  resolvedStatus === "expired"
-                    ? "text-red-600 dark:text-red-400"
-                    : resolvedStatus === "expiring_soon"
-                      ? "text-amber-600 dark:text-amber-400"
-                      : "text-slate-400 dark:text-slate-500",
+                  resolvedStatus === "expiring_soon"
+                    ? "text-amber-600 dark:text-amber-400"
+                    : "text-slate-400 dark:text-slate-500",
                 )}
               >
                 <Calendar className="h-3 w-3 shrink-0 opacity-70" />
@@ -243,6 +244,20 @@ export function ProductCard({
                 {resolvedStatus === "expiring_soon" && "Por vencer"}
               </span>
             </Tooltip>
+          )}
+          {onConfirmarPerdida && resolvedStatus === "expired" && (
+            <Button
+              variant="danger"
+              size="sm"
+              className="h-8 shrink-0 whitespace-nowrap px-2.5 py-0 text-[11px] sm:text-xs"
+              icon={<PackageX className="h-3.5 w-3.5" aria-hidden />}
+              onClick={(e) => {
+                e.stopPropagation();
+                onConfirmarPerdida();
+              }}
+            >
+              Confirmar pérdida
+            </Button>
           )}
         </div>
 

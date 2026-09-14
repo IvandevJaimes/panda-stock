@@ -91,7 +91,7 @@ export function AgregarInventarioForm({ producto, onCancel, onSuccess, onSubmitt
           })}
         />
         <Input
-          label="Costo unitario (Vacío = mismo costo)"
+          label="Costo unitario (Vacío = costo del lote activo)"
           type="number"
           step="0.01"
           min="0"

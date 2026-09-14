@@ -76,7 +76,7 @@ export function EditarVencimientoLoteForm({
                 error={!!fieldState.error}
                 disabled={isSubmitting}
                 placeholder="DD/MM/YYYY"
-                placement="top-start"
+                placement="top-end"
                 className="w-full"
               />
             )}

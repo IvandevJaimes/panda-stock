@@ -1,4 +1,5 @@
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { CalendarIcon, ChevronLeft, ChevronRight } from "lucide-react";
 import { DayPicker } from "react-day-picker";
 import { es } from "date-fns/locale";
@@ -16,12 +17,43 @@ export interface DateInputProps {
   placement?: "bottom-start" | "bottom-end" | "top-start" | "top-end";
 }
 
-const POPOVER_PLACEMENT_CLASSES = {
-  "bottom-start": "top-[calc(100%+6px)] left-0",
-  "bottom-end": "top-[calc(100%+6px)] right-0",
-  "top-start": "bottom-[calc(100%+6px)] left-0",
-  "top-end": "bottom-[calc(100%+6px)] right-0",
-} as const;
+interface PopoverCoords {
+  top?: number;
+  right?: number;
+  bottom?: number;
+  left?: number;
+}
+
+/**
+ * Calcula la posición del popover respecto al VIEWPORT (el popover se renderiza
+ * vía portal en document.body con position fixed). Así escapa del clipping de
+ * cualquier contenedor con overflow (modales, scroll containers) y no queda
+ * tapado por elementos que vienen después en el DOM (header/footer del modal).
+ */
+function computePopoverCoords(
+  inputRect: DOMRect,
+  placement: NonNullable<DateInputProps["placement"]>,
+): PopoverCoords {
+  const gap = 6;
+  const viewportW = window.innerWidth;
+  const viewportH = window.innerHeight;
+
+  const right = viewportW - inputRect.right;
+  const left = inputRect.left;
+  const top = inputRect.bottom + gap;
+  const bottom = viewportH - inputRect.top + gap;
+
+  switch (placement) {
+    case "bottom-end":
+      return { top, right };
+    case "bottom-start":
+      return { top, left };
+    case "top-end":
+      return { bottom, right };
+    case "top-start":
+      return { bottom, left };
+  }
+}
 
 function isoToDisplay(iso: string): string {
   if (!iso) return "";
@@ -112,6 +144,8 @@ export const DateInput = React.forwardRef<HTMLInputElement, DateInputProps>(
     ref,
   ) => {
     const [isOpen, setIsOpen] = React.useState(false);
+    const [coords, setCoords] = React.useState<PopoverCoords | null>(null);
+    const popoverRef = React.useRef<HTMLDivElement | null>(null);
     const [displayValue, setDisplayValue] = React.useState(() =>
       isoToDisplay(value || ""),
     );
@@ -147,10 +181,10 @@ export const DateInput = React.forwardRef<HTMLInputElement, DateInputProps>(
       if (!isOpen) return;
 
       function handleClickOutside(event: MouseEvent) {
-        if (
-          containerRef.current &&
-          !containerRef.current.contains(event.target as Node)
-        ) {
+        const target = event.target as Node;
+        const dentroInput = containerRef.current?.contains(target) ?? false;
+        const dentroPopover = popoverRef.current?.contains(target) ?? false;
+        if (!dentroInput && !dentroPopover) {
           setIsOpen(false);
         }
       }
@@ -168,6 +202,24 @@ export const DateInput = React.forwardRef<HTMLInputElement, DateInputProps>(
         document.removeEventListener("keydown", handleEscapeKey);
       };
     }, [isOpen]);
+
+    // Reposiciona el popover (portal al body) si el input se mueve por scroll/resize.
+    React.useEffect(() => {
+      if (!isOpen) return;
+
+      const recompute = () => {
+        const rect = internalInputRef.current?.getBoundingClientRect();
+        if (rect) setCoords(computePopoverCoords(rect, placement));
+      };
+
+      recompute();
+      window.addEventListener("resize", recompute);
+      window.addEventListener("scroll", recompute, true); // capture: scroll de cualquier ancestro
+      return () => {
+        window.removeEventListener("resize", recompute);
+        window.removeEventListener("scroll", recompute, true);
+      };
+    }, [isOpen, placement]);
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
       if (e.key === "Escape") {
@@ -287,63 +339,69 @@ export const DateInput = React.forwardRef<HTMLInputElement, DateInputProps>(
           type="button"
           tabIndex={-1}
           disabled={disabled}
-          onClick={() => !disabled && setIsOpen((prev) => !prev)}
+          onClick={() => {
+            if (disabled) return;
+            const rect = internalInputRef.current?.getBoundingClientRect();
+            if (rect) setCoords(computePopoverCoords(rect, placement));
+            setIsOpen((prev) => !prev);
+          }}
           aria-label="Abrir selector de fecha"
           className="absolute right-2 top-1/2 -translate-y-1/2 cursor-pointer rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-slate-800 dark:hover:text-slate-300"
         >
           <CalendarIcon className="h-4 w-4 shrink-0" />
         </button>
 
-        {/* Popover de Calendario con posicionamiento estrictamente absoluto */}
-        {isOpen && (
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label="Calendario de selección de fecha"
-            className={cn(
-              "absolute z-[100] min-w-[280px] animate-entry-up rounded-2xl border border-slate-200 bg-white p-3 shadow-xl dark:border-slate-800 dark:bg-[#0B1120]",
-              POPOVER_PLACEMENT_CLASSES[placement],
-            )}
-          >
-            <DayPicker
-              mode="single"
-              selected={selectedDate}
-              onSelect={handleDaySelect}
-              locale={es}
-              classNames={{
-                root: "p-1 select-none",
-                months: "relative flex flex-col",
-                month: "space-y-2",
-                month_caption:
-                  "flex justify-center items-center h-8 mb-1",
-                caption_label:
-                  "text-sm font-semibold capitalize text-slate-800 dark:text-slate-100",
-                nav: "absolute inset-x-0 z-10 flex h-8 items-center justify-between",
-                button_previous:
-                  "h-7 w-7 bg-transparent p-0 opacity-70 hover:opacity-100 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center cursor-pointer transition-colors",
-                button_next:
-                  "h-7 w-7 bg-transparent p-0 opacity-70 hover:opacity-100 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center cursor-pointer transition-colors",
-                month_grid: "w-full border-collapse",
-                weekdays: "flex justify-between mb-1",
-                weekday:
-                  "text-slate-400 dark:text-slate-500 w-8 text-center text-xs font-medium uppercase",
-                weeks: "flex flex-col gap-1",
-                week: "flex w-full justify-between",
-                day: "p-0 text-center text-sm relative group",
-                day_button:
-                  "h-8 w-8 p-0 font-normal rounded-lg transition-colors flex items-center justify-center text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer group-data-[selected=true]:!bg-emerald-600 group-data-[selected=true]:!text-white group-data-[selected=true]:hover:!bg-emerald-500 font-medium group-data-[today=true]:border group-data-[today=true]:border-emerald-500/40 group-data-[today=true]:font-bold group-data-[outside=true]:opacity-30 group-data-[disabled=true]:opacity-25 group-data-[disabled=true]:pointer-events-none",
-              }}
-              components={{
-                Chevron: ({ orientation }) =>
-                  orientation === "left" ? (
-                    <ChevronLeft className="h-4 w-4" />
-                  ) : (
-                    <ChevronRight className="h-4 w-4" />
-                  ),
-              }}
-            />
-          </div>
-        )}
+        {/* Popover de Calendario: portal al body para escapar del clipping/overflow de los modales */}
+        {isOpen &&
+          coords &&
+          createPortal(
+            <div
+              ref={popoverRef}
+              role="dialog"
+              aria-modal="true"
+              aria-label="Calendario de selección de fecha"
+              style={coords as React.CSSProperties}
+              className="fixed z-[9999] min-w-[280px] animate-entry-up rounded-2xl border border-slate-200 bg-white p-3 shadow-xl dark:border-slate-800 dark:bg-[#0B1120]"
+            >
+              <DayPicker
+                mode="single"
+                selected={selectedDate}
+                onSelect={handleDaySelect}
+                locale={es}
+                classNames={{
+                  root: "p-1 select-none",
+                  months: "relative flex flex-col",
+                  month: "space-y-2",
+                  month_caption: "flex justify-center items-center h-8 mb-1",
+                  caption_label:
+                    "text-sm font-semibold capitalize text-slate-800 dark:text-slate-100",
+                  nav: "absolute inset-x-0 z-10 flex h-8 items-center justify-between",
+                  button_previous:
+                    "h-7 w-7 bg-transparent p-0 opacity-70 hover:opacity-100 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center cursor-pointer transition-colors",
+                  button_next:
+                    "h-7 w-7 bg-transparent p-0 opacity-70 hover:opacity-100 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center cursor-pointer transition-colors",
+                  month_grid: "w-full border-collapse",
+                  weekdays: "flex justify-between mb-1",
+                  weekday:
+                    "text-slate-400 dark:text-slate-500 w-8 text-center text-xs font-medium uppercase",
+                  weeks: "flex flex-col gap-1",
+                  week: "flex w-full justify-between",
+                  day: "p-0 text-center text-sm relative group",
+                  day_button:
+                    "h-8 w-8 p-0 font-normal rounded-lg transition-colors flex items-center justify-center text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer group-data-[selected=true]:!bg-emerald-600 group-data-[selected=true]:!text-white group-data-[selected=true]:hover:!bg-emerald-500 font-medium group-data-[today=true]:border group-data-[today=true]:border-emerald-500/40 group-data-[today=true]:font-bold group-data-[outside=true]:opacity-30 group-data-[disabled=true]:opacity-25 group-data-[disabled=true]:pointer-events-none",
+                }}
+                components={{
+                  Chevron: ({ orientation }) =>
+                    orientation === "left" ? (
+                      <ChevronLeft className="h-4 w-4" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4" />
+                    ),
+                }}
+              />
+            </div>,
+            document.body,
+          )}
       </div>
     );
   },

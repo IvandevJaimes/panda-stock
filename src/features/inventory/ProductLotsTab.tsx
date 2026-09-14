@@ -1,9 +1,10 @@
 import { useState } from "react";
 import {
+  AlertTriangle,
   Boxes,
   Calendar,
   History,
-  Layers,
+  PackageX,
   Pencil,
   Plus,
   Trash2,
@@ -16,10 +17,11 @@ import { Button } from "../../components/ui/Button";
 import { ConfirmModal } from "../../components/ui/ConfirmModal";
 import { Modal } from "../../components/ui/Modal";
 import { Tooltip } from "../../components/ui/Tooltip";
+import { ConfirmarPerdidaModal } from "./ConfirmarPerdidaModal";
 import { LotQuickActionsModal } from "./lote-actions/LotQuickActionsModal";
 import { AgregarInventarioForm } from "./quick-actions/AgregarInventarioForm";
 import { FORM_ID } from "./quick-actions/types";
-import { DETALLE_DIAS_VENCER, estadoLoteBadge } from "./loteHelpers";
+import { DETALLE_DIAS_VENCER } from "./loteHelpers";
 import type { Lote, Producto } from "../../../electron/db/types";
 
 // ---------------------------------------------------------------------------
@@ -27,6 +29,8 @@ import type { Lote, Producto } from "../../../electron/db/types";
 // ---------------------------------------------------------------------------
 export interface ProductLotsTabProps {
   product: Producto;
+  marcaNombre?: string;
+  categoriaNombre?: string;
   lotes: Lote[] | null;
   onMutated: () => void;
 }
@@ -94,15 +98,17 @@ function stockHealthIndicator(cantidadActual: number, cantidadInicial: number) {
 // ---------------------------------------------------------------------------
 export function ProductLotsTab({
   product,
+  marcaNombre,
+  categoriaNombre,
   lotes,
   onMutated,
 }: ProductLotsTabProps) {
   const [quickActionsLote, setQuickActionsLote] = useState<Lote | null>(null);
   const [deletingLote, setDeletingLote] = useState<Lote | null>(null);
-  const [historialAbierto, setHistorialAbierto] = useState(false);
   const [agregarInventarioAbierto, setAgregarInventarioAbierto] =
     useState(false);
   const [submittingInventario, setSubmittingInventario] = useState(false);
+  const [perdidaSeleccion, setPerdidaSeleccion] = useState<Lote | null>(null);
 
   // --- Estado de carga ---
   if (lotes === null) {
@@ -142,17 +148,35 @@ export function ProductLotsTab({
     );
   }
 
-  // --- Separar lote activo, lotes vigentes e historial ---
-  const loteActivo = lotes.find((l) => l.cantidadActual > 0) ?? null;
+  // --- Separar lotes según su estado: activo, vigentes, vencidos e historial ---
+  // Lote activo = el que se consume (FEFO): con stock que vence primero, sin fecha al final.
+  const loteActivo =
+    lotes
+      .filter((l) => l.cantidadActual > 0)
+      .sort((a, b) => {
+        if (!a.fechaVence) return 1;
+        if (!b.fechaVence) return -1;
+        return a.fechaVence.localeCompare(b.fechaVence);
+      })[0] ?? null;
   const lotesVigentes = lotes.filter(
     (l) =>
       l.id !== loteActivo?.id &&
       l.cantidadActual > 0 &&
       !esLoteVencido(l.fechaVence),
   );
-  const historial = lotes.filter(
-    (l) => l.cantidadActual <= 0 || esLoteVencido(l.fechaVence),
+  // Los vencidos con stock NO son historial: esperan confirmación de pérdida.
+  const lotesVencidos = lotes.filter(
+    (l) =>
+      l.id !== loteActivo?.id &&
+      l.cantidadActual > 0 &&
+      esLoteVencido(l.fechaVence),
   );
+  const historial = lotes.filter((l) => l.cantidadActual <= 0);
+
+  const handlePerdidaSuccess = () => {
+    onMutated();
+    setPerdidaSeleccion(null);
+  };
 
   const handleDeleteLote = async () => {
     if (!deletingLote) return;
@@ -181,124 +205,48 @@ export function ProductLotsTab({
   return (
     <div className="flex flex-col gap-4">
       {/* ================================================================ */}
-      {/* ENCABEZADO: historial + agregar inventario                       */}
+      {/* ENCABEZADO: producto + agregar inventario                        */}
       {/* ================================================================ */}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5">
-          <Layers
-            className="h-4 w-4 text-emerald-500 dark:text-emerald-400"
-            strokeWidth={2}
-            aria-hidden
-          />
-          <span className="text-sm font-bold text-slate-800 dark:text-slate-100">
-            Gestión de lotes
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <span className="truncate font-display text-base font-bold text-slate-900 dark:text-slate-100">
+            {product.nombre}
+            {product.variante && (
+              <span className="ml-2 text-sm font-medium text-slate-400 dark:text-slate-500">
+                · {product.variante}
+              </span>
+            )}
           </span>
+          {(marcaNombre || categoriaNombre) && (
+            <span className="truncate text-xs font-medium text-slate-400 dark:text-slate-500">
+              {[marcaNombre, categoriaNombre].filter(Boolean).join(" · ")}
+            </span>
+          )}
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            icon={<History className="h-4 w-4" aria-hidden />}
-            onClick={() => setHistorialAbierto(true)}
-          >
-            Historial de lotes
-          </Button>
-          <Button
-            variant="primary"
-            size="sm"
-            icon={<Plus className="h-4 w-4" aria-hidden />}
-            onClick={() => setAgregarInventarioAbierto(true)}
-          >
-            Agregar inventario
-          </Button>
-        </div>
+        <Button
+          variant="primary"
+          size="sm"
+          icon={<Plus className="h-4 w-4" aria-hidden />}
+          onClick={() => setAgregarInventarioAbierto(true)}
+        >
+          Agregar inventario
+        </Button>
       </div>
 
       {/* ================================================================ */}
       {/* CARD DESTACADA: LOTE ACTIVO                                      */}
       {/* ================================================================ */}
       {loteActivo && (
-        <div className="relative overflow-hidden rounded-xl border border-emerald-500/30 bg-white p-4 dark:bg-slate-900/50">
-          {/* Línea superior */}
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center rounded-md border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
-              Activo
-            </span>
-            <span className="font-mono text-sm font-bold text-slate-900 dark:text-slate-100">
-              {loteActivo.numeroLote ?? `Lote #${loteActivo.id}`}
-            </span>
-
-            {/* Acciones a la derecha: solo editar, el lote activo no se puede eliminar */}
-            <div className="ml-auto flex items-center gap-0.5">
-              <Tooltip content="Editar lote" placement="top">
-                <button
-                  type="button"
-                  onClick={() => setQuickActionsLote(loteActivo)}
-                  aria-label="Editar lote"
-                  className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-black/5 hover:text-slate-800 sm:h-8 sm:w-8 sm:rounded-xl dark:hover:bg-white/5 dark:hover:text-slate-100"
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                </button>
-              </Tooltip>
-            </div>
-          </div>
-
-          {/* Métricas del lote activo: grid de 3 columnas */}
-          <div className="mt-4 grid grid-cols-3 gap-4 border-t border-slate-200 pt-3 dark:border-slate-800">
-            {/* Stock disponible */}
-            <div className="flex flex-col gap-0.5">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                Stock disponible
-              </span>
-              <span
-                className={cn(
-                  "font-mono text-lg font-bold tabular-nums",
-                  stockHealthIndicator(
-                    loteActivo.cantidadActual,
-                    loteActivo.cantidadInicial,
-                  ),
-                )}
-              >
-                {loteActivo.cantidadActual}
-              </span>
-            </div>
-
-            {/* Vencimiento */}
-            <div className="flex flex-col gap-0.5">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                Vencimiento
-              </span>
-              {loteActivo.fechaVence ? (
-                <div className="flex items-center gap-1.5">
-                  <Calendar
-                    className="h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-slate-500"
-                    aria-hidden
-                  />
-                  <span className="text-sm font-semibold tabular-nums text-slate-800 dark:text-slate-100">
-                    {formatearFecha(loteActivo.fechaVence)}
-                  </span>
-                </div>
-              ) : (
-                <span className="text-xs font-medium italic text-slate-500 opacity-70 dark:text-slate-400">
-                  Sin vencimiento
-                </span>
-              )}
-              {loteActivo.fechaVence && (
-                <VencimientoBadge fechaVence={loteActivo.fechaVence} />
-              )}
-            </div>
-
-            {/* Costo de entrada */}
-            <div className="flex flex-col gap-0.5">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                Costo de entrada
-              </span>
-              <span className="font-mono text-sm font-bold tabular-nums text-slate-800 dark:text-slate-100">
-                {formatearPrecio(loteActivo.costoUnitario)}
-              </span>
-            </div>
-          </div>
-        </div>
+        <LoteCard
+          lote={loteActivo}
+          destacado
+          onEdit={() => setQuickActionsLote(loteActivo)}
+          onConfirmarPerdida={
+            esLoteVencido(loteActivo.fechaVence)
+              ? () => setPerdidaSeleccion(loteActivo)
+              : undefined
+          }
+        />
       )}
 
       {/* ================================================================ */}
@@ -310,92 +258,76 @@ export function ProductLotsTab({
             <Boxes className="h-4 w-4" strokeWidth={2} aria-hidden />
             Lotes vigentes
           </h4>
-          <div className="divide-y divide-slate-100 rounded-xl border border-slate-200/80 bg-slate-50/50 dark:divide-slate-800 dark:border-slate-800/80 dark:bg-slate-900/40">
-            {lotesVigentes.map((lote) => {
-              const vencimiento = badgeVencimiento(lote.fechaVence);
-              return (
-                <div
-                  key={lote.id}
-                  className="flex flex-wrap items-center gap-x-5 gap-y-2 px-4 py-3"
-                >
-                  {/* Identificador */}
-                  <span className="min-w-[100px] font-mono text-xs font-semibold tracking-wide text-slate-700 dark:text-slate-200">
-                    {lote.numeroLote ?? `Lote #${lote.id}`}
-                  </span>
+          <div className="flex flex-col gap-3">
+            {lotesVigentes.map((lote) => (
+              <LoteCard
+                key={lote.id}
+                lote={lote}
+                onEdit={() => setQuickActionsLote(lote)}
+                onDelete={() => setDeletingLote(lote)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
 
-                  {/* Datos compactos */}
-                  <div className="flex flex-wrap items-center gap-x-5 gap-y-1 sm:ml-auto">
-                    <MetricaCompacta
-                      etiqueta="Disp."
-                      valor={String(lote.cantidadActual)}
-                      mono
-                    />
-                    <MetricaCompacta
-                      etiqueta="Costo"
-                      valor={formatearPrecio(lote.costoUnitario)}
-                      mono
-                    />
-                    <div className="flex items-center gap-1.5">
-                      {lote.fechaVence ? (
-                        <>
-                          <span className="text-sm font-semibold tabular-nums text-slate-800 dark:text-slate-100">
-                            {formatearFecha(lote.fechaVence)}
-                          </span>
-                          <span
-                            className={cn(
-                              "inline-flex shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold",
-                              vencimiento.clases,
-                            )}
-                          >
-                            {vencimiento.label}
-                          </span>
-                        </>
-                      ) : (
-                        <span className="text-xs font-medium italic text-slate-500 opacity-70 dark:text-slate-400">
-                          Sin vencimiento
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Acciones: editar + eliminar (solo lotes no activos) */}
-                  <div className="flex items-center gap-0.5 sm:ml-2">
-                    <Tooltip content="Editar lote" placement="top">
-                      <button
-                        type="button"
-                        onClick={() => setQuickActionsLote(lote)}
-                        aria-label="Editar lote"
-                        className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-black/5 hover:text-slate-800 sm:h-8 sm:w-8 sm:rounded-xl dark:hover:bg-white/5 dark:hover:text-slate-100"
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </button>
-                    </Tooltip>
-                    <Tooltip content="Eliminar lote" placement="top">
-                      <button
-                        type="button"
-                        onClick={() => setDeletingLote(lote)}
-                        aria-label="Eliminar lote"
-                        className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 sm:h-8 sm:w-8 sm:rounded-xl dark:hover:bg-red-950/40 dark:hover:text-red-400"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </Tooltip>
-                  </div>
-                </div>
-              );
-            })}
+      {/* ================================================================ */}
+      {/* LOTES VENCIDOS (con stock, esperando confirmación de pérdida)    */}
+      {/* ================================================================ */}
+      {lotesVencidos.length > 0 && (
+        <div>
+          <h4 className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-red-600/80 dark:text-red-400/80">
+            <AlertTriangle className="h-4 w-4" strokeWidth={2} aria-hidden />
+            Lotes vencidos
+          </h4>
+          <div className="flex flex-col gap-3">
+            {lotesVencidos.map((lote) => (
+              <LoteCard
+                key={lote.id}
+                lote={lote}
+                vencido
+                onEdit={() => setQuickActionsLote(lote)}
+                onDelete={() => setDeletingLote(lote)}
+                onConfirmarPerdida={() => setPerdidaSeleccion(lote)}
+              />
+            ))}
           </div>
         </div>
       )}
 
       {/* Si no hay más vigentes ni historial, solo está el activo */}
       {lotesVigentes.length === 0 &&
+        lotesVencidos.length === 0 &&
         historial.length === 0 &&
         loteActivo && (
           <p className="text-center text-xs text-slate-400 dark:text-slate-500">
             Este es el único lote registrado para el producto.
           </p>
         )}
+
+      <div className="flex flex-col gap-4 border-t border-slate-200 pt-4 dark:border-slate-800">
+        <h4 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+          <History className="h-4 w-4" strokeWidth={2} aria-hidden />
+          Historial de lotes
+        </h4>
+        {historial.length === 0 ? (
+          <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50/40 p-4 text-center text-xs text-slate-400 dark:border-slate-700/60 dark:bg-slate-900/20 dark:text-slate-500">
+            Sin lotes en el historial.
+          </p>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {historial.map((lote) => (
+              <LoteCard
+                key={lote.id}
+                lote={lote}
+                historial
+                onEdit={() => setQuickActionsLote(lote)}
+                onDelete={() => setDeletingLote(lote)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* ================================================================ */}
       {/* MODALES                                                          */}
@@ -409,62 +341,6 @@ export function ProductLotsTab({
           onMutated={onMutated}
         />
       )}
-
-      <Modal
-        isOpen={historialAbierto}
-        onClose={() => setHistorialAbierto(false)}
-        maxWidth="lg"
-        title="Historial de lotes"
-      >
-        <div className="flex flex-col gap-3">
-          {historial.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/40 p-10 text-center text-sm text-slate-400 dark:border-slate-700/60 dark:bg-slate-900/20 dark:text-slate-500">
-              Sin lotes en el historial.
-            </div>
-          ) : (
-            <div className="divide-y divide-slate-100 rounded-xl border border-slate-200/80 bg-slate-50/50 dark:divide-slate-800 dark:border-slate-800/80 dark:bg-slate-900/40">
-              {historial.map((lote) => {
-                const vencimiento = badgeVencimiento(lote.fechaVence);
-                return (
-                  <div
-                    key={lote.id}
-                    className="flex flex-wrap items-center gap-x-5 gap-y-2 px-4 py-3"
-                  >
-                    <span className="min-w-[100px] font-mono text-xs font-semibold tracking-wide text-slate-700 dark:text-slate-200">
-                      {lote.numeroLote ?? `Lote #${lote.id}`}
-                    </span>
-                    <div className="flex flex-wrap items-center gap-x-5 gap-y-1 sm:ml-auto">
-                      <MetricaCompacta
-                        etiqueta="Disp."
-                        valor={String(lote.cantidadActual)}
-                        mono
-                      />
-                      <MetricaCompacta
-                        etiqueta="Costo"
-                        valor={formatearPrecio(lote.costoUnitario)}
-                        mono
-                      />
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-sm font-semibold tabular-nums text-slate-800 dark:text-slate-100">
-                          {formatearFecha(lote.fechaVence)}
-                        </span>
-                        <span
-                          className={cn(
-                            "inline-flex shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold",
-                            vencimiento.clases,
-                          )}
-                        >
-                          {vencimiento.label}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </Modal>
 
       <Modal
         isOpen={agregarInventarioAbierto}
@@ -507,6 +383,14 @@ export function ProductLotsTab({
         }
         confirmText="Eliminar"
       />
+
+      <ConfirmarPerdidaModal
+        isOpen={perdidaSeleccion !== null}
+        lote={perdidaSeleccion}
+        producto={product}
+        onClose={() => setPerdidaSeleccion(null)}
+        onSuccess={handlePerdidaSuccess}
+      />
     </div>
   );
 }
@@ -514,42 +398,197 @@ export function ProductLotsTab({
 // ---------------------------------------------------------------------------
 // Sub-componentes auxiliares
 // ---------------------------------------------------------------------------
-function MetricaCompacta({
-  etiqueta,
-  valor,
-  mono = false,
+function LoteCard({
+  lote,
+  destacado = false,
+  vencido = false,
+  historial = false,
+  onEdit,
+  onDelete,
+  onConfirmarPerdida,
 }: {
-  etiqueta: string;
-  valor: string;
-  mono?: boolean;
+  lote: Lote;
+  destacado?: boolean;
+  vencido?: boolean;
+  historial?: boolean;
+  onEdit?: () => void;
+  onDelete?: () => void;
+  onConfirmarPerdida?: () => void;
 }) {
+  const vencimiento = badgeVencimiento(lote.fechaVence);
+  const esHistorial = historial;
+  const esDestacadoVencido = destacado && esLoteVencido(lote.fechaVence);
   return (
-    <div className="flex items-baseline gap-1">
-      <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-        {etiqueta}
-      </span>
-      <span
-        className={cn(
-          "text-sm font-semibold text-slate-800 dark:text-slate-100",
-          mono && "font-mono tabular-nums",
-        )}
-      >
-        {valor}
-      </span>
-    </div>
-  );
-}
-
-function VencimientoBadge({ fechaVence }: { fechaVence: string | null }) {
-  const badge = estadoLoteBadge(fechaVence);
-  return (
-    <span
+    <div
       className={cn(
-        "mt-0.5 inline-flex w-fit shrink-0 items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold",
-        badge.clases,
+        "relative overflow-hidden rounded-xl border p-4 transition-colors",
+        destacado &&
+          !esDestacadoVencido &&
+          "border-emerald-500/30 bg-white dark:bg-slate-900/50",
+        esDestacadoVencido &&
+          "border-amber-500/40 bg-amber-500/[0.04] dark:border-amber-500/40 dark:bg-amber-950/20",
+        !destacado &&
+          !vencido &&
+          !esHistorial &&
+          "border-slate-200/80 bg-slate-50/50 dark:border-slate-800/80 dark:bg-slate-900/40",
+        vencido &&
+          "border-amber-500/40 bg-amber-500/[0.04] dark:border-amber-500/40 dark:bg-amber-950/20",
+        esHistorial &&
+          "border-red-500/10 bg-red-500/[0.03] dark:border-red-500/15 dark:bg-red-950/20",
       )}
     >
-      {badge.label}
-    </span>
+      {/* Línea superior */}
+      <div className="flex flex-wrap items-center gap-2">
+        {destacado && (
+          <span
+            className={cn(
+              "inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider",
+              esDestacadoVencido
+                ? "border-red-500/20 bg-red-500/10 text-red-700 dark:text-red-400"
+                : "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+            )}
+          >
+            Activo
+          </span>
+        )}
+        {esHistorial && (
+          <span className="inline-flex items-center rounded-md border border-red-500/20 bg-red-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-red-500/80 dark:text-red-400/80">
+            {lote.cantidadActual <= 0 ? "Agotado" : "Vencido"}
+          </span>
+        )}
+        <span
+          className={cn(
+            "font-mono text-sm font-bold",
+            esHistorial
+              ? "text-slate-500/80 dark:text-slate-400/70"
+              : "text-slate-900 dark:text-slate-100",
+          )}
+        >
+          {lote.numeroLote ?? `Lote #${lote.id}`}
+        </span>
+
+        {/* Acciones a la derecha: badge de estado + acciones */}
+        <div className="ml-auto flex flex-wrap items-center gap-1.5">
+          {lote.fechaVence && (
+            <span
+              className={cn(
+                "inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold",
+                vencimiento.clases,
+              )}
+            >
+              {vencimiento.label}
+            </span>
+          )}
+          {onEdit && (
+            <Tooltip content="Editar lote" placement="top">
+              <button
+                type="button"
+                onClick={onEdit}
+                aria-label="Editar lote"
+                className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-black/5 hover:text-slate-800 sm:h-8 sm:w-8 sm:rounded-xl dark:hover:bg-white/5 dark:hover:text-slate-100"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+            </Tooltip>
+          )}
+          {onDelete && (
+            <Tooltip content="Eliminar lote" placement="top">
+              <button
+                type="button"
+                onClick={onDelete}
+                aria-label="Eliminar lote"
+                className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 sm:h-8 sm:w-8 sm:rounded-xl dark:hover:bg-red-950/40 dark:hover:text-red-400"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </Tooltip>
+          )}
+        </div>
+      </div>
+
+      {/* Métricas del lote: grid de 3 columnas */}
+      <div className="mt-4 grid grid-cols-3 gap-4 border-t border-slate-200 pt-3 dark:border-slate-800">
+        {/* Stock disponible */}
+        <div className="flex flex-col gap-0.5">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+            Stock disponible
+          </span>
+          <span
+            className={cn(
+              "font-mono text-lg font-bold tabular-nums",
+              esHistorial
+                ? "text-slate-400/80 dark:text-slate-500/70"
+                : stockHealthIndicator(
+                    lote.cantidadActual,
+                    lote.cantidadInicial,
+                  ),
+            )}
+          >
+            {lote.cantidadActual}
+          </span>
+        </div>
+
+        {/* Vencimiento */}
+        <div className="flex flex-col gap-0.5">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+            Vencimiento
+          </span>
+          {lote.fechaVence ? (
+            <div className="flex items-center gap-1.5">
+              <Calendar
+                className="h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-slate-500"
+                aria-hidden
+              />
+              <span
+                className={cn(
+                  "text-sm font-semibold tabular-nums",
+                  esHistorial
+                    ? "text-slate-500/80 dark:text-slate-400/70"
+                    : "text-slate-800 dark:text-slate-100",
+                )}
+              >
+                {formatearFecha(lote.fechaVence)}
+              </span>
+            </div>
+          ) : (
+            <span className="text-xs font-medium italic text-slate-500 opacity-70 dark:text-slate-400">
+              Sin vencimiento
+            </span>
+          )}
+        </div>
+
+        {/* Costo unitario */}
+        <div className="flex flex-col gap-0.5">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+            Costo unitario
+          </span>
+          <span
+            className={cn(
+              "font-mono text-sm font-bold tabular-nums",
+              esHistorial
+                ? "text-slate-500/80 dark:text-slate-400/70"
+                : "text-slate-800 dark:text-slate-100",
+            )}
+          >
+            {formatearPrecio(lote.costoUnitario)}
+          </span>
+        </div>
+      </div>
+
+      {/* Acción de confirmación de pérdida: solo para vencidos, abajo de la card */}
+      {onConfirmarPerdida && (
+        <div className="mt-4 border-t border-slate-200 pt-3 dark:border-slate-800">
+          <Button
+            variant="danger"
+            size="sm"
+            className="w-full"
+            icon={<PackageX className="h-3.5 w-3.5" aria-hidden />}
+            onClick={onConfirmarPerdida}
+          >
+            Confirmar pérdida
+          </Button>
+        </div>
+      )}
+    </div>
   );
 }
