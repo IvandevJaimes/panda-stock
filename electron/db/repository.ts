@@ -218,15 +218,20 @@ export function getProductos(filtros?: FiltrosProducto): ProductoConLoteActivo[]
 
   const condicion = and(...condiciones)
 
-  // Vencimiento del lote activo (FIFO): primer lote con stock ordenado por fecha
-  // de ingreso y luego por vencimiento, mismo criterio que processSale.
+  // Vencimiento del lote activo: el lote con stock que vence primero (FEFO).
+  // Es el que determina si el producto hoy tiene mercadería vencida; los lotes
+  // sin fecha no pueden decidir el vencimiento de la card.
+  // Las columnas van calificadas con alias: si no, drizzle las emite sin
+  // calificar y SQLite resuelve "id" contra el lote interno, rompiendo la
+  // correlación (todas las cards mostraban el mismo vencimiento).
   const loteActivoSubquery = sql<string | null>`
     (
-      select ${lotes.fechaVence}
-      from ${lotes}
-      where ${lotes.productoId} = ${productos.id}
-        and ${lotes.cantidadActual} > 0
-      order by ${lotes.fechaIngreso} asc, ${lotes.fechaVence} asc
+      select l.fecha_vence
+      from lotes l
+      where l.producto_id = productos.id
+        and l.cantidad_actual > 0
+        and l.fecha_vence is not null
+      order by l.fecha_vence asc
       limit 1
     )
   `
@@ -399,7 +404,7 @@ export function getLotesByProducto(productoId: number): Lote[] {
     .select()
     .from(lotes)
     .where(eq(lotes.productoId, productoId))
-    .orderBy(asc(lotes.fechaIngreso))
+    .orderBy(asc(lotes.fechaIngreso), asc(lotes.fechaVence))
     .all()
 }
 
@@ -1006,13 +1011,25 @@ export function crearMovimientoStock(data: CrearMovimientoInput): void {
 
     // 2. Handle Lot logic
     if (data.tipo === 'entrada') {
+      // Si no se especifica costo, usar el del lote activo (FIFO); si no hay, usar el del producto
+      let costoUnitario = data.costoUnitario
+      if (costoUnitario === undefined) {
+        const loteActivo = tx
+          .select({ costoUnitario: lotes.costoUnitario })
+          .from(lotes)
+          .where(and(eq(lotes.productoId, data.productoId), gt(lotes.cantidadActual, 0)))
+          .orderBy(asc(lotes.fechaIngreso), asc(lotes.fechaVence))
+          .get()
+        costoUnitario = loteActivo?.costoUnitario ?? filaProducto.costo
+      }
+
       // Siempre crear lote nuevo en entrada
       const resultadoLote = tx.insert(lotes).values({
         productoId: data.productoId,
         numeroLote: data.numeroLote || null,
         cantidadInicial: data.cantidad,
         cantidadActual: data.cantidad,
-        costoUnitario: data.costoUnitario ?? filaProducto.costo,
+        costoUnitario,
         fechaIngreso: ahora,
         fechaVence: data.fechaVencimiento || null,
         creadoEn: ahora
