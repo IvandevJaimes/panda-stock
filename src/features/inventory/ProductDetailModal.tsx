@@ -27,6 +27,7 @@ import {
   estadoLoteBadge,
   tintPanelLote,
 } from "./loteHelpers";
+import { ProductLotsTab } from "./ProductLotsTab";
 import type { Lote, Producto, TipoVenta } from "../../../electron/db/types";
 
 // Preparación para el historial de auditoría (kardex) de la sección Movimientos:
@@ -46,6 +47,8 @@ export interface ProductDetailModalProps {
   onClose: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  /** Se invoca cuando una mutación en lotes/acciones rápidas altera datos del producto */
+  onMutated?: () => void;
 }
 
 const TIPO_VENTA_LABEL: Record<TipoVenta, string> = {
@@ -159,50 +162,7 @@ function EstadoStock({
   );
 }
 
-function badgeVencimiento(
-  fechaVence: string | null,
-): { label: string; clases: string } {
-  if (!fechaVence) {
-    return {
-      label: "Sin vencimiento",
-      clases:
-        "bg-slate-100 text-slate-500 border border-slate-200 dark:bg-slate-800/60 dark:text-slate-400 dark:border-slate-700/60",
-    };
-  }
-  const evaluacion = evaluateExpiry(fechaVence, DETALLE_DIAS_VENCER);
-  if (!evaluacion || evaluacion.status === "normal") {
-    return {
-      label: evaluacion ? "Vigente" : "Sin vencimiento",
-      clases:
-        "bg-emerald-500/10 text-emerald-600 border border-emerald-500/25 dark:text-emerald-400",
-    };
-  }
-  if (evaluacion.status === "expiring_soon") {
-    return {
-      label: "Por vencer",
-      clases:
-        "bg-amber-500/10 text-amber-700 border border-amber-500/30 dark:text-amber-400",
-    };
-  }
-  return {
-    label: "Vencido",
-    clases:
-      "bg-red-500/10 text-red-700 border border-red-500/30 dark:text-red-400",
-  };
-}
 
-function Panel({ etiqueta, children }: { etiqueta: string; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-        {etiqueta}
-      </span>
-      <div className="text-sm font-semibold text-slate-800 dark:text-slate-100">
-        {children}
-      </div>
-    </div>
-  );
-}
 
 export function ProductDetailModal({
   isOpen,
@@ -213,6 +173,7 @@ export function ProductDetailModal({
   onClose,
   onEdit,
   onDelete,
+  onMutated,
 }: ProductDetailModalProps) {
   const [lotes, setLotes] = useState<Lote[] | null>(null);
 
@@ -237,6 +198,15 @@ export function ProductDetailModal({
       activo = false;
     };
   }, [isOpen, product.id]);
+
+  /** Refresca lotes y notifica al padre para que recargue el producto */
+  const refreshData = () => {
+    void lotesService
+      .getByProducto(product.id)
+      .then(setLotes)
+      .catch(() => setLotes([]));
+    onMutated?.();
+  };
 
   const codigosBarras = (product.codigosBarras ?? "")
     .split(",")
@@ -471,68 +441,11 @@ export function ProductDetailModal({
       label: "Lotes",
       icon: Layers,
       content: (
-        <div className="flex flex-col gap-3">
-          {lotes === null ? (
-            <div className="rounded-xl border border-slate-200/80 bg-slate-50/50 p-6 text-center text-sm text-slate-500 dark:border-slate-800/80 dark:bg-slate-900/40 dark:text-slate-400">
-              Cargando lotes…
-            </div>
-          ) : lotes.length === 0 ? (
-            <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-slate-200 bg-slate-50/40 p-10 text-center dark:border-slate-700/60 dark:bg-slate-900/20">
-              <div className="bg-slate-100 p-3 rounded-full dark:bg-slate-800/60">
-                <Boxes className="h-6 w-6 text-slate-400 dark:text-slate-500" strokeWidth={1.75} />
-              </div>
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                Sin lotes cargados
-              </p>
-              <p className="max-w-xs text-xs text-slate-400 dark:text-slate-500">
-                Los costos históricos y vencimientos por tanda se mostrarán acá
-                cuando se registre inventario.
-              </p>
-            </div>
-          ) : (
-            lotes.map((lote) => {
-              const vencimiento = badgeVencimiento(lote.fechaVence);
-              return (
-                <div
-                  key={lote.id}
-                  className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-xl border border-slate-200/80 bg-slate-50/50 p-4 dark:border-slate-800/80 dark:bg-slate-900/40"
-                >
-                  <span className="font-mono text-xs font-semibold tracking-wide text-slate-700 dark:text-slate-200">
-                    {lote.numeroLote ?? `Lote #${lote.id}`}
-                  </span>
-                  <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 sm:ml-auto sm:gap-x-8">
-                    <Panel etiqueta="Disponible">
-                      <span className="tabular-nums">{lote.cantidadActual}</span>
-                    </Panel>
-                    <Panel etiqueta="Costo histórico">
-                      <span className="tabular-nums">
-                        {formatearPrecio(lote.costoUnitario)}
-                      </span>
-                    </Panel>
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                        Vencimiento
-                      </span>
-                      <span className="flex items-center gap-1.5">
-                        <span className="text-sm font-semibold tabular-nums text-slate-800 dark:text-slate-100">
-                          {formatearFecha(lote.fechaVence)}
-                        </span>
-                        <span
-                          className={cn(
-                            "inline-flex shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold",
-                            vencimiento.clases,
-                          )}
-                        >
-                          {vencimiento.label}
-                        </span>
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
+        <ProductLotsTab
+          product={product}
+          lotes={lotes}
+          onMutated={refreshData}
+        />
       ),
     },
     {

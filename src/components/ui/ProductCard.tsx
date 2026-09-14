@@ -1,4 +1,4 @@
-import { Barcode, Calendar, Pencil, Trash2 } from "lucide-react";
+import { Barcode, Calendar, Layers, Pencil, Trash2 } from "lucide-react";
 import { Tooltip } from "./Tooltip";
 import { TruncatedText } from "./TruncatedText";
 import { HighlightMatch } from "./HighlightMatch";
@@ -28,6 +28,7 @@ export interface ProductCardProps {
   onEdit?: () => void;
   onDelete?: () => void;
   onOpenDetail?: () => void;
+  onOpenLotes?: () => void;
   className?: string;
   style?: React.CSSProperties;
 }
@@ -61,6 +62,7 @@ export function ProductCard({
   onEdit,
   onDelete,
   onOpenDetail,
+  onOpenLotes,
   className,
   style,
 }: ProductCardProps) {
@@ -245,8 +247,23 @@ export function ProductCard({
         </div>
 
         {/* Divisor vertical y acciones fijas en X */}
-        {(onEdit || onDelete) && (
+        {(onEdit || onDelete || onOpenLotes) && (
           <div className="flex shrink-0 items-center gap-0.5 border-l border-slate-200/60 pl-2 dark:border-slate-800/80">
+            {onOpenLotes && (
+              <Tooltip content="Ver lotes" placement="top">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpenLotes?.();
+                  }}
+                  aria-label="Ver lotes"
+                  className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-emerald-50 hover:text-emerald-600 sm:h-8 sm:w-8 sm:rounded-xl dark:hover:bg-emerald-950/40 dark:hover:text-emerald-400"
+                >
+                  <Layers className="h-3.5 w-3.5" />
+                </button>
+              </Tooltip>
+            )}
             {onEdit && (
               <Tooltip content="Editar producto" placement="top">
                 <button

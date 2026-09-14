@@ -614,6 +614,13 @@ export function InventoryPage() {
                   setSelectedProductForDetail(raw);
                 }
               }}
+              onOpenLotes={() => {
+                const raw = productosCrudos.find((p) => p.id === producto.id);
+                if (raw) {
+                  setDetailInitialTab("lotes");
+                  setSelectedProductForDetail(raw);
+                }
+              }}
             />
           ))}
 
@@ -715,6 +722,7 @@ export function InventoryPage() {
             setSelectedProductForDetail(null);
             toast.info("Eliminar producto en desarrollo");
           }}
+          onMutated={() => void refreshProductos()}
         />
       )}
 
