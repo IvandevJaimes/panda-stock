@@ -41,6 +41,8 @@ import {
   updateCategoria,
   updateMarca,
   updateProducto,
+  updateLote,
+  deleteLote,
   verifyPin,
 } from "./db/repository.ts";
 import type {
@@ -157,6 +159,10 @@ function registerIpcHandlers() {
   ipcMain.handle("lotes:get-expiring", (_event, diasLimite: number) =>
     getLotesPorVencer(diasLimite),
   );
+  ipcMain.handle("lotes:update", (_event, id: number, data: { fechaVence?: string | null; costoUnitario?: number; cantidadActual?: number; motivo?: string }) =>
+    updateLote(id, data),
+  );
+  ipcMain.handle("lotes:delete", (_event, id: number) => deleteLote(id));
 
   ipcMain.handle("cajas:get-active", () => getActiveCaja());
   ipcMain.handle("cajas:open", (_event, data: AperturaCajaInput) =>

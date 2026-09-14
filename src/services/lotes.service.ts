@@ -32,4 +32,20 @@ export const lotesService = {
       throw new Error(toErrorMessage(error), { cause: error })
     }
   },
+
+  async update(id: number, data: { fechaVence?: string | null; costoUnitario?: number; cantidadActual?: number; motivo?: string }): Promise<Lote> {
+    try {
+      return await window.electronAPI.lotes.update(id, data)
+    } catch (error) {
+      throw new Error(toErrorMessage(error), { cause: error })
+    }
+  },
+
+  async delete(id: number): Promise<void> {
+    try {
+      await window.electronAPI.lotes.delete(id)
+    } catch (error) {
+      throw new Error(toErrorMessage(error), { cause: error })
+    }
+  },
 }

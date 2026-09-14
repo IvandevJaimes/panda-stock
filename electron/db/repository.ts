@@ -867,6 +867,118 @@ export function getReportesSummary(filtros?: FiltrosReportes): ReportesSummary {
     cantVentas: ventasTotales?.cantidad ?? 0,
   }
 }
+export function updateLote(
+  id: number,
+  data: {
+    fechaVence?: string | null
+    costoUnitario?: number
+    cantidadActual?: number
+    motivo?: string
+  },
+): Lote {
+  const db = getDb()
+  const ahora = new Date().toISOString()
+
+  return db.transaction((tx) => {
+    const currentLote = tx.select().from(lotes).where(eq(lotes.id, id)).get()
+    if (!currentLote) throw new Error('Lote no encontrado')
+
+    const setObj: Record<string, unknown> = {}
+    if (data.fechaVence !== undefined) setObj.fechaVence = data.fechaVence
+    if (data.costoUnitario !== undefined) setObj.costoUnitario = data.costoUnitario
+
+    if (data.cantidadActual !== undefined && data.cantidadActual !== currentLote.cantidadActual) {
+      const producto = tx
+        .select({ stockActual: productos.stockActual })
+        .from(productos)
+        .where(eq(productos.id, currentLote.productoId))
+        .get()
+
+      if (!producto) throw new Error('Producto asociado al lote no encontrado')
+
+      const stockAnterior = producto.stockActual
+      const delta = data.cantidadActual - currentLote.cantidadActual
+      const stockPosterior = stockAnterior + delta
+
+      if (stockPosterior < 0) throw new Error('El ajuste dejaría stock negativo en el producto')
+
+      setObj.cantidadActual = data.cantidadActual
+
+      tx.update(productos)
+        .set({ stockActual: stockPosterior, actualizadoEn: ahora })
+        .where(eq(productos.id, currentLote.productoId))
+        .run()
+
+      tx.insert(movimientosStock)
+        .values({
+          productoId: currentLote.productoId,
+          loteId: id,
+          ventaId: null,
+          tipo: delta > 0 ? 'ajuste_positivo' : 'ajuste_negativo',
+          cantidad: Math.abs(delta),
+          stockAnterior,
+          stockPosterior,
+          motivo: data.motivo || 'Ajuste manual de lote',
+          fechaHora: ahora,
+        })
+        .run()
+    }
+
+    const updatedLote = tx
+      .update(lotes)
+      .set(setObj)
+      .where(eq(lotes.id, id))
+      .returning()
+      .get()
+
+    return updatedLote
+  })
+}
+
+export function deleteLote(id: number): void {
+  const db = getDb()
+  const ahora = new Date().toISOString()
+
+  db.transaction((tx) => {
+    const currentLote = tx.select().from(lotes).where(eq(lotes.id, id)).get()
+    if (!currentLote) throw new Error('Lote no encontrado')
+
+    if (currentLote.cantidadActual > 0) {
+      const producto = tx
+        .select({ stockActual: productos.stockActual })
+        .from(productos)
+        .where(eq(productos.id, currentLote.productoId))
+        .get()
+
+      if (!producto) throw new Error('Producto asociado al lote no encontrado')
+
+      const stockAnterior = producto.stockActual
+      const stockPosterior = stockAnterior - currentLote.cantidadActual
+
+      tx.update(productos)
+        .set({ stockActual: stockPosterior, actualizadoEn: ahora })
+        .where(eq(productos.id, currentLote.productoId))
+        .run()
+
+      tx.insert(movimientosStock)
+        .values({
+          productoId: currentLote.productoId,
+          loteId: id,
+          ventaId: null,
+          tipo: 'ajuste_negativo',
+          cantidad: currentLote.cantidadActual,
+          stockAnterior,
+          stockPosterior,
+          motivo: 'Eliminación de lote',
+          fechaHora: ahora,
+        })
+        .run()
+    }
+
+    tx.delete(lotes).where(eq(lotes.id, id)).run()
+  })
+}
+
 export function crearMovimientoStock(data: CrearMovimientoInput): void {
   const db = getDb()
   const ahora = new Date().toISOString()

@@ -65,6 +65,8 @@ declare global {
         getByProducto: (productoId: number) => Promise<Lote[]>
         create: (data: NuevoLote) => Promise<Lote>
         getExpiring: (diasLimite: number) => Promise<Lote[]>
+        update: (id: number, data: { fechaVence?: string | null; costoUnitario?: number; cantidadActual?: number; motivo?: string }) => Promise<Lote>
+        delete: (id: number) => Promise<void>
       }
       cajas: {
         getActive: () => Promise<Caja | null>

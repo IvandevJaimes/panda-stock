@@ -67,6 +67,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
     create: (data: NuevoLote) => ipcRenderer.invoke("lotes:create", data),
     getExpiring: (diasLimite: number) =>
       ipcRenderer.invoke("lotes:get-expiring", diasLimite),
+    update: (id: number, data: { fechaVence?: string | null; costoUnitario?: number; cantidadActual?: number; motivo?: string }) =>
+      ipcRenderer.invoke("lotes:update", id, data),
+    delete: (id: number) => ipcRenderer.invoke("lotes:delete", id),
   },
   cajas: {
     getActive: () => ipcRenderer.invoke("cajas:get-active"),
