@@ -18,6 +18,7 @@ export interface ProductQuickActionsModalProps {
   product: Producto | null;
   marcaNombre: string;
   categoriaNombre: string;
+  vistaInicial?: QuickActionView;
   onClose: () => void;
   onFullEdit: () => void;
   onOpenLotes: () => void;
@@ -29,13 +30,14 @@ export function ProductQuickActionsModal({
   product,
   marcaNombre,
   categoriaNombre,
+  vistaInicial = "menu",
   onClose,
   onFullEdit,
   onOpenLotes,
   onSuccess,
 }: ProductQuickActionsModalProps) {
   const [lotes, setLotes] = useState<Lote[] | null>(null);
-  const [vistaActual, setVistaActual] = useState<QuickActionView>("menu");
+  const [vistaActual, setVistaActual] = useState<QuickActionView>(vistaInicial);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {

@@ -1,4 +1,12 @@
-import { Barcode, Calendar, Layers, PackageX, Pencil, Trash2 } from "lucide-react";
+import {
+  Barcode,
+  Calendar,
+  Layers,
+  PackageX,
+  Pencil,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import { Tooltip } from "./Tooltip";
 import { TruncatedText } from "./TruncatedText";
 import { HighlightMatch } from "./HighlightMatch";
@@ -31,6 +39,7 @@ export interface ProductCardProps {
   onOpenDetail?: () => void;
   onOpenLotes?: () => void;
   onConfirmarPerdida?: () => void;
+  onAgregarInventario?: () => void;
   className?: string;
   style?: React.CSSProperties;
 }
@@ -66,6 +75,7 @@ export function ProductCard({
   onOpenDetail,
   onOpenLotes,
   onConfirmarPerdida,
+  onAgregarInventario,
   className,
   style,
 }: ProductCardProps) {
@@ -186,12 +196,30 @@ export function ProductCard({
           >
             {stock}
           </span>
+          {minStock > 0 && (
+            <div className="mt-0.5 h-1 w-10 overflow-hidden rounded-full bg-slate-200/80 dark:bg-slate-700/60">
+              <div
+                className={cn(
+                  "h-full rounded-full transition-all",
+                  stock <= 0
+                    ? "bg-red-500"
+                    : stock < minStock
+                      ? "bg-amber-500"
+                      : "bg-emerald-500",
+                )}
+                style={{
+                  width: `${Math.min(100, (stock / minStock) * 100)}%`,
+                }}
+              />
+            </div>
+          )}
           <span className="text-[10px] font-normal leading-none text-slate-500 dark:text-slate-400 sm:text-[11px]">
             {minStock > 0 ? `Mín. ${minStock}` : "Sin mínimo"}
           </span>
         </div>
 
-        {/* Bloque de vencimiento: fecha + badge */}
+        {/* Bloque de vencimiento: fecha + badge (solo cuando hay contenido visible) */}
+        {(expiresAt || resolvedStatus !== "normal") && (
         <div className="flex shrink-0 items-center justify-end gap-2">
           {/* Fecha suelta: siempre visible en normal; se oculta en pantallas chicas si hay badge; se omite si está vencido (el badge ya lo comunica) */}
           {expiresAt && expiry && resolvedStatus !== "expired" && (
@@ -212,9 +240,7 @@ export function ProductCard({
           )}
 
           {!expiresAt && (
-            <span className="shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium italic opacity-70 sm:text-[11px]">
-              Sin vencimiento
-            </span>
+            <span className="sr-only">Sin vencimiento</span>
           )}
 
           {resolvedStatus !== "normal" && (
@@ -259,7 +285,22 @@ export function ProductCard({
               Confirmar pérdida
             </Button>
           )}
+          {onAgregarInventario && resolvedStatus === "out_of_stock" && (
+            <Button
+              variant="primary"
+              size="sm"
+              className="h-8 shrink-0 whitespace-nowrap px-2.5 py-0 text-[11px] sm:text-xs"
+              icon={<Plus className="h-3.5 w-3.5" aria-hidden />}
+              onClick={(e) => {
+                e.stopPropagation();
+                onAgregarInventario();
+              }}
+            >
+              Agregar inventario
+            </Button>
+          )}
         </div>
+        )}
 
         {/* Divisor vertical y acciones fijas en X */}
         {(onEdit || onDelete || onOpenLotes) && (

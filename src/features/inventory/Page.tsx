@@ -25,6 +25,7 @@ import { ProductDetailModal } from "./ProductDetailModal";
 import { LotesModal } from "./LotesModal";
 import { ConfirmarPerdidaModal } from "./ConfirmarPerdidaModal";
 import { ProductQuickActionsModal } from "./quick-actions";
+import type { QuickActionView } from "./quick-actions/types";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { useCategories } from "../../hooks/useCategories";
 import { Input } from "../../components/ui/Input";
@@ -138,6 +139,8 @@ export function InventoryPage() {
   const [isCreateProductOpen, setIsCreateProductOpen] = useState(false);
   const [selectedProductForDetail, setSelectedProductForDetail] = useState<Producto | null>(null);
   const [productForQuickActions, setProductForQuickActions] = useState<Producto | null>(null);
+  const [vistaAccionInicial, setVistaAccionInicial] = useState<QuickActionView>("menu");
+  const [aperturaAcciones, setAperturaAcciones] = useState(0);
   const [lotesProducto, setLotesProducto] = useState<Producto | null>(null);
   const [perdidaSeleccion, setPerdidaSeleccion] = useState<{
     producto: Producto;
@@ -235,6 +238,14 @@ export function InventoryPage() {
   const handleOpenLotes = (producto: Producto) => {
     setSelectedProductForDetail(null);
     setLotesProducto(producto);
+  };
+
+  const abrirAccionesRapidas = (producto: ProductoInventario, vista: QuickActionView) => {
+    const raw = productosCrudos.find((p) => p.id === producto.id);
+    if (!raw) return;
+    setVistaAccionInicial(vista);
+    setAperturaAcciones((n) => n + 1);
+    setProductForQuickActions(raw);
   };
 
   const handleConfirmarPerdida = async (producto: Producto) => {
@@ -627,10 +638,7 @@ export function InventoryPage() {
               codigoInterno={producto.codigoInterno}
               codigosBarras={producto.codigosBarras}
               highlightQuery={busqueda}
-              onEdit={() => {
-                const raw = productosCrudos.find((p) => p.id === producto.id);
-                if (raw) setProductForQuickActions(raw);
-              }}
+              onEdit={() => abrirAccionesRapidas(producto, "menu")}
               onDelete={() =>
                 toast.info(`Eliminar ${producto.name} en desarrollo`)
               }
@@ -650,6 +658,11 @@ export function InventoryPage() {
                       );
                       if (raw) void handleConfirmarPerdida(raw);
                     }
+                  : undefined
+              }
+              onAgregarInventario={
+                producto.stock <= 0
+                  ? () => abrirAccionesRapidas(producto, "agregar-inventario")
                   : undefined
               }
             />
@@ -769,8 +782,10 @@ export function InventoryPage() {
       )}
 
       <ProductQuickActionsModal
+        key={aperturaAcciones}
         isOpen={productForQuickActions !== null}
         product={productForQuickActions}
+        vistaInicial={vistaAccionInicial}
         marcaNombre={
           productForQuickActions
             ? (marcas.find(
