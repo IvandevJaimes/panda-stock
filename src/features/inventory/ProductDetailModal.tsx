@@ -13,6 +13,7 @@ import {
   Package,
   PackageX,
   Pencil,
+  Plus,
   QrCode,
   Trash2,
   XCircle,
@@ -27,6 +28,7 @@ import { ConfirmarPerdidaModal } from "./ConfirmarPerdidaModal";
 import {
   DETALLE_DIAS_VENCER,
   estadoLoteBadge,
+  relativeTextVencimiento,
   tintPanelLote,
 } from "./loteHelpers";
 import type { Lote, Producto, TipoVenta } from "../../../electron/db/types";
@@ -49,6 +51,8 @@ export interface ProductDetailModalProps {
   onDelete: () => void;
   /** Abre el modal independiente de gestión de lotes (cierra el detalle) */
   onOpenLotes?: () => void;
+  /** Abre el modal de gestión de lotes con el formulario de agregar inventario listo */
+  onAgregarInventario?: () => void;
   /** Se invoca cuando una mutación en lotes/acciones rápidas altera datos del producto */
   onMutated?: () => void;
 }
@@ -180,6 +184,7 @@ export function ProductDetailModal({
   onEdit,
   onDelete,
   onOpenLotes,
+  onAgregarInventario,
   onMutated,
 }: ProductDetailModalProps) {
   const [lotes, setLotes] = useState<Lote[] | null>(null);
@@ -403,6 +408,22 @@ export function ProductDetailModal({
                         ? formatearFecha(loteActivo.fechaVence)
                         : "Sin vencimiento"}
                     </span>
+                    {loteActivo.fechaVence &&
+                      (() => {
+                        const relativo = relativeTextVencimiento(
+                          loteActivo.fechaVence,
+                        );
+                        return relativo ? (
+                          <span
+                            className={cn(
+                              "text-[11px] font-semibold",
+                              relativo.clases,
+                            )}
+                          >
+                            {relativo.texto}
+                          </span>
+                        ) : null;
+                      })()}
                   </div>
                   <div className="flex flex-col gap-1">
                     <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
@@ -430,25 +451,50 @@ export function ProductDetailModal({
               </div>
             ) : (
               <div className="flex flex-col items-start gap-1 rounded-xl border border-dashed border-slate-200 bg-slate-50/40 p-4 dark:border-slate-700/60 dark:bg-slate-900/20">
-                <span className="flex items-center gap-1.5 text-sm font-semibold text-slate-500 dark:text-slate-400">
-                  <Boxes className="h-4 w-4" aria-hidden />
-                  Sin lote activo
-                </span>
-                <span className="text-xs text-slate-400 dark:text-slate-500">
-                  Registrá un lote para controlar vencimientos y costos por
-                  partida.
-                </span>
-                {onOpenLotes && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    icon={<Layers className="h-4 w-4" aria-hidden />}
-                    onClick={onOpenLotes}
-                    className="mt-1"
-                  >
-                    Gestionar lotes
-                  </Button>
+                {lotes !== null && lotes.length === 0 ? (
+                  <>
+                    <span className="flex items-center gap-1.5 text-sm font-semibold text-red-600 dark:text-red-400">
+                      <Boxes className="h-4 w-4" aria-hidden />
+                      Sin stock
+                    </span>
+                    <span className="text-xs text-slate-400 dark:text-slate-500">
+                      Este producto todavía no tiene inventario cargado.
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span className="flex items-center gap-1.5 text-sm font-semibold text-red-600 dark:text-red-400">
+                      <PackageX className="h-4 w-4" aria-hidden />
+                      Stock agotado
+                    </span>
+                    <span className="text-xs text-slate-400 dark:text-slate-500">
+                      Todos los lotes se agotaron. Agregá inventario para
+                      reponer stock.
+                    </span>
+                  </>
                 )}
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  {onAgregarInventario && (
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      icon={<Plus className="h-4 w-4" aria-hidden />}
+                      onClick={onAgregarInventario}
+                    >
+                      Agregar inventario
+                    </Button>
+                  )}
+                  {onOpenLotes && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      icon={<Layers className="h-4 w-4" aria-hidden />}
+                      onClick={onOpenLotes}
+                    >
+                      Gestionar lotes
+                    </Button>
+                  )}
+                </div>
               </div>
             )}
           </section>
@@ -523,13 +569,29 @@ export function ProductDetailModal({
       tabs={pestanas}
       maxWidth="max-w-2xl"
       subheaderClassName={
-        loteActivo ? tintSubheader(loteActivo.fechaVence) : ""
+        loteActivo
+          ? tintSubheader(loteActivo.fechaVence)
+          : lotes !== null
+            ? "border-red-500/20 bg-red-500/10 dark:border-red-500/40 dark:bg-red-950/40"
+            : ""
       }
       subheader={
         <div className="flex items-center justify-between gap-3 text-xs">
-          <div className="flex min-w-0 items-center gap-1.5 text-slate-600 dark:text-slate-300">
+          <div
+            className={cn(
+              "flex min-w-0 items-center gap-1.5 text-slate-600 dark:text-slate-300",
+              lotes !== null &&
+                loteActivo === null &&
+                "text-red-600 dark:text-red-400",
+            )}
+          >
             <Layers
-              className="h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-slate-500"
+              className={cn(
+                "h-3.5 w-3.5 shrink-0",
+                lotes !== null && loteActivo === null
+                  ? "text-red-500 dark:text-red-400"
+                  : "text-slate-400 dark:text-slate-500",
+              )}
               aria-hidden
             />
             <span className="truncate">
@@ -537,24 +599,36 @@ export function ProductDetailModal({
                 ? "Cargando lote…"
                 : loteIdentidad
                   ? `Lote activo: ${loteIdentidad}`
-                  : "Lote: Sin registrar"}
+                  : "Lote: Sin stock"}
             </span>
           </div>
           <div className="flex shrink-0 items-center gap-2">
+            {lotes !== null && loteActivo === null && onAgregarInventario && (
+              <Button
+                variant="primary"
+                size="sm"
+                icon={<Plus className="h-3.5 w-3.5" aria-hidden />}
+                onClick={onAgregarInventario}
+              >
+                Agregar inventario
+              </Button>
+            )}
             {loteActivo?.fechaVence && (
               <span className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
                 <CalendarDays className="h-3.5 w-3.5" aria-hidden />
                 Vence: {formatearFecha(loteActivo.fechaVence)}
               </span>
             )}
-            <span
-              className={cn(
-                "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold",
-                loteBadge.clases,
-              )}
-            >
-              {loteBadge.label}
-            </span>
+            {loteActivo && (
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold",
+                  loteBadge.clases,
+                )}
+              >
+                {loteBadge.label}
+              </span>
+            )}
           </div>
         </div>
       }

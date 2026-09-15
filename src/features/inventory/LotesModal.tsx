@@ -24,7 +24,7 @@ import { LotQuickActionsModal } from "./lote-actions/LotQuickActionsModal";
 import { AgregarInventarioForm } from "./quick-actions/AgregarInventarioForm";
 import { FORM_ID } from "./quick-actions/types";
 import { EmptyStateCompact } from "../../components/ui/EmptyStateCompact";
-import { DETALLE_DIAS_VENCER } from "./loteHelpers";
+import { DETALLE_DIAS_VENCER, relativeTextVencimiento } from "./loteHelpers";
 import type { Lote, Producto } from "../../../electron/db/types";
 
 // ---------------------------------------------------------------------------
@@ -37,6 +37,8 @@ export interface LotesModalProps {
   categoriaNombre?: string;
   onClose: () => void;
   onMutated: () => void;
+  /** Abre directamente el formulario de agregar inventario al abrir el modal */
+  abrirInventarioInicial?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -111,6 +113,7 @@ export function LotesModal({
   categoriaNombre,
   onClose,
   onMutated,
+  abrirInventarioInicial = false,
 }: LotesModalProps) {
   const [lotes, setLotes] = useState<Lote[] | null>(null);
   const [quickActionsLote, setQuickActionsLote] = useState<Lote | null>(null);
@@ -131,6 +134,7 @@ export function LotesModal({
       .then((data) => {
         if (!activo) return;
         setLotes(data);
+        if (abrirInventarioInicial) setAgregarInventarioAbierto(true);
       })
       .catch(() => {
         if (!activo) return;
@@ -140,7 +144,7 @@ export function LotesModal({
     return () => {
       activo = false;
     };
-  }, [isOpen, product.id]);
+  }, [isOpen, product.id, abrirInventarioInicial]);
 
   /** Refresca lotes internamente y notifica al padre para que recargue el producto */
   const refreshData = () => {
@@ -218,9 +222,10 @@ export function LotesModal({
 
   const sinLotes = (
     <EmptyStateCompact
+      tone="danger"
       icon={<Boxes className="h-6 w-6" strokeWidth={1.75} aria-hidden />}
-      title="Sin lotes cargados"
-      description="Los costos históricos y vencimientos por tanda se mostrarán acá cuando se registre inventario."
+      title="Sin stock"
+      description="Este producto todavía no tiene inventario cargado. Agregá un lote para empezar."
       action={
         <Button
           variant="primary"
@@ -236,8 +241,9 @@ export function LotesModal({
 
   const sinLoteActivo = (
     <EmptyStateCompact
+      tone="danger"
       icon={<PackageX className="h-6 w-6" strokeWidth={1.75} aria-hidden />}
-      title="Sin lote activo"
+      title="Stock agotado"
       description="Todos los lotes fueron agotados. Agregá inventario para registrar una nueva tanda."
       action={
         <Button
@@ -353,9 +359,6 @@ export function LotesModal({
             key={lote.id}
             lote={lote}
             historial
-            onEdit={
-              esLoteVencido(lote.fechaVence) ? undefined : () => setQuickActionsLote(lote)
-            }
             onDelete={() => setDeletingLote(lote)}
           />
         ))}
@@ -580,7 +583,7 @@ function LoteCard({
 
         {/* Acciones a la derecha: badge de estado + acciones */}
         <div className="ml-auto flex flex-wrap items-center gap-1.5">
-          {lote.fechaVence && (
+          {!esHistorial && lote.fechaVence && (
             <span
               className={cn(
                 "inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold",
@@ -617,27 +620,29 @@ function LoteCard({
         </div>
       </div>
 
-      {/* Métricas del lote: grid de 3 columnas */}
-      <div className="mt-4 grid grid-cols-3 gap-4 border-t border-slate-200 pt-3 dark:border-slate-800">
-        {/* Stock disponible */}
-        <div className="flex flex-col gap-0.5">
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-            Stock disponible
-          </span>
-          <span
-            className={cn(
-              "font-mono text-lg font-bold tabular-nums",
-              esHistorial
-                ? "text-slate-400/80 dark:text-slate-500/70"
-                : stockHealthIndicator(
-                    lote.cantidadActual,
-                    lote.cantidadInicial,
-                  ),
-            )}
-          >
-            {lote.cantidadActual}
-          </span>
-        </div>
+      {/* Métricas del lote: grid de 2 columnas en historial (sin stock), 3 en el resto */}
+      <div
+        className={cn(
+          "mt-4 grid gap-4 border-t border-slate-200 pt-3 dark:border-slate-800",
+          esHistorial ? "grid-cols-2" : "grid-cols-3",
+        )}
+      >
+        {/* Stock disponible: no aplica en historial (lotes agotados) */}
+        {!esHistorial && (
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+              Stock disponible
+            </span>
+            <span
+              className={cn(
+                "font-mono text-lg font-bold tabular-nums",
+                stockHealthIndicator(lote.cantidadActual, lote.cantidadInicial),
+              )}
+            >
+              {lote.cantidadActual}
+            </span>
+          </div>
+        )}
 
         {/* Vencimiento */}
         <div className="flex flex-col gap-0.5">
@@ -645,21 +650,34 @@ function LoteCard({
             Vencimiento
           </span>
           {lote.fechaVence ? (
-            <div className="flex items-center gap-1.5">
-              <Calendar
-                className="h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-slate-500"
-                aria-hidden
-              />
-              <span
-                className={cn(
-                  "text-sm font-semibold tabular-nums",
-                  esHistorial
-                    ? "text-slate-500/80 dark:text-slate-400/70"
-                    : "text-slate-800 dark:text-slate-100",
-                )}
-              >
-                {formatearFecha(lote.fechaVence)}
-              </span>
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-1.5">
+                <Calendar
+                  className="h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-slate-500"
+                  aria-hidden
+                />
+                <span
+                  className={cn(
+                    "text-sm font-semibold tabular-nums",
+                    esHistorial
+                      ? "text-slate-500/80 dark:text-slate-400/70"
+                      : "text-slate-800 dark:text-slate-100",
+                  )}
+                >
+                  {formatearFecha(lote.fechaVence)}
+                </span>
+              </div>
+              {(() => {
+                const relativo = relativeTextVencimiento(lote.fechaVence);
+                if (!relativo) return null;
+                if (esHistorial && !esLoteVencido(lote.fechaVence))
+                  return null;
+                return (
+                  <span className={cn("text-[11px] font-semibold", relativo.clases)}>
+                    {relativo.texto}
+                  </span>
+                );
+              })()}
             </div>
           ) : (
             <span className="text-xs font-medium italic text-slate-500 opacity-70 dark:text-slate-400">

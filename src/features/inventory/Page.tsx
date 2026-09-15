@@ -142,6 +142,7 @@ export function InventoryPage() {
   const [vistaAccionInicial, setVistaAccionInicial] = useState<QuickActionView>("menu");
   const [aperturaAcciones, setAperturaAcciones] = useState(0);
   const [lotesProducto, setLotesProducto] = useState<Producto | null>(null);
+  const [abrirInventarioAuto, setAbrirInventarioAuto] = useState(false);
   const [perdidaSeleccion, setPerdidaSeleccion] = useState<{
     producto: Producto;
     lote: Lote;
@@ -237,6 +238,7 @@ export function InventoryPage() {
 
   const handleOpenLotes = (producto: Producto) => {
     setSelectedProductForDetail(null);
+    setAbrirInventarioAuto(false);
     setLotesProducto(producto);
   };
 
@@ -760,6 +762,12 @@ export function InventoryPage() {
           onOpenLotes={() => {
             setSelectedProductForDetail(null);
             setLotesProducto(selectedProductForDetail);
+            setAbrirInventarioAuto(false);
+          }}
+          onAgregarInventario={() => {
+            setSelectedProductForDetail(null);
+            setAbrirInventarioAuto(true);
+            setLotesProducto(selectedProductForDetail);
           }}
           onEdit={() => {
             setProductForQuickActions(selectedProductForDetail);
@@ -837,7 +845,11 @@ export function InventoryPage() {
             categories.find((c) => c.id === lotesProducto.categoriaId)
               ?.nombre ?? ""
           }
-          onClose={() => setLotesProducto(null)}
+          abrirInventarioInicial={abrirInventarioAuto}
+          onClose={() => {
+            setAbrirInventarioAuto(false);
+            setLotesProducto(null);
+          }}
           onMutated={() => void refreshProductos()}
         />
       )}

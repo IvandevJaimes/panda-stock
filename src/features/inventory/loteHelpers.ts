@@ -47,3 +47,19 @@ export function tintPanelLote(fechaVence: string | null): string {
   }
   return "border-emerald-500/25 bg-emerald-500/5 dark:border-emerald-900/50 dark:bg-emerald-950/25";
 }
+
+/** Texto relativo de vencimiento ("Vence en X días" / "Vencido hace X días") con color según estado. */
+export function relativeTextVencimiento(
+  fechaVence: string | null,
+): { texto: string; clases: string } | null {
+  if (!fechaVence) return null;
+  const evaluacion = evaluateExpiry(fechaVence, DETALLE_DIAS_VENCER);
+  if (!evaluacion) return null;
+  const clases =
+    evaluacion.status === "expired"
+      ? "text-red-600 dark:text-red-400"
+      : evaluacion.status === "expiring_soon"
+        ? "text-amber-600 dark:text-amber-400"
+        : "text-emerald-600 dark:text-emerald-400";
+  return { texto: evaluacion.relativeText, clases };
+}
