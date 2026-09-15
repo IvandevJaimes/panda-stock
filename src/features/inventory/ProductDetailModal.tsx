@@ -27,9 +27,12 @@ import { lotesService } from "../../services/lotes.service";
 import { ConfirmarPerdidaModal } from "./ConfirmarPerdidaModal";
 import {
   DETALLE_DIAS_VENCER,
-  estadoLoteBadge,
+  esLoteVencido,
+  esStockBajo,
+  estadoLoteActivoBadge,
+  getLoteActivo,
   relativeTextVencimiento,
-  tintPanelLote,
+  tintPanelLoteActivo,
 } from "./loteHelpers";
 import type { Lote, Producto, TipoVenta } from "../../../electron/db/types";
 
@@ -74,21 +77,23 @@ function formatearFecha(iso?: string | null): string {
   return iso;
 }
 
-function tintSubheader(fechaVence: string | null): string {
-  if (!fechaVence) return "";
+function tintSubheader(
+  fechaVence: string | null,
+  stockBajo: boolean,
+): string {
+  if (!fechaVence) {
+    return stockBajo
+      ? "border-amber-500/20 bg-amber-500/10 dark:border-amber-500/40 dark:bg-amber-950/30"
+      : "";
+  }
   const evaluacion = evaluateExpiry(fechaVence, DETALLE_DIAS_VENCER);
   if (evaluacion?.status === "expired") {
     return "border-red-500/20 bg-red-500/10 dark:border-red-500/40 dark:bg-red-950/40";
   }
-  if (evaluacion?.status === "expiring_soon") {
+  if (evaluacion?.status === "expiring_soon" || stockBajo) {
     return "border-amber-500/20 bg-amber-500/10 dark:border-amber-500/40 dark:bg-amber-950/30";
   }
   return "";
-}
-
-function esLoteVencido(fechaVence: string | null): boolean {
-  if (!fechaVence) return false;
-  return evaluateExpiry(fechaVence)?.status === "expired";
 }
 
 function formatearFechaHora(iso?: string | null): string {
@@ -159,10 +164,10 @@ function EstadoStock({
       </span>
     );
   }
-  if (stock <= stockMinimo) {
+  if (stock < stockMinimo) {
     return (
       <span className="inline-flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
-        <AlertTriangle className="h-4 w-4" aria-hidden /> Bajo stock
+        <AlertTriangle className="h-4 w-4" aria-hidden /> Stock bajo
       </span>
     );
   }
@@ -172,8 +177,6 @@ function EstadoStock({
     </span>
   );
 }
-
-
 
 export function ProductDetailModal({
   isOpen,
@@ -230,25 +233,11 @@ export function ProductDetailModal({
       : product.codigoInterno
     : product.codigoInterno;
 
-  const loteActivo = lotes
-    ? (lotes
-        .filter((lote) => lote.cantidadActual > 0)
-        .sort((a, b) => {
-          if (!a.fechaVence) return 1;
-          if (!b.fechaVence) return -1;
-          return a.fechaVence.localeCompare(b.fechaVence);
-        })[0] ?? null)
-    : null;
-  const loteBadge = loteActivo
-    ? estadoLoteBadge(loteActivo.fechaVence)
-    : {
-        label: "Sin registrar",
-        clases:
-          "bg-slate-500/10 text-slate-400 border-slate-500/20 dark:border-slate-500/30 dark:text-slate-400",
-      };
+  const loteActivo = getLoteActivo(lotes);
   const loteIdentidad = loteActivo
     ? (loteActivo.numeroLote ?? `Lote #${loteActivo.id}`)
     : null;
+  const productoStockBajo = esStockBajo(product.stockActual, product.stockMinimo);
 
   const handlePerdidaSuccess = () => {
     setPerdidaSeleccion(null);
@@ -333,9 +322,7 @@ export function ProductDetailModal({
                 {product.stockActual}
               </Dato>
               <Dato etiqueta="Stock mínimo">
-                {product.stockMinimo > 0
-                  ? product.stockMinimo
-                  : "Sin mínimo"}
+                {product.stockMinimo > 0 ? product.stockMinimo : "Sin mínimo"}
               </Dato>
               <Dato etiqueta="Estado de stock">
                 <EstadoStock
@@ -343,10 +330,7 @@ export function ProductDetailModal({
                   stockMinimo={product.stockMinimo}
                 />
               </Dato>
-              <Dato
-                etiqueta="Valor de inventario"
-                className="tabular-nums"
-              >
+              <Dato etiqueta="Valor de inventario" className="tabular-nums">
                 {formatearPrecio(product.stockActual * (product.costo ?? 0))}
               </Dato>
             </dl>
@@ -354,12 +338,28 @@ export function ProductDetailModal({
 
           {/* Sección: Lote activo y vencimiento */}
           <section className="py-4">
-            <SectionTitle icon={Layers}>Lote activo y vencimiento</SectionTitle>
+            <div className="flex justify-between items-center text-center">
+              <SectionTitle icon={Layers}>
+                Lote activo y vencimiento
+              </SectionTitle>
+              {onOpenLotes && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  icon={<Layers className="h-4 w-4" aria-hidden />}
+                  className="mb-3"
+                  onClick={onOpenLotes}
+                >
+                  Gestionar lotes
+                </Button>
+              )}
+            </div>
+
             {loteActivo ? (
               <div
                 className={cn(
                   "rounded-xl border p-4 transition-colors",
-                  tintPanelLote(loteActivo.fechaVence),
+                  tintPanelLoteActivo(loteActivo.fechaVence, productoStockBajo),
                 )}
               >
                 <div className="flex items-center justify-between gap-3">
@@ -377,24 +377,22 @@ export function ProductDetailModal({
                     </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
-                    <span
-                      className={cn(
-                        "inline-flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-semibold",
-                        loteBadge.clases,
-                      )}
-                    >
-                      {loteBadge.label}
-                    </span>
-                    {onOpenLotes && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        icon={<Layers className="h-4 w-4" aria-hidden />}
-                        onClick={onOpenLotes}
-                      >
-                        Gestionar lotes
-                      </Button>
-                    )}
+                    {(() => {
+                      const badge = estadoLoteActivoBadge(
+                        loteActivo.fechaVence,
+                        productoStockBajo,
+                      );
+                      return (
+                        <span
+                          className={cn(
+                            "inline-flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-semibold",
+                            badge.clases,
+                          )}
+                        >
+                          {badge.label}
+                        </span>
+                      );
+                    })()}
                   </div>
                 </div>
 
@@ -473,25 +471,16 @@ export function ProductDetailModal({
                     </span>
                   </>
                 )}
-                <div className="mt-1 flex flex-wrap items-center gap-2">
+                <div className="mt-2 flex w-full gap-2">
                   {onAgregarInventario && (
                     <Button
                       variant="primary"
                       size="sm"
                       icon={<Plus className="h-4 w-4" aria-hidden />}
                       onClick={onAgregarInventario}
+                      className="w-full"
                     >
                       Agregar inventario
-                    </Button>
-                  )}
-                  {onOpenLotes && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      icon={<Layers className="h-4 w-4" aria-hidden />}
-                      onClick={onOpenLotes}
-                    >
-                      Gestionar lotes
                     </Button>
                   )}
                 </div>
@@ -565,101 +554,108 @@ export function ProductDetailModal({
       <TabsModal
         isOpen={isOpen}
         onClose={onClose}
-      title="Detalle del producto"
-      tabs={pestanas}
-      maxWidth="max-w-2xl"
-      subheaderClassName={
-        loteActivo
-          ? tintSubheader(loteActivo.fechaVence)
-          : lotes !== null
-            ? "border-red-500/20 bg-red-500/10 dark:border-red-500/40 dark:bg-red-950/40"
-            : ""
-      }
-      subheader={
-        <div className="flex items-center justify-between gap-3 text-xs">
-          <div
-            className={cn(
-              "flex min-w-0 items-center gap-1.5 text-slate-600 dark:text-slate-300",
-              lotes !== null &&
-                loteActivo === null &&
-                "text-red-600 dark:text-red-400",
-            )}
-          >
-            <Layers
+        title="Detalle del producto"
+        tabs={pestanas}
+        maxWidth="max-w-2xl"
+        subheaderClassName={
+          loteActivo
+            ? tintSubheader(loteActivo.fechaVence, productoStockBajo)
+            : lotes !== null
+              ? "border-red-500/20 bg-red-500/10 dark:border-red-500/40 dark:bg-red-950/40"
+              : ""
+        }
+        subheader={
+          <div className="flex items-center justify-between gap-3 text-xs">
+            <div
               className={cn(
-                "h-3.5 w-3.5 shrink-0",
-                lotes !== null && loteActivo === null
-                  ? "text-red-500 dark:text-red-400"
-                  : "text-slate-400 dark:text-slate-500",
+                "flex min-w-0 items-center gap-1.5 text-slate-600 dark:text-slate-300",
+                lotes !== null &&
+                  loteActivo === null &&
+                  "text-red-600 dark:text-red-400",
               )}
-              aria-hidden
-            />
-            <span className="truncate">
-              {lotes === null
-                ? "Cargando lote…"
-                : loteIdentidad
-                  ? `Lote activo: ${loteIdentidad}`
-                  : "Lote: Sin stock"}
-            </span>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            {lotes !== null && loteActivo === null && onAgregarInventario && (
-              <Button
-                variant="primary"
-                size="sm"
-                icon={<Plus className="h-3.5 w-3.5" aria-hidden />}
-                onClick={onAgregarInventario}
-              >
-                Agregar inventario
-              </Button>
-            )}
-            {loteActivo?.fechaVence && (
-              <span className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
-                <CalendarDays className="h-3.5 w-3.5" aria-hidden />
-                Vence: {formatearFecha(loteActivo.fechaVence)}
-              </span>
-            )}
-            {loteActivo && (
-              <span
+            >
+              <Layers
                 className={cn(
-                  "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold",
-                  loteBadge.clases,
+                  "h-3.5 w-3.5 shrink-0",
+                  lotes !== null && loteActivo === null
+                    ? "text-red-500 dark:text-red-400"
+                    : "text-slate-400 dark:text-slate-500",
                 )}
-              >
-                {loteBadge.label}
+                aria-hidden
+              />
+              <span className="truncate">
+                {lotes === null
+                  ? "Cargando lote…"
+                  : loteIdentidad
+                    ? `Lote activo: ${loteIdentidad}`
+                    : "Lote: Sin stock"}
               </span>
-            )}
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              {lotes !== null && loteActivo === null && onAgregarInventario && (
+                <Button
+                  variant="primary"
+                  size="sm"
+                  icon={<Plus className="h-3.5 w-3.5" aria-hidden />}
+                  onClick={onAgregarInventario}
+                >
+                  Agregar inventario
+                </Button>
+              )}
+              {loteActivo?.fechaVence && (
+                <span className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
+                  <CalendarDays className="h-3.5 w-3.5" aria-hidden />
+                  Vence: {formatearFecha(loteActivo.fechaVence)}
+                </span>
+              )}
+              {loteActivo &&
+                (() => {
+                  const badge = estadoLoteActivoBadge(
+                    loteActivo.fechaVence,
+                    productoStockBajo,
+                  );
+                  return (
+                    <span
+                      className={cn(
+                        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold",
+                        badge.clases,
+                      )}
+                    >
+                      {badge.label}
+                    </span>
+                  );
+                })()}
+            </div>
           </div>
-        </div>
-      }
-      footer={
-        <>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              icon={<Pencil className="h-4 w-4" />}
-              onClick={onEdit}
+        }
+        footer={
+          <>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                icon={<Pencil className="h-4 w-4" />}
+                onClick={onEdit}
+              >
+                Editar
+              </Button>
+              <Button
+                variant="ghost"
+                icon={<Trash2 className="h-4 w-4" />}
+                onClick={onDelete}
+                className="text-red-600 hover:bg-red-500/10 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-500/10 dark:hover:text-red-500"
+              >
+                Eliminar
+              </Button>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="cursor-pointer rounded-xl px-4 py-2 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
             >
-              Editar
-            </Button>
-            <Button
-              variant="ghost"
-              icon={<Trash2 className="h-4 w-4" />}
-              onClick={onDelete}
-              className="text-red-600 hover:bg-red-500/10 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-500/10 dark:hover:text-red-500"
-            >
-              Eliminar
-            </Button>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="cursor-pointer rounded-xl px-4 py-2 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
-          >
-            Cerrar
-          </button>
-        </>
-      }
+              Cerrar
+            </button>
+          </>
+        }
       />
 
       <ConfirmarPerdidaModal

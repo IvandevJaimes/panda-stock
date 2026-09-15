@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { Button } from "../../../components/ui/Button";
 import { Modal } from "../../../components/ui/Modal";
 import { lotesService } from "../../../services/lotes.service";
+import { getLoteActivo } from "../loteHelpers";
 import type { Lote, Producto } from "../../../../electron/db/types";
 import { AgregarInventarioForm } from "./AgregarInventarioForm";
 import { AjustarStockForm } from "./AjustarStockForm";
@@ -11,6 +12,7 @@ import { EditarVarianteForm } from "./EditarVarianteForm";
 import { ModificarPrecioForm } from "./ModificarPrecioForm";
 import { QuickActionsMenu } from "./QuickActionsMenu";
 import { RegistrarPerdidaForm } from "./RegistrarPerdidaForm";
+import { StockMinimoForm } from "./StockMinimoForm";
 import { FORM_ID, SUBMIT_LABEL, type QuickActionView } from "./types";
 
 export interface ProductQuickActionsModalProps {
@@ -60,9 +62,7 @@ export function ProductQuickActionsModal({
     };
   }, [isOpen, product]);
 
-  const loteActivo = lotes
-    ? (lotes.find((lote) => lote.cantidadActual > 0) ?? lotes[0] ?? null)
-    : null;
+  const loteActivo = getLoteActivo(lotes);
   const loteIdentidad = loteActivo
     ? (loteActivo.numeroLote ?? `Lote #${loteActivo.id}`)
     : null;
@@ -107,7 +107,7 @@ export function ProductQuickActionsModal({
     <Modal
       isOpen={isOpen}
       onClose={handleClose}
-      maxWidth="lg"
+      maxWidth="xl"
       title="Acciones Rápidas"
     >
       <div className="flex flex-col">
@@ -180,6 +180,16 @@ export function ProductQuickActionsModal({
           <EditarVarianteForm
             producto={product}
             varianteInicial={product.variante || ""}
+            onCancel={() => setVistaActual("menu")}
+            onSuccess={handleActionComplete}
+            onSubmittingChange={setSubmitting}
+          />
+        )}
+
+        {vistaActual === "stock-minimo" && (
+          <StockMinimoForm
+            producto={product}
+            stockMinimoInicial={product.stockMinimo}
             onCancel={() => setVistaActual("menu")}
             onSuccess={handleActionComplete}
             onSubmittingChange={setSubmitting}

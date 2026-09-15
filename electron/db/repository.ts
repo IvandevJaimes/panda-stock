@@ -9,6 +9,7 @@ import {
   gte,
   isNotNull,
   like,
+  lt,
   lte,
   or,
   sql,
@@ -213,7 +214,7 @@ export function getProductos(filtros?: FiltrosProducto): ProductoConLoteActivo[]
     condiciones.push(eq(productos.marcaId, filtros.marcaId))
   }
   if (filtros?.bajoStock) {
-    condiciones.push(lte(productos.stockActual, productos.stockMinimo))
+    condiciones.push(lt(productos.stockActual, productos.stockMinimo))
   }
 
   const condicion = and(...condiciones)
@@ -394,7 +395,7 @@ export function getAlertasStock(): Producto[] {
   return getDb()
     .select()
     .from(productos)
-    .where(and(lte(productos.stockActual, productos.stockMinimo), eq(productos.activo, true)))
+    .where(and(lt(productos.stockActual, productos.stockMinimo), eq(productos.activo, true)))
     .orderBy(asc(productos.stockActual))
     .all()
 }

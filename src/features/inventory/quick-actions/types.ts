@@ -5,7 +5,8 @@ export type QuickActionView =
   | "registrar-perdida"
   | "precio-venta"
   | "editar-codigo"
-  | "variante-detalle";
+  | "variante-detalle"
+  | "stock-minimo";
 
 export const ACCION_LABEL: Record<Exclude<QuickActionView, "menu">, string> = {
   "agregar-inventario": "Agregar Inventario",
@@ -14,6 +15,7 @@ export const ACCION_LABEL: Record<Exclude<QuickActionView, "menu">, string> = {
   "precio-venta": "Modificar Precio de Venta",
   "editar-codigo": "Editar Código",
   "variante-detalle": "Editar Variante / Detalle",
+  "stock-minimo": "Stock mínimo",
 };
 
 export const noSpinnersClass =
@@ -26,6 +28,7 @@ export const FORM_ID: Record<Exclude<QuickActionView, "menu">, string> = {
   "precio-venta": "quick-action-precio-venta",
   "editar-codigo": "quick-action-editar-codigo",
   "variante-detalle": "quick-action-variante-detalle",
+  "stock-minimo": "quick-action-stock-minimo",
 };
 
 export const SUBMIT_LABEL: Record<Exclude<QuickActionView, "menu">, string> = {

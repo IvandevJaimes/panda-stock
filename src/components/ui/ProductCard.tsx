@@ -189,7 +189,7 @@ export function ProductCard({
               "text-sm font-semibold leading-none tabular-nums",
               stock === 0
                 ? "text-red-600 dark:text-red-400"
-                : stock <= minStock
+                : stock < minStock
                   ? "text-amber-600 dark:text-amber-400"
                   : "text-slate-900 dark:text-slate-100",
             )}
@@ -214,7 +214,7 @@ export function ProductCard({
             </div>
           )}
           <span className="text-[10px] font-normal leading-none text-slate-500 dark:text-slate-400 sm:text-[11px]">
-            {minStock > 0 ? `Mín. ${minStock}` : "Sin mínimo"}
+            {minStock > 0 ? `Mín. ${minStock}` : "Sin mín."}
           </span>
         </div>
 
@@ -251,6 +251,7 @@ export function ProductCard({
                   : expiry?.relativeText
               }
               placement="top"
+              disabled={resolvedStatus === "low_stock" || resolvedStatus === "out_of_stock" ? true : false}
             >
               <span
                 className={cn(

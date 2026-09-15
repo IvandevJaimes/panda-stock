@@ -113,4 +113,8 @@ export const productosService = {
   async updateVariante(id: number, nuevaVariante: string | null): Promise<Producto> {
     return this.update(id, { variante: nuevaVariante })
   },
+
+  async updateStockMinimo(id: number, stockMinimo: number): Promise<Producto> {
+    return this.update(id, { stockMinimo })
+  },
 }

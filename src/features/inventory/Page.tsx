@@ -24,6 +24,7 @@ import { CreateProductModal } from "./CreateProductModal";
 import { ProductDetailModal } from "./ProductDetailModal";
 import { LotesModal } from "./LotesModal";
 import { ConfirmarPerdidaModal } from "./ConfirmarPerdidaModal";
+import { esLoteVencido } from "./loteHelpers";
 import { ProductQuickActionsModal } from "./quick-actions";
 import type { QuickActionView } from "./quick-actions/types";
 import { EmptyState } from "../../components/ui/EmptyState";
@@ -119,13 +120,8 @@ function derivarStatus(p: ProductoInventario): ProductStatus {
   if (p.status === "vencido") return "expired";
   if (p.status === "por-vencer") return "expiring_soon";
   if (p.stock === 0) return "out_of_stock";
-  if (p.stock <= p.minStock) return "low_stock";
+  if (p.stock < p.minStock) return "low_stock";
   return "normal";
-}
-
-function esLoteVencido(fechaVence: string | null): boolean {
-  if (!fechaVence) return false;
-  return evaluateExpiry(fechaVence)?.status === "expired";
 }
 
 const PAGE_SIZE = 20;
@@ -299,7 +295,7 @@ export function InventoryPage() {
     const coincideKpi = (p: ProductoInventario) => {
       switch (activeKpiFilter) {
         case "low_stock":
-          return p.stock <= p.minStock && p.stock > 0;
+          return p.stock < p.minStock && p.stock > 0;
         case "expiring_soon":
           return p.status === "por-vencer";
         case "out_of_stock":
@@ -330,7 +326,7 @@ export function InventoryPage() {
 
   const kpis = useMemo(
     () => ({
-      stockBajo: productos.filter((p) => p.stock <= p.minStock && p.stock > 0)
+      stockBajo: productos.filter((p) => p.stock < p.minStock && p.stock > 0)
         .length,
       porVencer: productos.filter((p) => p.status === "por-vencer").length,
       agotados: productos.filter((p) => p.stock === 0).length,
@@ -850,7 +846,15 @@ export function InventoryPage() {
             setAbrirInventarioAuto(false);
             setLotesProducto(null);
           }}
-          onMutated={() => void refreshProductos()}
+          onMutated={() => {
+            void refreshProductos().then((dataActualizada) => {
+              setLotesProducto((prev) =>
+                prev
+                  ? (dataActualizada.find((p) => p.id === prev.id) ?? prev)
+                  : prev,
+              );
+            });
+          }}
         />
       )}
 

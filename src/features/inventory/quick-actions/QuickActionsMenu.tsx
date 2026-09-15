@@ -8,6 +8,7 @@ import {
   Plus,
   SlidersHorizontal,
   Tags,
+  AlertCircle,
 } from "lucide-react";
 import { cn } from "../../../lib/cn";
 import type { Producto } from "../../../../electron/db/types";
@@ -37,7 +38,8 @@ export function QuickActionsMenu({
   onFullEdit,
   onOpenLotes,
 }: QuickActionsMenuProps) {
-  const precioMayoreo = producto.precioVenta > 0 ? producto.precioVenta * 0.9 : null;
+  const precioMayoreo =
+    producto.precioVenta > 0 ? producto.precioVenta * 0.9 : null;
   const loteIndisponible = lotesCargando || !tieneLoteActivo;
 
   return (
@@ -96,7 +98,7 @@ export function QuickActionsMenu({
                 "font-semibold",
                 producto.stockActual <= 0
                   ? "text-red-600 dark:text-red-400"
-                  : producto.stockActual <= producto.stockMinimo
+                  : producto.stockActual < producto.stockMinimo
                     ? "text-amber-600 dark:text-amber-400"
                     : "text-emerald-600 dark:text-emerald-400",
               )}
@@ -160,7 +162,7 @@ export function QuickActionsMenu({
 
       <hr className="my-4 border-slate-200 dark:border-slate-800" />
 
-      <div className="flex flex-col gap-3">
+      <div className="grid grid-cols-2 gap-2">
         <button
           type="button"
           onClick={() => onNavigate("precio-venta")}
@@ -211,6 +213,25 @@ export function QuickActionsMenu({
             </span>
             <span className="block text-xs font-medium text-slate-400 dark:text-slate-500">
               Modificar la variante o detalle del producto.
+            </span>
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onNavigate("stock-minimo")}
+          className="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-200 p-3 text-left transition-colors hover:border-amber-500/50 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/60"
+        >
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
+            <AlertCircle className="h-4 w-4" strokeWidth={2} aria-hidden />
+          </span>
+          <span className="min-w-0">
+            <span className="block text-sm font-semibold text-slate-800 dark:text-slate-100">
+              {producto.stockMinimo === 0 ? "Agregar stock minimo" : "Editar stock minimo"}
+              
+            </span>
+            <span className="block text-xs font-medium text-slate-400 dark:text-slate-500">
+              Ingresar o editar stock minimo para las alertas
             </span>
           </span>
         </button>

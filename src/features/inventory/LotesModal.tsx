@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import {
   Activity,
-  AlertTriangle,
   Boxes,
   Calendar,
   History,
@@ -24,7 +23,14 @@ import { LotQuickActionsModal } from "./lote-actions/LotQuickActionsModal";
 import { AgregarInventarioForm } from "./quick-actions/AgregarInventarioForm";
 import { FORM_ID } from "./quick-actions/types";
 import { EmptyStateCompact } from "../../components/ui/EmptyStateCompact";
-import { DETALLE_DIAS_VENCER, relativeTextVencimiento } from "./loteHelpers";
+import {
+  DETALLE_DIAS_VENCER,
+  esLoteVencido,
+  esStockBajo,
+  getLoteActivo,
+  getLotesSiguientes,
+  relativeTextVencimiento,
+} from "./loteHelpers";
 import type { Lote, Producto } from "../../../electron/db/types";
 
 // ---------------------------------------------------------------------------
@@ -85,11 +91,6 @@ function badgeVencimiento(
     clases:
       "bg-red-500/10 text-red-700 border border-red-500/30 dark:text-red-400",
   };
-}
-
-function esLoteVencido(fechaVence: string | null): boolean {
-  if (!fechaVence) return false;
-  return evaluateExpiry(fechaVence)?.status === "expired";
 }
 
 function stockHealthIndicator(cantidadActual: number, cantidadInicial: number) {
@@ -155,34 +156,13 @@ export function LotesModal({
     onMutated();
   };
 
-  // --- Separar lotes según su estado: activo, vigentes, vencidos e historial ---
-  // Lote activo = el que se consume (FEFO): con stock que vence primero, sin fecha al final.
-  const loteActivo =
-    lotes === null
-      ? null
-      : (lotes
-          .filter((l) => l.cantidadActual > 0)
-          .sort((a, b) => {
-            if (!a.fechaVence) return 1;
-            if (!b.fechaVence) return -1;
-            return a.fechaVence.localeCompare(b.fechaVence);
-          })[0] ?? null);
-  const lotesVigentes =
-    lotes?.filter(
-      (l) =>
-        l.id !== loteActivo?.id &&
-        l.cantidadActual > 0 &&
-        !esLoteVencido(l.fechaVence),
-    ) ?? [];
-  // Los vencidos con stock NO son historial: esperan confirmación de pérdida.
-  const lotesVencidos =
-    lotes?.filter(
-      (l) =>
-        l.id !== loteActivo?.id &&
-        l.cantidadActual > 0 &&
-        esLoteVencido(l.fechaVence),
-    ) ?? [];
+  // --- Separar lotes: activo, siguientes con stock (FEFO) e historial ---
+  // Lote activo = el que se consume (FEFO): el de stock que vence primero,
+  // aunque esté vencido — espera confirmación de pérdida antes de dar paso.
+  const loteActivo = getLoteActivo(lotes);
+  const lotesSiguientes = getLotesSiguientes(lotes);
   const historial = lotes?.filter((l) => l.cantidadActual <= 0) ?? [];
+  const productoStockBajo = esStockBajo(product.stockActual, product.stockMinimo);
 
   const handlePerdidaSuccess = () => {
     refreshData();
@@ -258,90 +238,71 @@ export function LotesModal({
     />
   );
 
-  // --- Pestaña 1: lote activo + vigentes ---
-  const tabVigentes = () => {
+  // --- Pestaña 1: lote activo + siguientes lotes con stock (FEFO) ---
+  const tabLotes = () => {
     if (lotes === null) return cargando;
     if (lotes.length === 0) return sinLotes;
     if (loteActivo === null) return sinLoteActivo;
     return (
       <div className="flex flex-col gap-4">
-        {loteActivo && (
-          <div>
-            <h4 className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-              <Activity className="h-4 w-4" strokeWidth={2} aria-hidden />
-              Lote activo
-            </h4>
-            <LoteCard
-              lote={loteActivo}
-              destacado
-              onEdit={() => setQuickActionsLote(loteActivo)}
-              onConfirmarPerdida={
-                esLoteVencido(loteActivo.fechaVence)
-                  ? () => setPerdidaSeleccion(loteActivo)
-                  : undefined
-              }
-            />
-          </div>
-        )}
-
-        {lotesVigentes.length > 0 && (
-          <div>
-            <h4 className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-              <Boxes className="h-4 w-4" strokeWidth={2} aria-hidden />
-              Lotes vigentes
-            </h4>
-            <div className="flex flex-col gap-3">
-              {lotesVigentes.map((lote) => (
-                <LoteCard
-                  key={lote.id}
-                  lote={lote}
-                  onEdit={() => setQuickActionsLote(lote)}
-                  onDelete={() => setDeletingLote(lote)}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {lotesVigentes.length === 0 &&
-          lotesVencidos.length === 0 &&
-          historial.length === 0 && (
-            <p className="text-center text-xs text-slate-400 dark:text-slate-500">
-              Este es el único lote registrado para el producto.
-            </p>
-          )}
-      </div>
-    );
-  };
-
-  // --- Pestaña 2: lotes vencidos con stock, esperando confirmación de pérdida ---
-  const tabVencidos = () => {
-    if (lotes === null) return cargando;
-    if (lotesVencidos.length === 0)
-      return (
-        <EmptyStateCompact
-          icon={<AlertTriangle className="h-6 w-6" strokeWidth={1.75} aria-hidden />}
-          title="Sin lotes vencidos"
-          description="Los lotes vencidos con stock esperando confirmación de pérdida aparecerán acá."
-        />
-      );
-    return (
-      <div className="flex flex-col gap-3">
-        {lotesVencidos.map((lote) => (
+        <div>
+          <h4 className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+            <Activity className="h-4 w-4" strokeWidth={2} aria-hidden />
+            Lote activo
+          </h4>
           <LoteCard
-            key={lote.id}
-            lote={lote}
-            vencido
-            onEdit={() => setQuickActionsLote(lote)}
-            onDelete={() => setDeletingLote(lote)}
-            onConfirmarPerdida={() => setPerdidaSeleccion(lote)}
+            lote={loteActivo}
+            destacado
+            stockBajo={productoStockBajo}
+            onEdit={() => setQuickActionsLote(loteActivo)}
+            onConfirmarPerdida={
+              esLoteVencido(loteActivo.fechaVence)
+                ? () => setPerdidaSeleccion(loteActivo)
+                : undefined
+            }
           />
-        ))}
+        </div>
+
+        {/* Separador + lotes siguientes, de vencimiento más cercano a más lejano */}
+        {lotesSiguientes.length > 0 && (
+          <>
+            <div className="border-t border-slate-200 dark:border-slate-800" />
+            <div>
+              <h4 className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                <Boxes className="h-4 w-4" strokeWidth={2} aria-hidden />
+                Próximos lotes
+              </h4>
+              <div className="flex flex-col gap-3">
+                {lotesSiguientes.map((lote) => (
+                  <LoteCard
+                    key={lote.id}
+                    lote={lote}
+                    vencido={esLoteVencido(lote.fechaVence)}
+                    stockBajo={productoStockBajo}
+                    onEdit={() => setQuickActionsLote(lote)}
+                    onDelete={() => setDeletingLote(lote)}
+                    onConfirmarPerdida={
+                      esLoteVencido(lote.fechaVence)
+                        ? () => setPerdidaSeleccion(lote)
+                        : undefined
+                    }
+                  />
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+
+        {lotesSiguientes.length === 0 && historial.length === 0 && (
+          <p className="text-center text-xs text-slate-400 dark:text-slate-500">
+            Este es el único lote registrado para el producto.
+          </p>
+        )}
       </div>
     );
   };
 
-  // --- Pestaña 3: historial (lotes agotados) ---
+  // --- Pestaña 2: historial (lotes agotados) ---
   const tabHistorial = () => {
     if (lotes === null) return cargando;
     if (historial.length === 0)
@@ -373,7 +334,7 @@ export function LotesModal({
         onClose={onClose}
         title="Gestión de lotes"
         maxWidth="max-w-3xl"
-        defaultTabId="vigentes"
+        defaultTabId="lotes"
         subheader={
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex min-w-0 flex-col gap-0.5">
@@ -403,22 +364,10 @@ export function LotesModal({
         }
         tabs={[
           {
-            id: "vigentes",
-            label: "Vigentes",
+            id: "lotes",
+            label: "Lotes",
             icon: <Boxes className="h-4 w-4" strokeWidth={2.25} aria-hidden />,
-            content: tabVigentes(),
-          },
-          {
-            id: "vencidos",
-            label: "Vencidos",
-            icon: (
-              <AlertTriangle
-                className="h-4 w-4"
-                strokeWidth={2.25}
-                aria-hidden
-              />
-            ),
-            content: tabVencidos(),
+            content: tabLotes(),
           },
           {
             id: "historial",
@@ -510,6 +459,7 @@ function LoteCard({
   destacado = false,
   vencido = false,
   historial = false,
+  stockBajo = false,
   onEdit,
   onDelete,
   onConfirmarPerdida,
@@ -518,6 +468,7 @@ function LoteCard({
   destacado?: boolean;
   vencido?: boolean;
   historial?: boolean;
+  stockBajo?: boolean;
   onEdit?: () => void;
   onDelete?: () => void;
   onConfirmarPerdida?: () => void;
@@ -591,6 +542,11 @@ function LoteCard({
               )}
             >
               {vencimiento.label}
+            </span>
+          )}
+          {!esHistorial && stockBajo && (
+            <span className="inline-flex shrink-0 items-center rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-400">
+              Stock bajo
             </span>
           )}
           {onEdit && (
