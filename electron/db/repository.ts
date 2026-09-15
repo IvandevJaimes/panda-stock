@@ -968,7 +968,7 @@ export function deleteLote(id: number): void {
       tx.insert(movimientosStock)
         .values({
           productoId: currentLote.productoId,
-          loteId: id,
+          loteId: null,
           ventaId: null,
           tipo: 'ajuste_negativo',
           cantidad: currentLote.cantidadActual,
@@ -979,6 +979,17 @@ export function deleteLote(id: number): void {
         })
         .run()
     }
+
+    // Desvincular referencias históricas antes de borrar (FK en SQLite).
+    // Se preservan movimientos y detalles de venta; solo se pierde el link al lote.
+    tx.update(movimientosStock)
+      .set({ loteId: null })
+      .where(eq(movimientosStock.loteId, id))
+      .run()
+    tx.update(detalleVentas)
+      .set({ loteId: null })
+      .where(eq(detalleVentas.loteId, id))
+      .run()
 
     tx.delete(lotes).where(eq(lotes.id, id)).run()
   })
