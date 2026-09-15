@@ -1,6 +1,7 @@
 import {
   Barcode,
   Calendar,
+  EllipsisVertical,
   Layers,
   PackageX,
   Pencil,
@@ -100,8 +101,8 @@ export function ProductCard({
   const terminoConsulta = highlightQuery?.trim() ?? "";
   const codigoResaltado =
     terminoConsulta.length >= 2
-      ? [codigoInterno, codigosBarras].find(
-          (codigo) => codigo?.toLowerCase().includes(terminoConsulta.toLowerCase()),
+      ? [codigoInterno, codigosBarras].find((codigo) =>
+          codigo?.toLowerCase().includes(terminoConsulta.toLowerCase()),
         )
       : undefined;
 
@@ -220,137 +221,149 @@ export function ProductCard({
 
         {/* Bloque de vencimiento: fecha + badge (solo cuando hay contenido visible) */}
         {(expiresAt || resolvedStatus !== "normal") && (
-        <div className="flex shrink-0 items-center justify-end gap-2">
-          {/* Fecha suelta: siempre visible en normal; se oculta en pantallas chicas si hay badge; se omite si está vencido (el badge ya lo comunica) */}
-          {expiresAt && expiry && resolvedStatus !== "expired" && (
-            <Tooltip content={expiry.relativeText} placement="top">
-              <div
-                className={cn(
-                  "flex shrink-0 cursor-default select-none items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium sm:text-[11px]",
-                  resolvedStatus !== "normal" && "hidden md:flex",
-                  resolvedStatus === "expiring_soon"
-                    ? "text-amber-600 dark:text-amber-400"
-                    : "text-slate-400 dark:text-slate-500",
-                )}
-              >
-                <Calendar className="h-3 w-3 shrink-0 opacity-70" />
-                <span className="tabular-nums">{expiry.formattedDate}</span>
-              </div>
-            </Tooltip>
-          )}
+          <div className="flex shrink-0 items-center justify-end gap-2">
+            {/* Fecha suelta: siempre visible en normal; se oculta en pantallas chicas si hay badge; se omite si está vencido (el badge ya lo comunica) */}
+            {expiresAt && expiry && resolvedStatus !== "expired" && (
+              <Tooltip content={expiry.relativeText} placement="top">
+                <div
+                  className={cn(
+                    "flex shrink-0 cursor-default select-none items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium sm:text-[11px]",
+                    resolvedStatus !== "normal" && "hidden md:flex",
+                    resolvedStatus === "expiring_soon"
+                      ? "text-amber-600 dark:text-amber-400"
+                      : "text-slate-400 dark:text-slate-500",
+                  )}
+                >
+                  <Calendar className="h-3 w-3 shrink-0 opacity-70" />
+                  <span className="tabular-nums">{expiry.formattedDate}</span>
+                </div>
+              </Tooltip>
+            )}
 
-          {!expiresAt && (
-            <span className="sr-only">Sin vencimiento</span>
-          )}
+            {!expiresAt && <span className="sr-only">Sin vencimiento</span>}
 
-          {resolvedStatus !== "normal" && (
-            <Tooltip
-              content={
-                isExpiryBadge
-                  ? `${expiry?.formattedDate} • ${expiry?.relativeText}`
-                  : expiry?.relativeText
-              }
-              placement="top"
-              disabled={resolvedStatus === "low_stock" || resolvedStatus === "out_of_stock" ? true : false}
-            >
-              <span
-                className={cn(
-                  "inline-flex shrink-0 items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide sm:text-[11px]",
-                  resolvedStatus === "expired" &&
-                    "bg-red-100 text-red-700 dark:bg-red-950/70 dark:text-red-300 border border-red-200/90 dark:border-red-900/50",
-                  resolvedStatus === "out_of_stock" &&
-                    "bg-red-100 text-red-700 dark:bg-red-950/70 dark:text-red-300 border border-red-200/90 dark:border-red-900/50",
-                  (resolvedStatus === "low_stock" ||
-                    resolvedStatus === "expiring_soon") &&
-                    "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-900/50",
-                )}
+            {resolvedStatus !== "normal" && (
+              <Tooltip
+                content={
+                  isExpiryBadge
+                    ? `${expiry?.formattedDate} • ${expiry?.relativeText}`
+                    : expiry?.relativeText
+                }
+                placement="top"
+                disabled={
+                  resolvedStatus === "low_stock" ||
+                  resolvedStatus === "out_of_stock"
+                    ? true
+                    : false
+                }
               >
-                {resolvedStatus === "expired" && "Vencido"}
-                {resolvedStatus === "out_of_stock" && "Agotado"}
-                {resolvedStatus === "low_stock" && "Stock bajo"}
-                {resolvedStatus === "expiring_soon" && "Por vencer"}
-              </span>
-            </Tooltip>
-          )}
-          {onConfirmarPerdida && resolvedStatus === "expired" && (
-            <Button
-              variant="danger"
-              size="sm"
-              className="h-8 shrink-0 whitespace-nowrap px-2.5 py-0 text-[11px] sm:text-xs"
-              icon={<PackageX className="h-3.5 w-3.5" aria-hidden />}
-              onClick={(e) => {
-                e.stopPropagation();
-                onConfirmarPerdida();
-              }}
-            >
-              Confirmar pérdida
-            </Button>
-          )}
-          {onAgregarInventario && resolvedStatus === "out_of_stock" && (
-            <Button
-              variant="primary"
-              size="sm"
-              className="h-8 shrink-0 whitespace-nowrap px-2.5 py-0 text-[11px] sm:text-xs"
-              icon={<Plus className="h-3.5 w-3.5" aria-hidden />}
-              onClick={(e) => {
-                e.stopPropagation();
-                onAgregarInventario();
-              }}
-            >
-              Agregar inventario
-            </Button>
-          )}
-        </div>
+                <span
+                  className={cn(
+                    "inline-flex shrink-0 items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide sm:text-[11px]",
+                    resolvedStatus === "expired" &&
+                      "bg-red-100 text-red-700 dark:bg-red-950/70 dark:text-red-300 border border-red-200/90 dark:border-red-900/50",
+                    resolvedStatus === "out_of_stock" &&
+                      "bg-red-100 text-red-700 dark:bg-red-950/70 dark:text-red-300 border border-red-200/90 dark:border-red-900/50",
+                    (resolvedStatus === "low_stock" ||
+                      resolvedStatus === "expiring_soon") &&
+                      "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-900/50",
+                  )}
+                >
+                  {resolvedStatus === "expired" && "Vencido"}
+                  {resolvedStatus === "out_of_stock" && "Agotado"}
+                  {resolvedStatus === "low_stock" && "Stock bajo"}
+                  {resolvedStatus === "expiring_soon" && "Por vencer"}
+                </span>
+              </Tooltip>
+            )}
+            {onConfirmarPerdida && resolvedStatus === "expired" && (
+              <Button
+                variant="danger"
+                size="sm"
+                className="h-8 shrink-0 whitespace-nowrap px-2.5 py-0 text-[11px] sm:text-xs"
+                icon={<PackageX className="h-3.5 w-3.5" aria-hidden />}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onConfirmarPerdida();
+                }}
+              >
+                Confirmar pérdida
+              </Button>
+            )}
+            {onAgregarInventario && resolvedStatus === "out_of_stock" && (
+              <Button
+                variant="primary"
+                size="sm"
+                className="h-8 shrink-0 whitespace-nowrap px-2.5 py-0 text-[11px] sm:text-xs"
+                icon={<Plus className="h-3.5 w-3.5" aria-hidden />}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAgregarInventario();
+                }}
+              >
+                Agregar inventario
+              </Button>
+            )}
+          </div>
         )}
 
         {/* Divisor vertical y acciones fijas en X */}
         {(onEdit || onDelete || onOpenLotes) && (
           <div className="flex shrink-0 items-center gap-0.5 border-l border-slate-200/60 pl-2 dark:border-slate-800/80">
-            {onOpenLotes && (
-              <Tooltip content="Ver lotes" placement="top">
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onOpenLotes?.();
-                  }}
-                  aria-label="Ver lotes"
-                  className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-emerald-50 hover:text-emerald-600 sm:h-8 sm:w-8 sm:rounded-xl dark:hover:bg-emerald-950/40 dark:hover:text-emerald-400"
-                >
-                  <Layers className="h-3.5 w-3.5" />
+            <div className="hidden md:flex items-center">
+              {onOpenLotes && (
+                <Tooltip content="Ver lotes" placement="top">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpenLotes?.();
+                    }}
+                    aria-label="Ver lotes"
+                    className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-emerald-50 hover:text-emerald-600 sm:h-8 sm:w-8 sm:rounded-xl dark:hover:bg-emerald-950/40 dark:hover:text-emerald-400"
+                  >
+                    <Layers className="h-3.5 w-3.5" />
+                  </button>
+                </Tooltip>
+              )}
+              {onEdit && (
+                <Tooltip content="Editar producto" placement="top">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEdit?.();
+                    }}
+                    aria-label="Editar"
+                    className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-black/5 hover:text-slate-800 sm:h-8 sm:w-8 sm:rounded-xl dark:hover:bg-white/5 dark:hover:text-slate-100"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                </Tooltip>
+              )}
+              {onDelete && (
+                <Tooltip content="Eliminar producto" placement="top">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete?.();
+                    }}
+                    aria-label="Eliminar"
+                    className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 sm:h-8 sm:w-8 sm:rounded-xl dark:hover:bg-red-950/40 dark:hover:text-red-400"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </Tooltip>
+              )}
+            </div>
+            <div className="flex md:hidden items-center">
+              <Tooltip content="Acciones" placement="top">
+                <button className="flex h-5 w-5 cursor-pointer items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-emerald-50 hover:text-emerald-600 sm:h-8 sm:w-8 sm:rounded-xl dark:hover:bg-emerald-950/40 dark:hover:text-emerald-400">
+                  <EllipsisVertical className="h-4 w-4" />
                 </button>
               </Tooltip>
-            )}
-            {onEdit && (
-              <Tooltip content="Editar producto" placement="top">
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onEdit?.();
-                  }}
-                  aria-label="Editar"
-                  className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-black/5 hover:text-slate-800 sm:h-8 sm:w-8 sm:rounded-xl dark:hover:bg-white/5 dark:hover:text-slate-100"
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                </button>
-              </Tooltip>
-            )}
-            {onDelete && (
-              <Tooltip content="Eliminar producto" placement="top">
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDelete?.();
-                  }}
-                  aria-label="Eliminar"
-                  className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 sm:h-8 sm:w-8 sm:rounded-xl dark:hover:bg-red-950/40 dark:hover:text-red-400"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </Tooltip>
-            )}
+            </div>
           </div>
         )}
       </div>

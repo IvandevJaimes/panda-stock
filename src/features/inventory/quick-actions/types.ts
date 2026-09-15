@@ -38,4 +38,5 @@ export const SUBMIT_LABEL: Record<Exclude<QuickActionView, "menu">, string> = {
   "precio-venta": "Guardar",
   "editar-codigo": "Guardar",
   "variante-detalle": "Guardar",
+  "stock-minimo": "Guardar",
 };
