@@ -238,12 +238,10 @@ export function InventoryPage() {
     setLotesProducto(producto);
   };
 
-  const abrirAccionesRapidas = (producto: ProductoInventario, vista: QuickActionView) => {
-    const raw = productosCrudos.find((p) => p.id === producto.id);
-    if (!raw) return;
+  const abrirAccionesRapidas = (producto: Producto, vista: QuickActionView) => {
     setVistaAccionInicial(vista);
     setAperturaAcciones((n) => n + 1);
-    setProductForQuickActions(raw);
+    setProductForQuickActions(producto);
   };
 
   const handleConfirmarPerdida = async (producto: Producto) => {
@@ -620,51 +618,68 @@ export function InventoryPage() {
         )
       ) : (
         <div className="mt-2 px-0.5 flex w-full min-w-0 flex-col gap-2.5">
-          {filasPagina.map((producto, index) => (
-            <ProductCard
-              key={producto.id}
-              style={{ animationDelay: index < 8 ? `${index * 20}ms` : "0ms" }}
-              category={producto.category}
-              name={producto.name}
-              variant={producto.variant}
-              brand={producto.brand || undefined}
-              stock={producto.stock}
-              minStock={producto.minStock}
-              price={producto.price}
-              expiresAt={producto.expiresAt ?? undefined}
-              status={derivarStatus(producto)}
-              codigoInterno={producto.codigoInterno}
-              codigosBarras={producto.codigosBarras}
-              highlightQuery={busqueda}
-              onEdit={() => abrirAccionesRapidas(producto, "menu")}
-              onDelete={() =>
-                toast.info(`Eliminar ${producto.name} en desarrollo`)
-              }
-              onOpenDetail={() => {
-                const raw = productosCrudos.find((p) => p.id === producto.id);
-                if (raw) setSelectedProductForDetail(raw);
-              }}
-              onOpenLotes={() => {
-                const raw = productosCrudos.find((p) => p.id === producto.id);
-                if (raw) handleOpenLotes(raw);
-              }}
-              onConfirmarPerdida={
-                producto.status === "vencido" && producto.stock > 0
-                  ? () => {
-                      const raw = productosCrudos.find(
-                        (p) => p.id === producto.id,
-                      );
-                      if (raw) void handleConfirmarPerdida(raw);
-                    }
-                  : undefined
-              }
-              onAgregarInventario={
-                producto.stock <= 0
-                  ? () => abrirAccionesRapidas(producto, "agregar-inventario")
-                  : undefined
-              }
-            />
-          ))}
+          {filasPagina.map((producto, index) => {
+            const raw = productosCrudos.find((p) => p.id === producto.id);
+            return (
+              <ProductCard
+                key={producto.id}
+                style={{
+                  animationDelay: index < 8 ? `${index * 20}ms` : "0ms",
+                }}
+                producto={raw}
+                category={producto.category}
+                name={producto.name}
+                variant={producto.variant}
+                brand={producto.brand || undefined}
+                stock={producto.stock}
+                minStock={producto.minStock}
+                price={producto.price}
+                expiresAt={producto.expiresAt ?? undefined}
+                status={derivarStatus(producto)}
+                codigoInterno={producto.codigoInterno}
+                codigosBarras={producto.codigosBarras}
+                highlightQuery={busqueda}
+                onOpenQuickActions={
+                  raw ? (p) => abrirAccionesRapidas(p, "menu") : undefined
+                }
+                onOpenLotes={
+                  raw
+                    ? (p) => {
+                        setSelectedProductForDetail(null);
+                        setAbrirInventarioAuto(false);
+                        setLotesProducto(p);
+                      }
+                    : undefined
+                }
+                onDeleteProduct={
+                  raw
+                    ? (p) => toast.info(`Eliminar ${p.nombre} en desarrollo`)
+                    : undefined
+                }
+                onOpenDetail={() => {
+                  const detalle = productosCrudos.find(
+                    (p) => p.id === producto.id,
+                  );
+                  if (detalle) setSelectedProductForDetail(detalle);
+                }}
+                onConfirmarPerdida={
+                  producto.status === "vencido" && producto.stock > 0
+                    ? () => {
+                        const lote = productosCrudos.find(
+                          (p) => p.id === producto.id,
+                        );
+                        if (lote) void handleConfirmarPerdida(lote);
+                      }
+                    : undefined
+                }
+                onAgregarInventario={
+                  raw && producto.stock <= 0
+                    ? () => abrirAccionesRapidas(raw, "agregar-inventario")
+                    : undefined
+                }
+              />
+            );
+          })}
 
           <div className="mt-2 flex flex-col items-center justify-between gap-2 sm:flex-row">
             <span className="text-xs font-medium text-slate-400 dark:text-slate-500">

@@ -1,19 +1,27 @@
 import {
   Barcode,
   Calendar,
-  EllipsisVertical,
   Layers,
+  MoreVertical,
   PackageX,
   Pencil,
   Plus,
   Trash2,
 } from "lucide-react";
+import type { Producto } from "../../../electron/db/types";
 import { Tooltip } from "./Tooltip";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "./DropdownMenu";
 import { TruncatedText } from "./TruncatedText";
 import { HighlightMatch } from "./HighlightMatch";
 import { Button } from "./Button";
 import { cn } from "../../lib/cn";
 import { evaluateExpiry } from "../../lib/dateUtils";
+import { useMediaQuery } from "../../hooks/useMediaQuery";
 
 export type ProductStatus =
   | "normal"
@@ -35,10 +43,12 @@ export interface ProductCardProps {
   codigoInterno?: string;
   codigosBarras?: string;
   highlightQuery?: string;
-  onEdit?: () => void;
-  onDelete?: () => void;
+  /** Producto crudo (DB) que se entrega a los handlers de acciones del menú. */
+  producto?: Producto;
+  onOpenQuickActions?: (producto: Producto) => void;
+  onOpenLotes?: (producto: Producto) => void;
+  onDeleteProduct?: (producto: Producto) => void;
   onOpenDetail?: () => void;
-  onOpenLotes?: () => void;
   onConfirmarPerdida?: () => void;
   onAgregarInventario?: () => void;
   className?: string;
@@ -71,10 +81,11 @@ export function ProductCard({
   codigoInterno,
   codigosBarras,
   highlightQuery,
-  onEdit,
-  onDelete,
-  onOpenDetail,
+  producto,
+  onOpenQuickActions,
   onOpenLotes,
+  onDeleteProduct,
+  onOpenDetail,
   onConfirmarPerdida,
   onAgregarInventario,
   className,
@@ -85,6 +96,10 @@ export function ProductCard({
   // jamás se contradigan (misma regla, misma zona horaria local).
   const isStockStatus = status === "out_of_stock" || status === "low_stock";
   const expiry = expiresAt ? evaluateExpiry(expiresAt) : null;
+
+  // Breakpoint Tailwind md: el texto de los botones de acción se muestra en md+,
+  // momento en que sus tooltips sobran (el tooltip solo aporta en iconos puros).
+  const esEscritorio = useMediaQuery("(min-width: 768px)");
 
   // Los estados basados en stock prevalecen; el resto se resuelve desde la fecha.
   const resolvedStatus: ProductStatus = isStockStatus
@@ -277,39 +292,46 @@ export function ProductCard({
               </Tooltip>
             )}
             {onConfirmarPerdida && resolvedStatus === "expired" && (
-              <Button
-                variant="danger"
-                size="sm"
-                className="h-8 shrink-0 whitespace-nowrap px-2.5 py-0 text-[11px] sm:text-xs"
-                icon={<PackageX className="h-3.5 w-3.5" aria-hidden />}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onConfirmarPerdida();
-                }}
-              >
-                Confirmar pérdida
-              </Button>
+              <Tooltip content="Confirmar pérdida" placement="top" disabled={esEscritorio}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon={<PackageX className="h-5 w-5 md:h-3.5 md:w-3.5" aria-hidden />}
+                  aria-label="Confirmar pérdida"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onConfirmarPerdida();
+                  }}
+                  className="h-8 shrink-0 gap-0 rounded-xl bg-red-600 px-1.5 py-0 text-white shadow-xs hover:bg-red-700 focus-visible:ring-red-500/30 dark:text-white dark:hover:bg-red-500 md:gap-2 md:px-3 md:text-xs md:dark:hover:bg-red-500"
+                >
+                  <span className="hidden md:inline-flex md:items-center md:leading-none">Confirmar pérdida</span>
+                </Button>
+              </Tooltip>
             )}
             {onAgregarInventario && resolvedStatus === "out_of_stock" && (
-              <Button
-                variant="primary"
-                size="sm"
-                className="h-8 shrink-0 whitespace-nowrap px-2.5 py-0 text-[11px] sm:text-xs"
-                icon={<Plus className="h-3.5 w-3.5" aria-hidden />}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onAgregarInventario();
-                }}
-              >
-                Agregar inventario
-              </Button>
+              <Tooltip content="Agregar inventario" placement="top" disabled={esEscritorio}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon={<Plus className="h-5 w-5 md:h-3.5 md:w-3.5" aria-hidden />}
+                  aria-label="Agregar inventario"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onAgregarInventario();
+                  }}
+                  className="h-8 shrink-0 gap-0 rounded-xl bg-emerald-600 px-1.5 py-0 text-white shadow-xs hover:bg-emerald-500 focus-visible:ring-emerald-500/30 dark:text-white dark:hover:bg-emerald-500 md:gap-2 md:px-3 md:text-xs md:dark:hover:bg-emerald-500"
+                >
+                  <span className="hidden md:inline-flex md:items-center md:leading-none">Agregar inventario</span>
+                </Button>
+              </Tooltip>
             )}
           </div>
         )}
 
         {/* Divisor vertical y acciones fijas en X */}
-        {(onEdit || onDelete || onOpenLotes) && (
+        {(onOpenLotes || onOpenQuickActions || onDeleteProduct) && (
           <div className="flex shrink-0 items-center gap-0.5 border-l border-slate-200/60 pl-2 dark:border-slate-800/80">
+            {/* Botones directos en pantallas md+ (el menú contextual vive en el kebab de móvil) */}
             <div className="hidden md:flex items-center">
               {onOpenLotes && (
                 <Tooltip content="Ver lotes" placement="top">
@@ -317,7 +339,7 @@ export function ProductCard({
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      onOpenLotes?.();
+                      if (producto) onOpenLotes?.(producto);
                     }}
                     aria-label="Ver lotes"
                     className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-emerald-50 hover:text-emerald-600 sm:h-8 sm:w-8 sm:rounded-xl dark:hover:bg-emerald-950/40 dark:hover:text-emerald-400"
@@ -326,28 +348,28 @@ export function ProductCard({
                   </button>
                 </Tooltip>
               )}
-              {onEdit && (
-                <Tooltip content="Editar producto" placement="top">
+              {onOpenQuickActions && (
+                <Tooltip content="Acciones rápidas" placement="top">
                   <button
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      onEdit?.();
+                      if (producto) onOpenQuickActions?.(producto);
                     }}
-                    aria-label="Editar"
+                    aria-label="Acciones rápidas"
                     className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-black/5 hover:text-slate-800 sm:h-8 sm:w-8 sm:rounded-xl dark:hover:bg-white/5 dark:hover:text-slate-100"
                   >
                     <Pencil className="h-3.5 w-3.5" />
                   </button>
                 </Tooltip>
               )}
-              {onDelete && (
+              {onDeleteProduct && (
                 <Tooltip content="Eliminar producto" placement="top">
                   <button
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      onDelete?.();
+                      if (producto) onDeleteProduct?.(producto);
                     }}
                     aria-label="Eliminar"
                     className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 sm:h-8 sm:w-8 sm:rounded-xl dark:hover:bg-red-950/40 dark:hover:text-red-400"
@@ -357,12 +379,58 @@ export function ProductCard({
                 </Tooltip>
               )}
             </div>
+
+            {/* Kebab con menú contextual en pantallas < md */}
             <div className="flex md:hidden items-center">
-              <Tooltip content="Acciones" placement="top">
-                <button className="flex h-5 w-5 cursor-pointer items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-emerald-50 hover:text-emerald-600 sm:h-8 sm:w-8 sm:rounded-xl dark:hover:bg-emerald-950/40 dark:hover:text-emerald-400">
-                  <EllipsisVertical className="h-4 w-4" />
-                </button>
-              </Tooltip>
+              <DropdownMenu placement="bottom-end">
+                <Tooltip content="Ver acciones">
+                <DropdownMenuTrigger asChild>
+                  
+                    <button
+                      type="button"
+                      onClick={(e) => e.stopPropagation()}
+                      aria-label="Más opciones"
+                      className="cursor-pointer p-1.5 rounded-lg border border-transparent text-slate-400 transition-all hover:border-slate-300/60 hover:bg-slate-200/60 dark:hover:border-slate-700/60 dark:hover:bg-slate-800/60 dark:hover:text-slate-200"
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                    </button>
+                 
+                </DropdownMenuTrigger>
+                 </Tooltip>
+                <DropdownMenuContent className="w-48">
+                  {onOpenLotes && (
+                    <DropdownMenuItem
+                      icon={<Layers className="h-3.5 w-3.5" />}
+                      onClick={() => {
+                        if (producto) onOpenLotes?.(producto);
+                      }}
+                    >
+                      Ver / Gestionar lotes
+                    </DropdownMenuItem>
+                  )}
+                  {onOpenQuickActions && (
+                    <DropdownMenuItem
+                      icon={<Pencil className="h-3.5 w-3.5" />}
+                      onClick={() => {
+                        if (producto) onOpenQuickActions?.(producto);
+                      }}
+                    >
+                      Acciones rápidas
+                    </DropdownMenuItem>
+                  )}
+                  {onDeleteProduct && (
+                    <DropdownMenuItem
+                      variant="danger"
+                      icon={<Trash2 className="h-3.5 w-3.5" />}
+                      onClick={() => {
+                        if (producto) onDeleteProduct?.(producto);
+                      }}
+                    >
+                      Eliminar producto
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
         )}
