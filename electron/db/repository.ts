@@ -290,7 +290,7 @@ function mapNuevoProducto(data: Record<string, unknown>) {
     categoriaId: (data.categoriaId as number | null | undefined) ?? null,
     marcaId: (data.marcaId as number | null | undefined) ?? null,
     nombre: data.nombre as string,
-    codigoInterno: data.codigoInterno as string,
+    codigoInterno: (data.codigoInterno as string | null | undefined)?.trim() || null,
     codigosBarras: (data.codigosBarras as string | null | undefined)?.trim() || null,
     variante: (data.variante as string | null | undefined)?.trim() || null,
     tipoVenta: (data.tipoVenta as Producto['tipoVenta']) ?? 'unidad',
@@ -361,7 +361,9 @@ export function updateProducto(id: number, data: Record<string, unknown>): Produ
   const set: Record<string, unknown> = { actualizadoEn: new Date().toISOString() }
 
   if (data.nombre !== undefined) set.nombre = data.nombre
-  if (data.codigoInterno !== undefined) set.codigoInterno = data.codigoInterno
+  if (data.codigoInterno !== undefined) {
+    set.codigoInterno = (data.codigoInterno as string | null)?.trim() || null
+  }
   if (data.codigosBarras !== undefined) set.codigosBarras = (data.codigosBarras as string | null)?.trim() || null
   if (data.variante !== undefined) set.variante = (data.variante as string | null)?.trim() || null
   if (data.categoriaId !== undefined) set.categoriaId = data.categoriaId

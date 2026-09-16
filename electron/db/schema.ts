@@ -41,7 +41,7 @@ export const productos = sqliteTable(
     categoriaId: integer('categoria_id').references(() => categorias.id),
     marcaId: integer('marca_id').references(() => marcas.id),
     nombre: text('nombre').notNull(),
-    codigoInterno: text('codigo_interno').notNull(),
+    codigoInterno: text('codigo_interno'),
     codigosBarras: text('codigos_barras'),
     variante: text('variante'),
     tipoVenta: text('tipo_venta').$type<TipoVenta>().notNull().default('unidad'),

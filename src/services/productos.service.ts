@@ -47,13 +47,12 @@ export const productosService = {
     const codigoInterno = String(data.codigoInterno ?? '').trim()
 
     if (!nombre) throw new Error('El nombre del producto es obligatorio')
-    if (!codigoInterno) throw new Error('El código interno es obligatorio')
 
     try {
       return await window.electronAPI.productos.create({
         ...data,
         nombre,
-        codigoInterno,
+        codigoInterno: codigoInterno || null,
         codigosBarras: limpiarBarras(data.codigosBarras as string | null | undefined),
       })
     } catch (error) {
@@ -68,7 +67,8 @@ export const productosService = {
       actualizado.nombre = String(actualizado.nombre).trim()
     }
     if (actualizado.codigoInterno !== undefined) {
-      actualizado.codigoInterno = String(actualizado.codigoInterno).trim()
+      actualizado.codigoInterno =
+        (actualizado.codigoInterno as string | null)?.trim() || null
     }
     if (actualizado.codigosBarras !== undefined) {
       actualizado.codigosBarras = limpiarBarras(actualizado.codigosBarras as string | null)

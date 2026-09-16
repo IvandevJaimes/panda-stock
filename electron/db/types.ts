@@ -56,7 +56,7 @@ export type Producto = {
   categoriaId: number | null
   marcaId: number | null
   nombre: string
-  codigoInterno: string
+  codigoInterno: string | null
   codigosBarras: string | null
   variante: string | null
   tipoVenta: TipoVenta
@@ -76,7 +76,7 @@ export type NuevoProducto = {
   categoriaId?: number | null
   marcaId?: number | null
   nombre: string
-  codigoInterno: string
+  codigoInterno?: string | null
   codigosBarras?: string | null
   variante?: string | null
   tipoVenta?: TipoVenta

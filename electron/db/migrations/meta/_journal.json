@@ -29,6 +29,13 @@
       "when": 1789130018330,
       "tag": "0003_many_bloodstrike",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1789566769352,
+      "tag": "0004_rich_spiral",
+      "breakpoints": true
     }
   ]
 }
