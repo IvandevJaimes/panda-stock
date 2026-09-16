@@ -7,9 +7,15 @@ interface HeaderLoteProps {
   lote: Lote;
   titulo: string;
   onBack: () => void;
+  esLoteActivo?: boolean;
 }
 
-export function HeaderLote({ lote, titulo, onBack }: HeaderLoteProps) {
+export function HeaderLote({
+  lote,
+  titulo,
+  onBack,
+  esLoteActivo = false,
+}: HeaderLoteProps) {
   const identidad = lote.numeroLote ?? `Lote #${lote.id}`;
 
   return (
@@ -30,8 +36,8 @@ export function HeaderLote({ lote, titulo, onBack }: HeaderLoteProps) {
         </h3>
       </div>
       <div className="mb-4 rounded-xl bg-slate-50 p-3 dark:bg-slate-800/50">
-        <div className="flex items-center gap-3">
-          <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="min-w-0 flex-1">
             <h4 className="truncate font-mono text-sm font-bold text-slate-900 dark:text-white">
               {identidad}
             </h4>
@@ -46,6 +52,11 @@ export function HeaderLote({ lote, titulo, onBack }: HeaderLoteProps) {
               </span>
             </div>
           </div>
+          {esLoteActivo && (
+            <span className="shrink-0 rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-emerald-600 dark:text-emerald-400">
+              Lote activo
+            </span>
+          )}
         </div>
       </div>
     </>

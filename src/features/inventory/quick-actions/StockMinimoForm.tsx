@@ -1,4 +1,5 @@
-import { useForm } from "react-hook-form";
+import { useEffect } from "react";
+import { useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 import { Input } from "../../../components/ui/Input";
 import { productosService } from "../../../services/productos.service";
@@ -16,6 +17,7 @@ interface StockMinimoFormProps {
   onCancel: () => void;
   onSuccess: () => void;
   onSubmittingChange: (submitting: boolean) => void;
+  onCanSaveChange?: (canSave: boolean) => void;
 }
 
 export function StockMinimoForm({
@@ -24,16 +26,28 @@ export function StockMinimoForm({
   onCancel,
   onSuccess,
   onSubmittingChange,
+  onCanSaveChange,
 }: StockMinimoFormProps) {
   const {
     register,
     handleSubmit,
+    control,
     formState: { errors, isSubmitting },
   } = useForm<StockMinimoValues>({
     defaultValues: {
       stockMinimo: stockMinimoInicial > 0 ? String(stockMinimoInicial) : "",
     },
   });
+
+  const stockMinimo = useWatch({ control, name: "stockMinimo" }) ?? "";
+
+  useEffect(() => {
+    const valorNormalizado = Math.max(
+      0,
+      Math.round(Number(stockMinimo) || 0),
+    );
+    onCanSaveChange?.(valorNormalizado !== stockMinimoInicial);
+  }, [stockMinimo, stockMinimoInicial, onCanSaveChange]);
 
   const onSubmit = async (data: StockMinimoValues) => {
     onSubmittingChange(true);

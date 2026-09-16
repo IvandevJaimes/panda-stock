@@ -103,7 +103,7 @@ function mapearProducto(
     stock: producto.stockActual,
     minStock: producto.stockMinimo,
     expiresAt: vencimientoFifo,
-    codigoInterno: producto.codigoInterno,
+    codigoInterno: producto.codigoInterno ?? "",
     codigosBarras: producto.codigosBarras ?? "",
     status: derivarEstadoVencimiento(vencimientoFifo),
   };
@@ -820,6 +820,7 @@ export function InventoryPage() {
               )?.nombre ?? "")
             : ""
         }
+        categorias={categories}
         onClose={() => setProductForQuickActions(null)}
         onSuccess={() => {
           void refreshProductos().then((dataActualizada) => {
@@ -836,12 +837,9 @@ export function InventoryPage() {
             handleOpenLotes(productForQuickActions);
           }
         }}
-        onFullEdit={() => {
-          if (!productForQuickActions) return;
-          toast.info(
-            `Editar toda la información de "${productForQuickActions.nombre}" en desarrollo`,
-          );
+        onConfirmarPerdida={(producto, lote) => {
           setProductForQuickActions(null);
+          setPerdidaSeleccion({ producto, lote });
         }}
       />
 

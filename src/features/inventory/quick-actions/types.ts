@@ -6,7 +6,8 @@ export type QuickActionView =
   | "precio-venta"
   | "editar-codigo"
   | "variante-detalle"
-  | "stock-minimo";
+  | "stock-minimo"
+  | "editar-producto";
 
 export const ACCION_LABEL: Record<Exclude<QuickActionView, "menu">, string> = {
   "agregar-inventario": "Agregar Inventario",
@@ -16,6 +17,7 @@ export const ACCION_LABEL: Record<Exclude<QuickActionView, "menu">, string> = {
   "editar-codigo": "Editar Código",
   "variante-detalle": "Editar Variante / Detalle",
   "stock-minimo": "Stock mínimo",
+  "editar-producto": "Editar Producto",
 };
 
 export const noSpinnersClass =
@@ -29,6 +31,7 @@ export const FORM_ID: Record<Exclude<QuickActionView, "menu">, string> = {
   "editar-codigo": "quick-action-editar-codigo",
   "variante-detalle": "quick-action-variante-detalle",
   "stock-minimo": "quick-action-stock-minimo",
+  "editar-producto": "quick-action-editar-producto",
 };
 
 export const SUBMIT_LABEL: Record<Exclude<QuickActionView, "menu">, string> = {
@@ -39,4 +42,5 @@ export const SUBMIT_LABEL: Record<Exclude<QuickActionView, "menu">, string> = {
   "editar-codigo": "Guardar",
   "variante-detalle": "Guardar",
   "stock-minimo": "Guardar",
+  "editar-producto": "Guardar cambios",
 };

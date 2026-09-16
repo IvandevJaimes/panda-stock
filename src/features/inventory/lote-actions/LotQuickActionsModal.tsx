@@ -15,6 +15,7 @@ export interface LotQuickActionsModalProps {
   productoId: number;
   onClose: () => void;
   onMutated: () => void;
+  onConfirmarPerdida: (lote: Lote) => void;
 }
 
 export function LotQuickActionsModal({
@@ -23,13 +24,18 @@ export function LotQuickActionsModal({
   productoId,
   onClose,
   onMutated,
+  onConfirmarPerdida,
 }: LotQuickActionsModalProps) {
   const [vistaActual, setVistaActual] = useState<LoteQuickView>("menu");
   const [submitting, setSubmitting] = useState(false);
+  const [puedeGuardar, setPuedeGuardar] = useState(false);
+
+  const VISTAS_EDICION: LoteQuickView[] = ["editar-vencimiento", "editar-costo"];
 
   const handleActionComplete = () => {
     setVistaActual("menu");
     setSubmitting(false);
+    setPuedeGuardar(false);
     onMutated();
     onClose();
   };
@@ -37,6 +43,7 @@ export function LotQuickActionsModal({
   const handleClose = () => {
     setVistaActual("menu");
     setSubmitting(false);
+    setPuedeGuardar(false);
     onClose();
   };
 
@@ -44,7 +51,11 @@ export function LotQuickActionsModal({
     <Modal isOpen={isOpen} onClose={handleClose} maxWidth="lg" title="Acciones del Lote">
       <div className="flex flex-col">
         {vistaActual === "menu" && (
-          <LoteQuickActionsMenu lote={lote} onNavigate={setVistaActual} />
+          <LoteQuickActionsMenu
+            lote={lote}
+            onNavigate={(v) => { setPuedeGuardar(false); setVistaActual(v); }}
+            onConfirmarPerdida={() => onConfirmarPerdida(lote)}
+          />
         )}
 
         {vistaActual === "ajustar-stock" && (
@@ -72,6 +83,7 @@ export function LotQuickActionsModal({
             onCancel={() => setVistaActual("menu")}
             onSuccess={handleActionComplete}
             onSubmittingChange={setSubmitting}
+            onCanSaveChange={setPuedeGuardar}
           />
         )}
 
@@ -81,6 +93,7 @@ export function LotQuickActionsModal({
             onCancel={() => setVistaActual("menu")}
             onSuccess={handleActionComplete}
             onSubmittingChange={setSubmitting}
+            onCanSaveChange={setPuedeGuardar}
           />
         )}
       </div>
@@ -92,6 +105,7 @@ export function LotQuickActionsModal({
             form={FORM_ID_LOTE[vistaActual]}
             variant="primary"
             loading={submitting}
+            disabled={VISTAS_EDICION.includes(vistaActual) && !puedeGuardar}
           >
             {SUBMIT_LABEL_LOTE[vistaActual]}
           </Button>

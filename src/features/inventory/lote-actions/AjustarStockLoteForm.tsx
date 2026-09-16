@@ -1,10 +1,13 @@
 import { useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
+import { CapitalizedInput } from "../../../components/ui/CapitalizedInput";
+import { FieldError } from "../../../components/ui/FieldError";
 import { Input } from "../../../components/ui/Input";
 import { lotesService } from "../../../services/lotes.service";
 import { cn } from "../../../lib/cn";
 import type { Lote } from "../../../../electron/db/types";
 import { HeaderLote } from "./HeaderLote";
+import { BotonGestionarLotes } from "../quick-actions/BotonGestionarLotes";
 import { noSpinnersClass } from "../quick-actions/types";
 import { ACCION_LABEL_LOTE, FORM_ID_LOTE } from "./types";
 
@@ -20,6 +23,9 @@ const VALORES_INICIALES_AJUSTAR = {
 
 interface AjustarStockLoteFormProps {
   lote: Lote;
+  formId?: string;
+  esLoteActivo?: boolean;
+  onOpenLotes?: () => void;
   onCancel: () => void;
   onSuccess: () => void;
   onSubmittingChange: (submitting: boolean) => void;
@@ -27,6 +33,9 @@ interface AjustarStockLoteFormProps {
 
 export function AjustarStockLoteForm({
   lote,
+  formId,
+  esLoteActivo = false,
+  onOpenLotes,
   onCancel,
   onSuccess,
   onSubmittingChange,
@@ -34,6 +43,7 @@ export function AjustarStockLoteForm({
   const {
     register,
     handleSubmit,
+    setValue,
     control,
     formState: { errors, isSubmitting },
   } = useForm<AjustarStockLoteValues>({
@@ -41,6 +51,7 @@ export function AjustarStockLoteForm({
   });
 
   const nuevoStock = useWatch({ control, name: "nuevoStock" }) ?? "";
+  const motivo = useWatch({ control, name: "motivo" }) ?? "";
   const nuevoStockNum = nuevoStock !== "" ? Number(nuevoStock) : NaN;
   const diferenciaValida = !Number.isNaN(nuevoStockNum);
   const diferencia = nuevoStockNum - lote.cantidadActual;
@@ -69,7 +80,7 @@ export function AjustarStockLoteForm({
 
   return (
     <form
-      id={FORM_ID_LOTE["ajustar-stock"]}
+      id={formId ?? FORM_ID_LOTE["ajustar-stock"]}
       noValidate
       onSubmit={handleSubmit(onSubmit)}
     >
@@ -77,6 +88,7 @@ export function AjustarStockLoteForm({
         lote={lote}
         titulo={ACCION_LABEL_LOTE["ajustar-stock"]}
         onBack={onCancel}
+        esLoteActivo={esLoteActivo}
       />
       <div className="space-y-4">
         <div>
@@ -112,15 +124,36 @@ export function AjustarStockLoteForm({
             </p>
           )}
         </div>
-        <Input
-          label="Motivo"
-          type="text"
-          disabled={isSubmitting}
-          error={errors.motivo?.message}
-          placeholder="Ej: Ajuste por conteo físico"
-          {...register("motivo")}
-        />
+        <div className="flex flex-col gap-1.5">
+          <label
+            htmlFor="motivo"
+            className="ml-1 text-xs font-semibold text-slate-700 dark:text-slate-300"
+          >
+            Motivo (Opcional)
+          </label>
+          <CapitalizedInput
+            id="motivo"
+            type="text"
+            disabled={isSubmitting}
+            placeholder="Ej: Ajuste por conteo físico"
+            value={motivo}
+            className={cn(
+              "border-slate-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700/80",
+              errors.motivo &&
+                "border-red-500 focus:border-red-500 focus:ring-4 focus:ring-red-500/10",
+            )}
+            onClear={() => setValue("motivo", "")}
+            {...register("motivo")}
+          />
+          <FieldError error={errors.motivo?.message} />
+        </div>
       </div>
+      {onOpenLotes && (
+        <>
+          <hr className="my-4 border-slate-100 dark:border-slate-800" />
+          <BotonGestionarLotes onOpenLotes={onOpenLotes} />
+        </>
+      )}
     </form>
   );
 }

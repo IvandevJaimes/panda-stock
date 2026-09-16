@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 import { Input } from "../../../components/ui/Input";
@@ -17,9 +18,10 @@ interface ModificarPrecioFormProps {
   onCancel: () => void;
   onSuccess: () => void;
   onSubmittingChange: (submitting: boolean) => void;
+  onCanSaveChange?: (canSave: boolean) => void;
 }
 
-export function ModificarPrecioForm({ producto, precioInicial, onCancel, onSuccess, onSubmittingChange }: ModificarPrecioFormProps) {
+export function ModificarPrecioForm({ producto, precioInicial, onCancel, onSuccess, onSubmittingChange, onCanSaveChange }: ModificarPrecioFormProps) {
   const {
     register,
     handleSubmit,
@@ -32,6 +34,11 @@ export function ModificarPrecioForm({ producto, precioInicial, onCancel, onSucce
   const nuevoPrecio = useWatch({ control, name: "nuevoPrecio" }) ?? "";
   const nuevoPrecioNum = nuevoPrecio !== "" ? Number(nuevoPrecio) : NaN;
   const precioValido = !Number.isNaN(nuevoPrecioNum) && nuevoPrecioNum > 0;
+  const hayCambio = nuevoPrecioNum !== precioInicial;
+
+  useEffect(() => {
+    onCanSaveChange?.(precioValido && hayCambio);
+  }, [precioValido, hayCambio, onCanSaveChange]);
 
   const onSubmit = async (data: ModificarPrecioValues) => {
     onSubmittingChange(true);
@@ -64,7 +71,7 @@ export function ModificarPrecioForm({ producto, precioInicial, onCancel, onSucce
             label="Nuevo Precio de Venta"
             type="number"
             step="0.01"
-            min="0"
+            min="0.01"
             autoFocus
             disabled={isSubmitting}
             error={errors.nuevoPrecio?.message}
@@ -74,7 +81,7 @@ export function ModificarPrecioForm({ producto, precioInicial, onCancel, onSucce
               validate: {
                 numeroValido: (val) =>
                   !Number.isNaN(Number(val)) || "Debe ser un número válido",
-                noNegativo: (val) => Number(val) >= 0 || "No puede ser negativo",
+                mayorQueCero: (val) => Number(val) > 0 || "Debe ser mayor a 0",
               },
             })}
           />

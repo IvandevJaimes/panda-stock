@@ -1,7 +1,9 @@
-import { useForm } from "react-hook-form";
+import { useEffect } from "react";
+import { useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
-import { Button } from "../../../components/ui/Button";
+import { Sparkles } from "lucide-react";
 import { Input } from "../../../components/ui/Input";
+import { Tooltip } from "../../../components/ui/Tooltip";
 import { productosService } from "../../../services/productos.service";
 import type { Producto } from "../../../../electron/db/types";
 import { HeaderMini } from "./HeaderMini";
@@ -17,17 +19,33 @@ interface EditarCodigoFormProps {
   onCancel: () => void;
   onSuccess: () => void;
   onSubmittingChange: (submitting: boolean) => void;
+  onCanSaveChange?: (canSave: boolean) => void;
 }
 
-export function EditarCodigoForm({ producto, codigoInicial, onCancel, onSuccess, onSubmittingChange }: EditarCodigoFormProps) {
+export function EditarCodigoForm({ producto, codigoInicial, onCancel, onSuccess, onSubmittingChange, onCanSaveChange }: EditarCodigoFormProps) {
   const {
     register,
     handleSubmit,
     setValue,
+    control,
     formState: { errors, isSubmitting },
   } = useForm<EditarCodigoValues>({
     defaultValues: { nuevoCodigo: codigoInicial },
   });
+
+  const nuevoCodigo = useWatch({ control, name: "nuevoCodigo" }) ?? "";
+
+  useEffect(() => {
+    onCanSaveChange?.(
+      nuevoCodigo.trim().toUpperCase() !== codigoInicial.trim().toUpperCase(),
+    );
+  }, [nuevoCodigo, codigoInicial, onCanSaveChange]);
+
+  const generarCodigoSugerido = () => {
+    const codigoSugerido = String(Math.floor(1000 + Math.random() * 9000));
+    setValue("nuevoCodigo", codigoSugerido, { shouldValidate: true });
+    toast.info(`Código sugerido: ${codigoSugerido}`);
+  };
 
   const onSubmit = async (data: EditarCodigoValues) => {
     onSubmittingChange(true);
@@ -65,19 +83,25 @@ export function EditarCodigoForm({ producto, codigoInicial, onCancel, onSuccess,
             autoFocus
             disabled={isSubmitting}
             error={errors.nuevoCodigo?.message}
+            value={nuevoCodigo}
             className="font-mono uppercase"
-            rightAction={
-              <Button
-                type="button"
-                variant="ghost"
-                className="h-full rounded-l-none"
-                onClick={() => setValue("nuevoCodigo", "")}
-              >
-                Limpiar
-              </Button>
+            labelAction={
+              <Tooltip content="Generar código sugerido">
+                <button
+                  type="button"
+                  disabled={isSubmitting}
+                  onClick={generarCodigoSugerido}
+                  className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 cursor-pointer disabled:opacity-50"
+                >
+                  <Sparkles className="h-3 w-3" />
+                  <span>Autogenerar</span>
+                </button>
+              </Tooltip>
+            }
+            onClear={() =>
+              setValue("nuevoCodigo", "", { shouldValidate: true })
             }
             {...register("nuevoCodigo", {
-              required: "El código es obligatorio",
               maxLength: {
                 value: 30,
                 message: "Máximo 30 caracteres",

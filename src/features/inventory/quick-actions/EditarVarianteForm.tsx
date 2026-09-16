@@ -1,6 +1,6 @@
-import { useForm } from "react-hook-form";
+import { useEffect } from "react";
+import { useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
-import { Button } from "../../../components/ui/Button";
 import { Input } from "../../../components/ui/Input";
 import { productosService } from "../../../services/productos.service";
 import type { Producto } from "../../../../electron/db/types";
@@ -17,17 +17,27 @@ interface EditarVarianteFormProps {
   onCancel: () => void;
   onSuccess: () => void;
   onSubmittingChange: (submitting: boolean) => void;
+  onCanSaveChange?: (canSave: boolean) => void;
 }
 
-export function EditarVarianteForm({ producto, varianteInicial, onCancel, onSuccess, onSubmittingChange }: EditarVarianteFormProps) {
+export function EditarVarianteForm({ producto, varianteInicial, onCancel, onSuccess, onSubmittingChange, onCanSaveChange }: EditarVarianteFormProps) {
   const {
     register,
     handleSubmit,
     setValue,
+    control,
     formState: { errors, isSubmitting },
   } = useForm<EditarVarianteValues>({
     defaultValues: { nuevaVariante: varianteInicial },
   });
+
+  const nuevaVariante = useWatch({ control, name: "nuevaVariante" }) ?? "";
+
+  useEffect(() => {
+    onCanSaveChange?.(
+      (nuevaVariante.trim() || "") !== (varianteInicial.trim() || ""),
+    );
+  }, [nuevaVariante, varianteInicial, onCanSaveChange]);
 
   const onSubmit = async (data: EditarVarianteValues) => {
     onSubmittingChange(true);
@@ -65,16 +75,10 @@ export function EditarVarianteForm({ producto, varianteInicial, onCancel, onSucc
             autoFocus
             disabled={isSubmitting}
             error={errors.nuevaVariante?.message}
+            value={nuevaVariante}
             placeholder='Ej. "500ml", "Rojo", "Anticaída", "Pack x3"'
-            rightAction={
-              <Button
-                type="button"
-                variant="ghost"
-                className="h-full rounded-l-none"
-                onClick={() => setValue("nuevaVariante", "")}
-              >
-                Limpiar
-              </Button>
+            onClear={() =>
+              setValue("nuevaVariante", "", { shouldValidate: true })
             }
             {...register("nuevaVariante", {
               maxLength: {

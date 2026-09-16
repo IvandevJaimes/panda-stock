@@ -1,4 +1,5 @@
-import { Controller, useForm } from "react-hook-form";
+import { useEffect } from "react";
+import { Controller, useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 import { DateInput } from "../../../components/ui/DateInput";
 import { FieldError } from "../../../components/ui/FieldError";
@@ -16,6 +17,7 @@ interface EditarVencimientoLoteFormProps {
   onCancel: () => void;
   onSuccess: () => void;
   onSubmittingChange: (submitting: boolean) => void;
+  onCanSaveChange?: (canSave: boolean) => void;
 }
 
 export function EditarVencimientoLoteForm({
@@ -23,6 +25,7 @@ export function EditarVencimientoLoteForm({
   onCancel,
   onSuccess,
   onSubmittingChange,
+  onCanSaveChange,
 }: EditarVencimientoLoteFormProps) {
   const {
     handleSubmit,
@@ -31,6 +34,14 @@ export function EditarVencimientoLoteForm({
   } = useForm<EditarVencimientoLoteValues>({
     defaultValues: { fechaVencimiento: lote.fechaVence ?? "" },
   });
+
+  const fechaVencimiento = useWatch({ control, name: "fechaVencimiento" }) ?? "";
+
+  useEffect(() => {
+    onCanSaveChange?.(
+      (fechaVencimiento.trim() || null) !== (lote.fechaVence ?? null),
+    );
+  }, [fechaVencimiento, lote.fechaVence, onCanSaveChange]);
 
   const onSubmit = async (data: EditarVencimientoLoteValues) => {
     onSubmittingChange(true);

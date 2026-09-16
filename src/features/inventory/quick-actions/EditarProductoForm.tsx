@@ -1,56 +1,51 @@
 import * as React from "react";
-import { Loader2, Sparkles } from "lucide-react";
+import { useEffect, useMemo } from "react";
 import {
   Controller,
   useForm,
   useWatch,
-  type DefaultValues,
 } from "react-hook-form";
 import { toast } from "sonner";
-import { Modal } from "../../components/ui/Modal";
-import { FieldError } from "../../components/ui/FieldError";
-import { CapitalizedInput } from "../../components/ui/CapitalizedInput";
+import { FieldError } from "../../../components/ui/FieldError";
+import { CapitalizedInput } from "../../../components/ui/CapitalizedInput";
 import {
   CustomSelect,
   type SelectOption,
-} from "../../components/ui/CustomSelect";
+} from "../../../components/ui/CustomSelect";
 import {
   OptionGroup,
   type OptionGroupOption,
-} from "../../components/ui/OptionGroup";
-import { DateInput } from "../../components/ui/DateInput";
-import { cn } from "../../lib/cn";
-import { productosService } from "../../services/productos.service";
-import { marcasService } from "../../services/marcas.service";
+} from "../../../components/ui/OptionGroup";
+import { cn } from "../../../lib/cn";
+import { productosService } from "../../../services/productos.service";
+import { marcasService } from "../../../services/marcas.service";
 import type {
   Categoria,
   Marca,
   Producto,
   TipoVenta,
-  UnidadMedida,
-} from "../../../electron/db/types";
-import { Tooltip } from "../../components/ui/Tooltip";
+} from "../../../../electron/db/types";
+import { HeaderMini } from "./HeaderMini";
+import { ACCION_LABEL, FORM_ID } from "./types";
 
-export interface CreateProductModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onSuccess?: (nuevoProducto?: Producto) => void;
+interface EditarProductoFormProps {
+  producto: Producto;
   categorias: Categoria[];
+  onCancel: () => void;
+  onSuccess: () => void;
+  onSubmittingChange: (submitting: boolean) => void;
+  onCanSaveChange?: (canSave: boolean) => void;
 }
 
-export interface FormValues {
+interface FormValues {
   nombre: string;
-  variante?: string;
+  variante: string;
   codigo: string;
   categoriaId: number;
   marca: string;
   tipoVenta: TipoVenta;
-  unidadMedida: UnidadMedida;
-  costo: string;
   precioVenta: string;
-  stockActual: string;
   stockMinimo: string;
-  vencimiento?: string;
 }
 
 const OPCIONES_TIPO_VENTA: OptionGroupOption<TipoVenta>[] = [
@@ -61,48 +56,63 @@ const OPCIONES_TIPO_VENTA: OptionGroupOption<TipoVenta>[] = [
 
 const SUGERENCIAS_LIMITE = 8;
 
-const VALORES_INICIALES: DefaultValues<FormValues> = {
-  nombre: "",
-  variante: "",
-  codigo: "",
-  categoriaId: 0,
-  marca: "",
-  tipoVenta: "unidad",
-  unidadMedida: "unidad",
-  costo: "",
-  precioVenta: "",
-  stockActual: "",
-  stockMinimo: "",
-  vencimiento: "",
-};
-
-export function CreateProductModal({
-  isOpen,
-  onClose,
-  onSuccess,
+export function EditarProductoForm({
+  producto,
   categorias,
-}: CreateProductModalProps) {
+  onCancel,
+  onSuccess,
+  onSubmittingChange,
+  onCanSaveChange,
+}: EditarProductoFormProps) {
+  const [marcas, setMarcas] = React.useState<Marca[]>([]);
+  const [marcaNombreActual, setMarcaNombreActual] = React.useState("");
+  const [marcasDropdown, setMarcasDropdown] = React.useState(false);
+  const marcasRef = React.useRef<HTMLDivElement>(null);
+
   const {
     register,
     handleSubmit,
-    reset,
     setValue,
     setError,
     control,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
-    defaultValues: VALORES_INICIALES,
+    defaultValues: {
+      nombre: producto.nombre,
+      variante: producto.variante ?? "",
+      codigo: producto.codigoInterno ?? "",
+      categoriaId: producto.categoriaId ?? 0,
+      marca: "",
+      tipoVenta: producto.tipoVenta,
+      precioVenta: String(producto.precioVenta),
+      stockMinimo: String(producto.stockMinimo),
+    },
   });
 
-  React.useEffect(() => {
-    if (isOpen) reset(VALORES_INICIALES);
-  }, [isOpen, reset]);
-
-  const [marcas, setMarcas] = React.useState<Marca[]>([]);
-  const [marcasDropdown, setMarcasDropdown] = React.useState(false);
-  const marcasRef = React.useRef<HTMLDivElement>(null);
   const valorMarca = useWatch({ control, name: "marca" }) ?? "";
-  const valorVariante = useWatch({ control, name: "variante" }) ?? "";
+
+  // Carga las marcas al montar y resuelve el nombre de la marca actual del
+  // producto (el backend las devuelve ordenadas por id descendente).
+  React.useEffect(() => {
+    let activo = true;
+    void marcasService
+      .getAll()
+      .then((data) => {
+        if (!activo) return;
+        setMarcas(data);
+        const marcaActual = data.find((m) => m.id === producto.marcaId);
+        if (marcaActual) {
+          setMarcaNombreActual(marcaActual.nombre);
+          setValue("marca", marcaActual.nombre, { shouldDirty: false });
+        }
+      })
+      .catch(() => {
+        // El autocomplete es una ayuda: si falla, el texto libre alcanza
+      });
+    return () => {
+      activo = false;
+    };
+  }, [producto.marcaId, setValue]);
 
   const marcasSugeridas = React.useMemo(() => {
     if (!marcasDropdown) return [];
@@ -113,29 +123,6 @@ export function CreateProductModal({
     return coincidencias.slice(0, SUGERENCIAS_LIMITE);
   }, [marcas, marcasDropdown, valorMarca]);
 
-  // Carga las marcas cada vez que se abre el modal (el backend ya las devuelve
-  // ordenadas por id descendente: las más recientes primero). Los setState viven
-  // en callbacks asíncronos (.then), respetando react-hooks/set-state-in-effect.
-  React.useEffect(() => {
-    if (!isOpen) return;
-    let activo = true;
-    void marcasService
-      .getAll()
-      .then((data) => {
-        if (!activo) return;
-        setMarcas(data);
-        setMarcasDropdown(false);
-      })
-      .catch(() => {
-        // El autocomplete es una ayuda: si falla, el alta sigue con texto libre
-      });
-    return () => {
-      activo = false;
-    };
-  }, [isOpen]);
-
-  // Cerrar el dropdown al hacer clic fuera del contenedor de marca. El setState
-  // vive dentro del callback del listener (asíncrono), no viola set-state-in-effect.
   React.useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (
@@ -149,11 +136,50 @@ export function CreateProductModal({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const generarCodigoSugerido = () => {
-    const codigoSugerido = String(Math.floor(1000 + Math.random() * 9000));
-    setValue("codigo", codigoSugerido, { shouldValidate: true });
-    toast.info(`Código sugerido: ${codigoSugerido}`);
-  };
+  const val = useWatch({ control });
+
+  const hayCambios = useMemo(() => {
+    const nombre = val.nombre?.trim() ?? "";
+    const variante = val.variante?.trim() || null;
+    const categoriaId =
+      Number(val.categoriaId) > 0 ? Number(val.categoriaId) : null;
+    const marca = val.marca?.trim() || null;
+    const tipoVenta = val.tipoVenta;
+    const precioVenta = Number(val.precioVenta) || 0;
+    const stockMinimo =
+      Math.max(0, Math.round(Number(val.stockMinimo) || 0));
+    const codigoLimpio = val.codigo?.trim() ?? "";
+
+    let codigoInterno: string | null = null;
+    let codigosBarras: string | null = null;
+    if (codigoLimpio) {
+      const esBarra =
+        /^[0-9, ]+$/.test(codigoLimpio) && codigoLimpio.length >= 8;
+      if (esBarra) {
+        codigosBarras = codigoLimpio;
+      } else {
+        codigoInterno = codigoLimpio;
+      }
+    }
+
+    return (
+      nombre !== (producto.nombre ?? "") ||
+      variante !== (producto.variante ?? null) ||
+      categoriaId !== (producto.categoriaId ?? null) ||
+      marca !== (marcaNombreActual || null) ||
+      tipoVenta !== producto.tipoVenta ||
+      precioVenta !== producto.precioVenta ||
+      stockMinimo !== producto.stockMinimo ||
+      (codigoInterno ?? producto.codigoInterno) !==
+        producto.codigoInterno ||
+      (codigosBarras ?? producto.codigosBarras) !==
+        producto.codigosBarras
+    );
+  }, [val, producto, marcaNombreActual]);
+
+  useEffect(() => {
+    onCanSaveChange?.(hayCambios);
+  }, [hayCambios, onCanSaveChange]);
 
   const opcionesCategorias: SelectOption[] = categorias.map((cat) => ({
     value: cat.id,
@@ -161,44 +187,39 @@ export function CreateProductModal({
   }));
 
   const onSubmit = async (data: FormValues) => {
+    onSubmittingChange(true);
     try {
-      // Normalización defensiva: garantiza ISO YYYY-MM-DD o null.
-      // Acepta DD/MM/YYYY y DD/MM/YY (año de 2 dígitos expandido a 20XX)
-      let vencimientoNormalizado: string | null = null;
-      if (data.vencimiento) {
-        const esIso = /^\d{4}-\d{2}-\d{2}$/.test(data.vencimiento);
-        if (esIso) {
-          vencimientoNormalizado = data.vencimiento;
-        } else {
-          const [dia, mes, anio] = data.vencimiento.split("/");
-          if (dia && mes && anio && anio.length >= 2 && anio.length <= 4) {
-            const anioCompleto = anio.length === 2 ? `20${anio}` : anio;
-            vencimientoNormalizado = `${anioCompleto}-${mes.padStart(2, "0")}-${dia.padStart(2, "0")}`;
-          }
-        }
-      }
-
-      const payload = {
-        ...data,
+      const payload: Record<string, unknown> = {
         nombre: data.nombre.trim(),
-        variante: data.variante?.trim() || null,
-        codigoInterno: data.codigo.trim(),
-        codigosBarras: data.codigo.trim() || null,
-        vencimiento: vencimientoNormalizado,
+        variante: data.variante.trim() || null,
         categoriaId:
           Number(data.categoriaId) > 0 ? Number(data.categoriaId) : null,
         marca: data.marca.trim() || null,
+        tipoVenta: data.tipoVenta,
+        precioVenta: Number(data.precioVenta),
+        stockMinimo: Math.max(0, Math.round(Number(data.stockMinimo) || 0)),
       };
 
-      const nuevoProducto = await productosService.create(payload);
+      const codigoLimpio = data.codigo.trim();
+      if (codigoLimpio) {
+        const esBarra =
+          /^[0-9, ]+$/.test(codigoLimpio) && codigoLimpio.length >= 8;
+        if (esBarra) {
+          payload.codigosBarras = codigoLimpio;
+        } else {
+          payload.codigoInterno = codigoLimpio;
+        }
+      }
 
-      toast.success("Producto creado exitosamente");
-      onSuccess?.(nuevoProducto);
-      onClose();
+      await productosService.update(producto.id, payload);
+
+      toast.success("Producto actualizado exitosamente");
+      onSuccess();
     } catch (error: unknown) {
-      console.error("Error al crear producto:", error);
       const mensaje =
-        error instanceof Error ? error.message : "Error al crear el producto";
+        error instanceof Error
+          ? error.message
+          : "Error al actualizar el producto";
 
       if (
         mensaje.toLowerCase().includes("unique") &&
@@ -212,28 +233,34 @@ export function CreateProductModal({
       } else {
         toast.error(mensaje);
       }
+    } finally {
+      onSubmittingChange(false);
     }
   };
 
   return (
-    <Modal
-      isOpen={isOpen}
-      maxWidth="lg"
-      onClose={onClose}
-      title="Nuevo Producto"
+    <form
+      id={FORM_ID["editar-producto"]}
+      noValidate
+      onSubmit={handleSubmit(onSubmit)}
     >
-      <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
-        {/* Fila 1 (dos columnas): Nombre y Marca */}
+      <HeaderMini
+        producto={producto}
+        titulo={ACCION_LABEL["editar-producto"]}
+        onBack={onCancel}
+      />
+      <div className="flex flex-col gap-4">
+        {/* Fila 1: Nombre y Marca */}
         <div className="grid grid-cols-2 gap-4">
           <div className="flex flex-col gap-1.5">
             <label
-              htmlFor="nombre"
+              htmlFor="edit-nombre"
               className="ml-1 text-xs font-semibold text-slate-700 dark:text-slate-300"
             >
               Nombre del producto <span className="text-red-500">*</span>
             </label>
             <CapitalizedInput
-              id="nombre"
+              id="edit-nombre"
               type="text"
               autoFocus
               disabled={isSubmitting}
@@ -261,14 +288,14 @@ export function CreateProductModal({
 
           <div className="flex flex-col gap-1.5">
             <label
-              htmlFor="marca"
+              htmlFor="edit-marca"
               className="ml-1 text-xs font-semibold text-slate-700 dark:text-slate-300"
             >
               Marca
             </label>
             <div ref={marcasRef} className="relative">
               <CapitalizedInput
-                id="marca"
+                id="edit-marca"
                 type="text"
                 disabled={isSubmitting}
                 placeholder="Ej. Dove, Nivea, L'Oréal"
@@ -330,21 +357,21 @@ export function CreateProductModal({
           </div>
         </div>
 
-        {/* Fila 2 (dos columnas): Variante / Detalle y Categoría */}
+        {/* Fila 2: Variante / Detalle y Categoría */}
         <div className="grid grid-cols-2 gap-4">
           <div className="flex flex-col gap-1.5">
             <label
-              htmlFor="variante"
+              htmlFor="edit-variante"
               className="ml-1 text-xs font-semibold text-slate-700 dark:text-slate-300"
             >
               Variante / Detalle
             </label>
             <CapitalizedInput
-              id="variante"
+              id="edit-variante"
               type="text"
               disabled={isSubmitting}
               placeholder="Ej. 500ml / Rojo"
-              value={valorVariante}
+              value={val.variante ?? ""}
               onClear={() =>
                 setValue("variante", "", { shouldValidate: true })
               }
@@ -390,29 +417,16 @@ export function CreateProductModal({
           </div>
         </div>
 
-        {/* Fila 3 (ancho completo): Código único (interno o de barra) */}
+        {/* Fila 3: Código */}
         <div className="flex flex-col gap-1.5">
-          <div className="flex items-center justify-between ml-1">
-            <label
-              htmlFor="codigo"
-              className="text-xs font-semibold text-slate-700 dark:text-slate-300"
-            >
-              Código (interno o de barra)
-            </label>
-            <Tooltip content="Generar código sugerido">
-              <button
-                type="button"
-                onClick={generarCodigoSugerido}
-                disabled={isSubmitting}
-                className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 cursor-pointer disabled:opacity-50"
-              >
-                <Sparkles className="h-3 w-3" />
-                <span>Autogenerar</span>
-              </button>
-            </Tooltip>
-          </div>
+          <label
+            htmlFor="edit-codigo"
+            className="ml-1 text-xs font-semibold text-slate-700 dark:text-slate-300"
+          >
+            Código (interno o de barra)
+          </label>
           <input
-            id="codigo"
+            id="edit-codigo"
             type="text"
             disabled={isSubmitting}
             placeholder="Ej. 111 o 7790012345678"
@@ -432,13 +446,12 @@ export function CreateProductModal({
           <FieldError error={errors.codigo?.message} />
         </div>
 
-        {/* Fila 4 (ancho completo): Tipo de Venta */}
+        {/* Fila 4: Tipo de Venta */}
         <div className="flex flex-col gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 dark:border-slate-700/60 dark:bg-slate-800/40">
           <Controller
             name="tipoVenta"
             control={control}
             rules={{ required: "Selecciona un tipo de venta" }}
-            
             render={({ field }) => (
               <OptionGroup
                 label="Tipo de venta"
@@ -453,50 +466,17 @@ export function CreateProductModal({
           <FieldError error={errors.tipoVenta?.message} />
         </div>
 
-        {/* Fila 5 (dos columnas): Precios (Costo y Venta) */}
+        {/* Fila 5: Precio de Venta y Stock Mínimo */}
         <div className="grid grid-cols-2 gap-3.5">
           <div className="flex flex-col gap-1.5">
             <label
-              htmlFor="costo"
-              className="ml-1 text-xs font-semibold text-slate-700 dark:text-slate-300"
-            >
-              Costo unitario ($) <span className="text-red-500">*</span>
-            </label>
-            <input
-              id="costo"
-              type="number"
-              step="0.01"
-              disabled={isSubmitting}
-              onWheel={(e) => e.currentTarget.blur()}
-              {...register("costo", {
-                required: "El costo es obligatorio",
-                validate: {
-                  numeroValido: (val) =>
-                    !Number.isNaN(Number(val)) ||
-                    "Debe ser un número válido",
-                  mayorQueCero: (val) =>
-                    Number(val) > 0 || "Debe ser mayor a 0",
-                },
-              })}
-              className={cn(
-                "h-10 w-full rounded-xl border bg-white px-3 text-sm text-slate-900 outline-none transition-all dark:bg-[#0B1120] dark:text-slate-100 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none",
-                errors.costo
-                  ? "border-red-500 focus:border-red-500 focus:ring-4 focus:ring-red-500/10"
-                  : "border-slate-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700/80",
-              )}
-            />
-            <FieldError error={errors.costo?.message} />
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <label
-              htmlFor="precioVenta"
+              htmlFor="edit-precioVenta"
               className="ml-1 text-xs font-semibold text-slate-700 dark:text-slate-300"
             >
               Precio de venta ($) <span className="text-red-500">*</span>
             </label>
             <input
-              id="precioVenta"
+              id="edit-precioVenta"
               type="number"
               step="0.01"
               disabled={isSubmitting}
@@ -520,52 +500,16 @@ export function CreateProductModal({
             />
             <FieldError error={errors.precioVenta?.message} />
           </div>
-        </div>
-
-        {/* Fila 6 (tres columnas): Stock Inicial, Stock Mínimo y Vencimiento */}
-        <div className="grid grid-cols-3 gap-3.5">
-          <div className="flex flex-col gap-1.5">
-            <label
-              htmlFor="stockActual"
-              className="ml-1 text-xs font-semibold text-slate-700 dark:text-slate-300"
-            >
-              Stock inicial <span className="text-red-500">*</span>
-            </label>
-            <input
-              id="stockActual"
-              type="number"
-              step="any"
-              disabled={isSubmitting}
-              onWheel={(e) => e.currentTarget.blur()}
-              {...register("stockActual", {
-                required: "El stock inicial es obligatorio",
-                validate: {
-                  numeroValido: (val) =>
-                    !Number.isNaN(Number(val)) ||
-                    "Debe ser un número válido",
-                  noNegativo: (val) =>
-                    Number(val) >= 0 || "No puede ser negativo",
-                },
-              })}
-              className={cn(
-                "h-10 w-full rounded-xl border bg-white px-3 text-sm text-slate-900 outline-none transition-all dark:bg-[#0B1120] dark:text-slate-100 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none",
-                errors.stockActual
-                  ? "border-red-500 focus:border-red-500 focus:ring-4 focus:ring-red-500/10"
-                  : "border-slate-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700/80",
-              )}
-            />
-            <FieldError error={errors.stockActual?.message} />
-          </div>
 
           <div className="flex flex-col gap-1.5">
             <label
-              htmlFor="stockMinimo"
+              htmlFor="edit-stockMinimo"
               className="ml-1 text-xs font-semibold text-slate-700 dark:text-slate-300"
             >
               Stock mínimo
             </label>
             <input
-              id="stockMinimo"
+              id="edit-stockMinimo"
               type="number"
               step="any"
               disabled={isSubmitting}
@@ -583,7 +527,7 @@ export function CreateProductModal({
                 },
               })}
               className={cn(
-                "h-10 w-full rounded-xl border bg-white px-3 text-sm text-slate-900 outline-none transition-all dark:bg-[#0B1120] dark:text-slate-100 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none",
+                "h-10 w-full rounded-xl border bg-white px-3 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 dark:bg-[#0B1120] dark:text-slate-100 dark:placeholder:text-slate-600 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none",
                 errors.stockMinimo
                   ? "border-red-500 focus:border-red-500 focus:ring-4 focus:ring-red-500/10"
                   : "border-slate-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700/80",
@@ -591,56 +535,8 @@ export function CreateProductModal({
             />
             <FieldError error={errors.stockMinimo?.message} />
           </div>
-
-          <div className="flex flex-col gap-1.5">
-            <label
-              htmlFor="vencimiento"
-              className="ml-1 text-xs font-semibold text-slate-700 dark:text-slate-300"
-            >
-              Vencimiento
-            </label>
-            <Controller
-              name="vencimiento"
-              control={control}
-              render={({ field, fieldState }) => (
-                <DateInput
-                  id="vencimiento"
-                  name={field.name}
-                  value={field.value}
-                  onChange={field.onChange}
-                  error={!!fieldState.error}
-                  disabled={isSubmitting}
-                  placement="top-end"
-                />
-              )}
-            />
-            <FieldError error={errors.vencimiento?.message} />
-          </div>
         </div>
-
-        {/* Acciones del formulario */}
-        <div className="mt-2 flex items-center justify-end gap-3 border-t border-slate-100 pt-4 dark:border-slate-800/60">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={isSubmitting}
-            className="cursor-pointer rounded-xl px-4 py-2 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-100 disabled:opacity-50 dark:text-slate-300 dark:hover:bg-slate-800"
-          >
-            Cancelar
-          </button>
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="flex min-w-[140px] cursor-pointer items-center justify-center rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-xs shadow-emerald-900/20 transition-all hover:bg-emerald-500 active:scale-95 disabled:opacity-70 disabled:active:scale-100"
-          >
-            {isSubmitting ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              "Guardar producto"
-            )}
-          </button>
-        </div>
-      </form>
-    </Modal>
+      </div>
+    </form>
   );
 }

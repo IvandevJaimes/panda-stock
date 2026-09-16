@@ -395,6 +395,10 @@ export function LotesModal({
           productoId={product.id}
           onClose={() => setQuickActionsLote(null)}
           onMutated={refreshData}
+          onConfirmarPerdida={(lote) => {
+            setQuickActionsLote(null);
+            setPerdidaSeleccion(lote);
+          }}
         />
       )}
 

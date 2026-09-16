@@ -3,16 +3,18 @@ import { toast } from "sonner";
 import { Button } from "../../../components/ui/Button";
 import { Modal } from "../../../components/ui/Modal";
 import { lotesService } from "../../../services/lotes.service";
-import { getLoteActivo } from "../loteHelpers";
-import type { Lote, Producto } from "../../../../electron/db/types";
+import { evaluateExpiry } from "../../../lib/dateUtils";
+import { esLoteVencido, getLoteActivo } from "../loteHelpers";
+import type { Categoria, Lote, Producto } from "../../../../electron/db/types";
+import { EditarProductoForm } from "./EditarProductoForm";
 import { AgregarInventarioForm } from "./AgregarInventarioForm";
-import { AjustarStockForm } from "./AjustarStockForm";
 import { EditarCodigoForm } from "./EditarCodigoForm";
 import { EditarVarianteForm } from "./EditarVarianteForm";
 import { ModificarPrecioForm } from "./ModificarPrecioForm";
 import { QuickActionsMenu } from "./QuickActionsMenu";
-import { RegistrarPerdidaForm } from "./RegistrarPerdidaForm";
 import { StockMinimoForm } from "./StockMinimoForm";
+import { AjustarStockLoteForm } from "../lote-actions/AjustarStockLoteForm";
+import { RegistrarPerdidaLoteForm } from "../lote-actions/RegistrarPerdidaLoteForm";
 import { FORM_ID, SUBMIT_LABEL, type QuickActionView } from "./types";
 
 export interface ProductQuickActionsModalProps {
@@ -20,10 +22,11 @@ export interface ProductQuickActionsModalProps {
   product: Producto | null;
   marcaNombre: string;
   categoriaNombre: string;
+  categorias: Categoria[];
   vistaInicial?: QuickActionView;
   onClose: () => void;
-  onFullEdit: () => void;
   onOpenLotes: () => void;
+  onConfirmarPerdida?: (producto: Producto, lote: Lote) => void;
   onSuccess?: () => void;
 }
 
@@ -32,15 +35,17 @@ export function ProductQuickActionsModal({
   product,
   marcaNombre,
   categoriaNombre,
+  categorias,
   vistaInicial = "menu",
   onClose,
-  onFullEdit,
   onOpenLotes,
+  onConfirmarPerdida,
   onSuccess,
 }: ProductQuickActionsModalProps) {
   const [lotes, setLotes] = useState<Lote[] | null>(null);
   const [vistaActual, setVistaActual] = useState<QuickActionView>(vistaInicial);
   const [submitting, setSubmitting] = useState(false);
+  const [puedeGuardar, setPuedeGuardar] = useState(false);
 
   useEffect(() => {
     if (!isOpen || !product) return;
@@ -66,13 +71,28 @@ export function ProductQuickActionsModal({
   const loteIdentidad = loteActivo
     ? (loteActivo.numeroLote ?? `Lote #${loteActivo.id}`)
     : null;
+  const loteActivoVencido = loteActivo
+    ? esLoteVencido(loteActivo.fechaVence)
+    : false;
+  const loteActivoPorVencer = loteActivo?.fechaVence
+    ? evaluateExpiry(loteActivo.fechaVence)?.status === "expiring_soon"
+    : false;
 
   const accionesConLoteRequerido: QuickActionView[] = [
     "ajustar-stock",
     "registrar-perdida",
   ];
 
+  const VISTAS_EDICION: QuickActionView[] = [
+    "precio-venta",
+    "editar-codigo",
+    "variante-detalle",
+    "stock-minimo",
+    "editar-producto",
+  ];
+
   const handleNavigate = (vista: QuickActionView) => {
+    setPuedeGuardar(false);
     if (!accionesConLoteRequerido.includes(vista)) {
       setVistaActual(vista);
       return;
@@ -91,6 +111,7 @@ export function ProductQuickActionsModal({
   const handleActionComplete = () => {
     setVistaActual("menu");
     setSubmitting(false);
+    setPuedeGuardar(false);
     if (onSuccess) onSuccess();
     else onClose();
   };
@@ -98,6 +119,7 @@ export function ProductQuickActionsModal({
   const handleClose = () => {
     setVistaActual("menu");
     setSubmitting(false);
+    setPuedeGuardar(false);
     onClose();
   };
 
@@ -119,8 +141,15 @@ export function ProductQuickActionsModal({
             loteIdentidad={loteIdentidad}
             lotesCargando={lotes === null}
             tieneLoteActivo={loteActivo !== null}
+            loteVencido={loteActivoVencido}
+            loteActivoPorVencer={loteActivoPorVencer}
+            loteFechaVence={loteActivo?.fechaVence ?? null}
             onNavigate={handleNavigate}
-            onFullEdit={onFullEdit}
+            onConfirmarPerdida={
+              loteActivoVencido && product && loteActivo
+                ? () => onConfirmarPerdida?.(product, loteActivo)
+                : undefined
+            }
             onOpenLotes={onOpenLotes}
           />
         )}
@@ -134,25 +163,28 @@ export function ProductQuickActionsModal({
           />
         )}
 
-        {vistaActual === "ajustar-stock" && (
-          <AjustarStockForm
-            producto={product}
+        {vistaActual === "ajustar-stock" && loteActivo && (
+          <AjustarStockLoteForm
             lote={loteActivo}
+            formId={FORM_ID["ajustar-stock"]}
+            esLoteActivo
+            onOpenLotes={onOpenLotes}
             onCancel={() => setVistaActual("menu")}
             onSuccess={handleActionComplete}
             onSubmittingChange={setSubmitting}
-            onOpenLotes={onOpenLotes}
           />
         )}
 
-        {vistaActual === "registrar-perdida" && (
-          <RegistrarPerdidaForm
-            producto={product}
+        {vistaActual === "registrar-perdida" && loteActivo && (
+          <RegistrarPerdidaLoteForm
             lote={loteActivo}
+            productoId={product.id}
+            formId={FORM_ID["registrar-perdida"]}
+            esLoteActivo
+            onOpenLotes={onOpenLotes}
             onCancel={() => setVistaActual("menu")}
             onSuccess={handleActionComplete}
             onSubmittingChange={setSubmitting}
-            onOpenLotes={onOpenLotes}
           />
         )}
 
@@ -163,6 +195,7 @@ export function ProductQuickActionsModal({
             onCancel={() => setVistaActual("menu")}
             onSuccess={handleActionComplete}
             onSubmittingChange={setSubmitting}
+            onCanSaveChange={setPuedeGuardar}
           />
         )}
 
@@ -173,6 +206,7 @@ export function ProductQuickActionsModal({
             onCancel={() => setVistaActual("menu")}
             onSuccess={handleActionComplete}
             onSubmittingChange={setSubmitting}
+            onCanSaveChange={setPuedeGuardar}
           />
         )}
 
@@ -183,6 +217,18 @@ export function ProductQuickActionsModal({
             onCancel={() => setVistaActual("menu")}
             onSuccess={handleActionComplete}
             onSubmittingChange={setSubmitting}
+            onCanSaveChange={setPuedeGuardar}
+          />
+        )}
+
+        {vistaActual === "editar-producto" && (
+          <EditarProductoForm
+            producto={product}
+            categorias={categorias}
+            onCancel={() => setVistaActual("menu")}
+            onSuccess={handleActionComplete}
+            onSubmittingChange={setSubmitting}
+            onCanSaveChange={setPuedeGuardar}
           />
         )}
 
@@ -193,6 +239,7 @@ export function ProductQuickActionsModal({
             onCancel={() => setVistaActual("menu")}
             onSuccess={handleActionComplete}
             onSubmittingChange={setSubmitting}
+            onCanSaveChange={setPuedeGuardar}
           />
         )}
       </div>
@@ -204,6 +251,7 @@ export function ProductQuickActionsModal({
             form={FORM_ID[vistaActual]}
             variant="primary"
             loading={submitting}
+            disabled={VISTAS_EDICION.includes(vistaActual) && !puedeGuardar}
           >
             {SUBMIT_LABEL[vistaActual]}
           </Button>

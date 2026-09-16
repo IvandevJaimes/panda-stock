@@ -1,8 +1,10 @@
-import { Controller, useForm, type DefaultValues } from "react-hook-form";
+import { Controller, useForm, useWatch, type DefaultValues } from "react-hook-form";
 import { toast } from "sonner";
+import { CapitalizedInput } from "../../../components/ui/CapitalizedInput";
 import { DateInput } from "../../../components/ui/DateInput";
 import { FieldError } from "../../../components/ui/FieldError";
 import { Input } from "../../../components/ui/Input";
+import { cn } from "../../../lib/cn";
 import { movimientosService } from "../../../services/movimientos.service";
 import type { Producto } from "../../../../electron/db/types";
 import { HeaderMini } from "./HeaderMini";
@@ -33,11 +35,14 @@ export function AgregarInventarioForm({ producto, onCancel, onSuccess, onSubmitt
   const {
     register,
     handleSubmit,
+    setValue,
     control,
     formState: { errors, isSubmitting },
   } = useForm<AgregarInventarioValues>({
     defaultValues: VALORES_INICIALES_AGREGAR,
   });
+
+  const motivo = useWatch({ control, name: "motivo" }) ?? "";
 
   const onSubmit = async (data: AgregarInventarioValues) => {
     onSubmittingChange(true);
@@ -94,7 +99,7 @@ export function AgregarInventarioForm({ producto, onCancel, onSuccess, onSubmitt
           label="Costo unitario (Vacío = costo del lote activo)"
           type="number"
           step="0.01"
-          min="0"
+          min="0.01"
           disabled={isSubmitting}
           error={errors.costoUnitario?.message}
           className={noSpinnersClass}
@@ -105,8 +110,10 @@ export function AgregarInventarioForm({ producto, onCancel, onSuccess, onSubmitt
                 val.trim() === "" ||
                 !Number.isNaN(Number(val)) ||
                 "Debe ser un número válido",
-              noNegativo: (val) =>
-                val.trim() === "" || Number(val) >= 0 || "No puede ser negativo",
+              mayorQueCero: (val) =>
+                val.trim() === "" ||
+                Number(val) > 0 ||
+                "Debe ser mayor a 0",
             },
           })}
         />
@@ -133,14 +140,29 @@ export function AgregarInventarioForm({ producto, onCancel, onSuccess, onSubmitt
           />
           <FieldError error={errors.fechaVencimiento?.message} />
         </div>
-        <Input
-          label="Motivo (Opcional)"
-          type="text"
-          disabled={isSubmitting}
-          error={errors.motivo?.message}
-          placeholder="Ej: Compra de mercadería"
-          {...register("motivo")}
-        />
+        <div className="flex flex-col gap-1.5">
+          <label
+            htmlFor="motivo"
+            className="ml-1 text-xs font-semibold text-slate-700 dark:text-slate-300"
+          >
+            Motivo (Opcional)
+          </label>
+          <CapitalizedInput
+            id="motivo"
+            type="text"
+            disabled={isSubmitting}
+            placeholder="Ej: Compra de mercadería"
+            value={motivo}
+            className={cn(
+              "border-slate-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700/80",
+              errors.motivo &&
+                "border-red-500 focus:border-red-500 focus:ring-4 focus:ring-red-500/10",
+            )}
+            onClear={() => setValue("motivo", "")}
+            {...register("motivo")}
+          />
+          <FieldError error={errors.motivo?.message} />
+        </div>
       </div>
     </form>
   );

@@ -1,4 +1,5 @@
-import { useForm } from "react-hook-form";
+import { useEffect } from "react";
+import { useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 import { Input } from "../../../components/ui/Input";
 import { lotesService } from "../../../services/lotes.service";
@@ -17,6 +18,7 @@ interface EditarCostoLoteFormProps {
   onCancel: () => void;
   onSuccess: () => void;
   onSubmittingChange: (submitting: boolean) => void;
+  onCanSaveChange?: (canSave: boolean) => void;
 }
 
 export function EditarCostoLoteForm({
@@ -24,14 +26,24 @@ export function EditarCostoLoteForm({
   onCancel,
   onSuccess,
   onSubmittingChange,
+  onCanSaveChange,
 }: EditarCostoLoteFormProps) {
   const {
     register,
     handleSubmit,
+    control,
     formState: { errors, isSubmitting },
   } = useForm<EditarCostoLoteValues>({
     defaultValues: { nuevoCosto: String(lote.costoUnitario) },
   });
+
+  const nuevoCosto = useWatch({ control, name: "nuevoCosto" }) ?? "";
+  const nuevoCostoNum = nuevoCosto !== "" ? Number(nuevoCosto) : NaN;
+
+  useEffect(() => {
+    const esValido = !Number.isNaN(nuevoCostoNum) && nuevoCostoNum > 0;
+    onCanSaveChange?.(esValido && nuevoCostoNum !== lote.costoUnitario);
+  }, [nuevoCostoNum, lote.costoUnitario, onCanSaveChange]);
 
   const onSubmit = async (data: EditarCostoLoteValues) => {
     onSubmittingChange(true);
@@ -69,7 +81,7 @@ export function EditarCostoLoteForm({
             label={`Costo actual: ${formatearPrecio(lote.costoUnitario)}`}
             type="number"
             step="0.01"
-            min="0"
+            min="0.01"
             autoFocus
             disabled={isSubmitting}
             error={errors.nuevoCosto?.message}
@@ -80,7 +92,7 @@ export function EditarCostoLoteForm({
               validate: {
                 numeroValido: (val) =>
                   !Number.isNaN(Number(val)) || "Debe ser un número válido",
-                noNegativo: (val) => Number(val) >= 0 || "No puede ser negativo",
+                mayorQueCero: (val) => Number(val) > 0 || "Debe ser mayor a 0",
               },
             })}
           />

@@ -4,6 +4,7 @@ import {
   DollarSign,
   Layers,
   Minus,
+  PackageX,
   Pencil,
   Plus,
   SlidersHorizontal,
@@ -11,9 +12,56 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { cn } from "../../../lib/cn";
+import { evaluateExpiry } from "../../../lib/dateUtils";
 import type { Producto } from "../../../../electron/db/types";
 import { formatearCodigo, formatearPrecio } from "./formatters";
+import { Tooltip } from "../../../components/ui/Tooltip";
 import type { QuickActionView } from "./types";
+
+type EstadoProducto =
+  | "expired"
+  | "out_of_stock"
+  | "low_stock"
+  | "expiring_soon"
+  | "normal";
+
+const estadoInfo: Record<
+  Exclude<EstadoProducto, "normal">,
+  { label: string; badge: string }
+> = {
+  expired: {
+    label: "Vencido",
+    badge:
+      "bg-red-100 text-red-700 dark:bg-red-950/70 dark:text-red-300 border border-red-200/90 dark:border-red-900/50",
+  },
+  out_of_stock: {
+    label: "Agotado",
+    badge:
+      "bg-red-100 text-red-700 dark:bg-red-950/70 dark:text-red-300 border border-red-200/90 dark:border-red-900/50",
+  },
+  low_stock: {
+    label: "Stock bajo",
+    badge:
+      "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-900/50",
+  },
+  expiring_soon: {
+    label: "Por vencer",
+    badge:
+      "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-900/50",
+  },
+};
+
+function derivarEstado(
+  producto: Producto,
+  loteVencido: boolean,
+  lotePorVencer: boolean,
+): EstadoProducto {
+  if (loteVencido) return "expired";
+  if (lotePorVencer) return "expiring_soon";
+  if (producto.stockActual <= 0) return "out_of_stock";
+  if (producto.stockActual < producto.stockMinimo) return "low_stock";
+  return "normal";
+}
 
 interface QuickActionsMenuProps {
   producto: Producto;
@@ -22,8 +70,11 @@ interface QuickActionsMenuProps {
   loteIdentidad: string | null;
   lotesCargando: boolean;
   tieneLoteActivo: boolean;
+  loteVencido: boolean;
+  loteActivoPorVencer: boolean;
+  loteFechaVence: string | null;
   onNavigate: (vista: QuickActionView) => void;
-  onFullEdit: () => void;
+  onConfirmarPerdida?: () => void;
   onOpenLotes: () => void;
 }
 
@@ -34,24 +85,55 @@ export function QuickActionsMenu({
   loteIdentidad,
   lotesCargando,
   tieneLoteActivo,
+  loteVencido,
+  loteActivoPorVencer,
+  loteFechaVence,
   onNavigate,
-  onFullEdit,
+  onConfirmarPerdida,
   onOpenLotes,
 }: QuickActionsMenuProps) {
   const precioMayoreo =
     producto.precioVenta > 0 ? producto.precioVenta * 0.9 : null;
   const loteIndisponible = lotesCargando || !tieneLoteActivo;
 
+  const estado = derivarEstado(producto, loteVencido, loteActivoPorVencer);
+  const infoEstado = estado !== "normal" ? estadoInfo[estado] : null;
+  const expiry = loteFechaVence ? evaluateExpiry(loteFechaVence) : null;
+  const esVencimientoBadge =
+    estado === "expired" || estado === "expiring_soon";
+
+  const badgeElement = infoEstado ? (
+    <span
+      className={cn(
+        "inline-flex shrink-0 items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide",
+        infoEstado.badge,
+      )}
+    >
+      {infoEstado.label}
+    </span>
+  ) : null;
+
   return (
     <>
       <div className="mb-4">
-        <h3 className="text-base font-bold text-slate-900 dark:text-white">
-          {producto.nombre}
+        <h3 className="flex flex-wrap items-center gap-2 text-base font-bold text-slate-900 dark:text-white">
+          <span>{producto.nombre}</span>
           {producto.variante && (
-            <span className="ml-1.5 font-normal text-slate-400 dark:text-slate-500">
+            <span className="ml-1 font-normal text-slate-400 dark:text-slate-500">
               · {producto.variante}
             </span>
           )}
+          {badgeElement &&
+            (esVencimientoBadge && expiry ? (
+              <Tooltip
+                content={`${expiry.formattedDate} • ${expiry.relativeText}`}
+                placement="top"
+              >
+                {badgeElement}
+              </Tooltip>
+            ) : (
+              badgeElement
+            ))}
         </h3>
         <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
           {marcaNombre && (
@@ -146,7 +228,11 @@ export function QuickActionsMenu({
         </button>
         <button
           type="button"
-          onClick={() => onNavigate("registrar-perdida")}
+          onClick={() =>
+            loteVencido
+              ? onConfirmarPerdida?.()
+              : onNavigate("registrar-perdida")
+          }
           aria-disabled={loteIndisponible}
           className={cn(
             "flex cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-red-600 px-2 py-2.5 text-xs font-semibold text-white shadow-sm transition-colors dark:bg-red-600",
@@ -155,8 +241,12 @@ export function QuickActionsMenu({
               : "hover:bg-red-500",
           )}
         >
-          <Minus className="h-3.5 w-3.5" aria-hidden />
-          Registrar pérdida
+          {loteVencido ? (
+            <PackageX className="h-3.5 w-3.5" aria-hidden />
+          ) : (
+            <Minus className="h-3.5 w-3.5" aria-hidden />
+          )}
+          {loteVencido ? "Confirmar pérdida" : "Registrar pérdida"}
         </button>
       </div>
 
@@ -241,7 +331,7 @@ export function QuickActionsMenu({
 
       <button
         type="button"
-        onClick={onFullEdit}
+        onClick={() => onNavigate("editar-producto")}
         className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
       >
         <Pencil className="h-4 w-4" aria-hidden />

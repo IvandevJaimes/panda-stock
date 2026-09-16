@@ -3,10 +3,12 @@ import {
   CalendarSync,
   ChevronRight,
   DollarSign,
-  MinusCircle,
+  Minus,
+  PackageX,
   SlidersHorizontal,
 } from "lucide-react";
 import { cn } from "../../../lib/cn";
+import { esLoteVencido } from "../loteHelpers";
 import { formatearFecha, formatearPrecio } from "../quick-actions/formatters";
 import type { Lote } from "../../../../electron/db/types";
 import type { LoteQuickView } from "./types";
@@ -14,13 +16,16 @@ import type { LoteQuickView } from "./types";
 interface LoteQuickActionsMenuProps {
   lote: Lote;
   onNavigate: (vista: LoteQuickView) => void;
+  onConfirmarPerdida?: () => void;
 }
 
 export function LoteQuickActionsMenu({
   lote,
   onNavigate,
+  onConfirmarPerdida,
 }: LoteQuickActionsMenuProps) {
   const loteIdentidad = lote.numeroLote ?? `Lote #${lote.id}`;
+  const loteVencido = esLoteVencido(lote.fechaVence);
 
   return (
     <>
@@ -68,11 +73,19 @@ export function LoteQuickActionsMenu({
         </button>
         <button
           type="button"
-          onClick={() => onNavigate("registrar-perdida")}
+          onClick={() =>
+            loteVencido
+              ? onConfirmarPerdida?.()
+              : onNavigate("registrar-perdida")
+          }
           className="flex cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-red-600 px-2 py-2.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-red-500 dark:bg-red-600 dark:hover:bg-red-500"
         >
-          <MinusCircle className="h-3.5 w-3.5" aria-hidden />
-          Registrar pérdida
+          {loteVencido ? (
+            <PackageX className="h-3.5 w-3.5" aria-hidden />
+          ) : (
+            <Minus className="h-3.5 w-3.5" aria-hidden />
+          )}
+          {loteVencido ? "Confirmar pérdida" : "Registrar pérdida"}
         </button>
       </div>
 
