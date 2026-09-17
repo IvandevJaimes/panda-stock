@@ -28,6 +28,7 @@ export interface ProductQuickActionsModalProps {
   onOpenLotes: () => void;
   onConfirmarPerdida?: (producto: Producto, lote: Lote) => void;
   onSuccess?: () => void;
+  onCategoriaCreada?: (categoria: Categoria) => void;
 }
 
 export function ProductQuickActionsModal({
@@ -41,6 +42,7 @@ export function ProductQuickActionsModal({
   onOpenLotes,
   onConfirmarPerdida,
   onSuccess,
+  onCategoriaCreada,
 }: ProductQuickActionsModalProps) {
   const [lotes, setLotes] = useState<Lote[] | null>(null);
   const [vistaActual, setVistaActual] = useState<QuickActionView>(vistaInicial);
@@ -229,6 +231,7 @@ export function ProductQuickActionsModal({
             onSuccess={handleActionComplete}
             onSubmittingChange={setSubmitting}
             onCanSaveChange={setPuedeGuardar}
+            onCategoriaCreada={onCategoriaCreada}
           />
         )}
 

@@ -1,5 +1,6 @@
 import * as React from "react";
 import { useEffect, useMemo } from "react";
+import { Sparkles, X } from "lucide-react";
 import {
   Controller,
   useForm,
@@ -8,6 +9,8 @@ import {
 import { toast } from "sonner";
 import { FieldError } from "../../../components/ui/FieldError";
 import { CapitalizedInput } from "../../../components/ui/CapitalizedInput";
+import { CreateCategoryModal } from "../../../components/inventory/CreateCategoryModal";
+import { Tooltip } from "../../../components/ui/Tooltip";
 import {
   CustomSelect,
   type SelectOption,
@@ -35,6 +38,7 @@ interface EditarProductoFormProps {
   onSuccess: () => void;
   onSubmittingChange: (submitting: boolean) => void;
   onCanSaveChange?: (canSave: boolean) => void;
+  onCategoriaCreada?: (categoria: Categoria) => void;
 }
 
 interface FormValues {
@@ -63,11 +67,13 @@ export function EditarProductoForm({
   onSuccess,
   onSubmittingChange,
   onCanSaveChange,
+  onCategoriaCreada,
 }: EditarProductoFormProps) {
   const [marcas, setMarcas] = React.useState<Marca[]>([]);
   const [marcaNombreActual, setMarcaNombreActual] = React.useState("");
   const [marcasDropdown, setMarcasDropdown] = React.useState(false);
   const marcasRef = React.useRef<HTMLDivElement>(null);
+  const [creandoCategoria, setCreandoCategoria] = React.useState(false);
 
   const {
     register,
@@ -137,6 +143,17 @@ export function EditarProductoForm({
   }, []);
 
   const val = useWatch({ control });
+
+  const generarCodigoSugerido = () => {
+    const codigoSugerido = String(Math.floor(1000 + Math.random() * 9000));
+    setValue("codigo", codigoSugerido, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+    toast.info(`Código sugerido: ${codigoSugerido}`);
+  };
+
+  const hayCodigo = Boolean(val.codigo?.trim());
 
   const hayCambios = useMemo(() => {
     const nombre = val.nombre?.trim() ?? "";
@@ -239,11 +256,12 @@ export function EditarProductoForm({
   };
 
   return (
-    <form
-      id={FORM_ID["editar-producto"]}
-      noValidate
-      onSubmit={handleSubmit(onSubmit)}
-    >
+    <>
+      <form
+        id={FORM_ID["editar-producto"]}
+        noValidate
+        onSubmit={handleSubmit(onSubmit)}
+      >
       <HeaderMini
         producto={producto}
         titulo={ACCION_LABEL["editar-producto"]}
@@ -410,6 +428,8 @@ export function EditarProductoForm({
                   placeholder="Seleccionar categoría..."
                   disabled={isSubmitting}
                   error={!!errors.categoriaId}
+                  footerLabel="Nueva categoría"
+                  onFooterClick={() => setCreandoCategoria(true)}
                 />
               )}
             />
@@ -419,30 +439,61 @@ export function EditarProductoForm({
 
         {/* Fila 3: Código */}
         <div className="flex flex-col gap-1.5">
-          <label
-            htmlFor="edit-codigo"
-            className="ml-1 text-xs font-semibold text-slate-700 dark:text-slate-300"
-          >
-            Código (interno o de barra)
-          </label>
-          <input
-            id="edit-codigo"
-            type="text"
-            disabled={isSubmitting}
-            placeholder="Ej. 111 o 7790012345678"
-            {...register("codigo", {
-              maxLength: {
-                value: 30,
-                message: "Máximo 30 caracteres",
-              },
-            })}
-            className={cn(
-              "h-10 w-full rounded-xl border bg-white px-3 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 dark:bg-[#0B1120] dark:text-slate-100 dark:placeholder:text-slate-600",
-              errors.codigo
-                ? "border-red-500 focus:border-red-500 focus:ring-4 focus:ring-red-500/10"
-                : "border-slate-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700/80",
+          <div className="flex items-center justify-between ml-1">
+            <label
+              htmlFor="edit-codigo"
+              className="text-xs font-semibold text-slate-700 dark:text-slate-300"
+            >
+              Código (interno o de barra)
+            </label>
+            <Tooltip content="Generar código sugerido">
+              <button
+                type="button"
+                onClick={generarCodigoSugerido}
+                disabled={isSubmitting}
+                className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 cursor-pointer disabled:opacity-50"
+              >
+                <Sparkles className="h-3 w-3" />
+                <span>Autogenerar</span>
+              </button>
+            </Tooltip>
+          </div>
+          <div className="relative w-full">
+            <input
+              id="edit-codigo"
+              type="text"
+              disabled={isSubmitting}
+              placeholder="Ej. 111 o 7790012345678"
+              {...register("codigo", {
+                maxLength: {
+                  value: 30,
+                  message: "Máximo 30 caracteres",
+                },
+              })}
+              className={cn(
+                "h-10 w-full rounded-xl border bg-white px-3 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 dark:bg-[#0B1120] dark:text-slate-100 dark:placeholder:text-slate-600",
+                hayCodigo && "pr-9",
+                errors.codigo
+                  ? "border-red-500 focus:border-red-500 focus:ring-4 focus:ring-red-500/10"
+                  : "border-slate-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700/80",
+              )}
+            />
+            {hayCodigo && (
+              <button
+                type="button"
+                onClick={() =>
+                  setValue("codigo", "", {
+                    shouldDirty: true,
+                    shouldValidate: true,
+                  })
+                }
+                aria-label="Limpiar campo"
+                className="absolute right-2 top-1/2 grid h-6 w-6 -translate-y-1/2 cursor-pointer place-items-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+              >
+                <X size={14} aria-hidden="true" />
+              </button>
             )}
-          />
+          </div>
           <FieldError error={errors.codigo?.message} />
         </div>
 
@@ -537,6 +588,20 @@ export function EditarProductoForm({
           </div>
         </div>
       </div>
-    </form>
+      </form>
+
+      <CreateCategoryModal
+        isOpen={creandoCategoria}
+        onClose={() => setCreandoCategoria(false)}
+        categories={categorias}
+        onSuccess={(nueva) => {
+          onCategoriaCreada?.(nueva);
+          setValue("categoriaId", nueva.id, {
+            shouldDirty: true,
+            shouldValidate: true,
+          });
+        }}
+      />
+    </>
   );
 }

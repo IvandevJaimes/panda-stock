@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { Modal } from "../../components/ui/Modal";
 import { FieldError } from "../../components/ui/FieldError";
 import { CapitalizedInput } from "../../components/ui/CapitalizedInput";
+import { CreateCategoryModal } from "../../components/inventory/CreateCategoryModal";
 import {
   CustomSelect,
   type SelectOption,
@@ -36,6 +37,7 @@ export interface CreateProductModalProps {
   onClose: () => void;
   onSuccess?: (nuevoProducto?: Producto) => void;
   categorias: Categoria[];
+  onCategoriaCreada?: (categoria: Categoria) => void;
 }
 
 export interface FormValues {
@@ -81,6 +83,7 @@ export function CreateProductModal({
   onClose,
   onSuccess,
   categorias,
+  onCategoriaCreada,
 }: CreateProductModalProps) {
   const {
     register,
@@ -93,6 +96,8 @@ export function CreateProductModal({
   } = useForm<FormValues>({
     defaultValues: VALORES_INICIALES,
   });
+
+  const [creandoCategoria, setCreandoCategoria] = React.useState(false);
 
   React.useEffect(() => {
     if (isOpen) reset(VALORES_INICIALES);
@@ -383,6 +388,8 @@ export function CreateProductModal({
                   placeholder="Seleccionar categoría..."
                   disabled={isSubmitting}
                   error={!!errors.categoriaId}
+                  footerLabel="Nueva categoría"
+                  onFooterClick={() => setCreandoCategoria(true)}
                 />
               )}
             />
@@ -641,6 +648,16 @@ export function CreateProductModal({
           </button>
         </div>
       </form>
+
+      <CreateCategoryModal
+        isOpen={creandoCategoria}
+        onClose={() => setCreandoCategoria(false)}
+        categories={categorias}
+        onSuccess={(nueva) => {
+          onCategoriaCreada?.(nueva);
+          setValue("categoriaId", nueva.id, { shouldValidate: true });
+        }}
+      />
     </Modal>
   );
 }

@@ -504,10 +504,14 @@ export function ProductDetailModal({
               <Dato etiqueta="Precio mayoreo" className="tabular-nums">
                 {precioMayoreo !== null ? formatearPrecio(precioMayoreo) : "—"}
               </Dato>
+              <Dato etiqueta="Valor del inventario">
+                {formatearPrecio(product.stockActual * (product.costo ?? 0))}
+              </Dato>
             </dl>
             <p className="mt-2 text-[11px] font-medium text-slate-400 dark:text-slate-500">
               Mayoreo derivado: 10% de descuento desde 3 unidades.
             </p>
+
           </section>
 
           {/* Sección 5: Auditoría */}

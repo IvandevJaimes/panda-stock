@@ -1,9 +1,11 @@
 import * as React from "react";
 import { createPortal } from "react-dom";
 import { CalendarIcon, ChevronLeft, ChevronRight } from "lucide-react";
-import { DayPicker } from "react-day-picker";
+import { DayPicker, type DropdownProps } from "react-day-picker";
 import { es } from "date-fns/locale";
 import { cn } from "../../lib/cn";
+import { Tooltip } from "./Tooltip";
+import { CustomSelect } from "./CustomSelect";
 
 export interface DateInputProps {
   value?: string | null;
@@ -15,6 +17,7 @@ export interface DateInputProps {
   id?: string;
   name?: string;
   placement?: "bottom-start" | "bottom-end" | "top-start" | "top-end";
+  monthYearSelects?: boolean;
 }
 
 interface PopoverCoords {
@@ -23,6 +26,12 @@ interface PopoverCoords {
   bottom?: number;
   left?: number;
 }
+
+// En react-day-picker el select de años genera opciones con value numérico
+// grande (los años), mientras que los meses usan values 0-11.
+const YEAR_OPTION_THRESHOLD = 1000;
+// Rango del desplegable de años: del año actual hasta +10 años al futuro.
+const YEAR_SELECT_MAX = new Date().getFullYear() + 10;
 
 /**
  * Calcula la posición del popover respecto al VIEWPORT (el popover se renderiza
@@ -128,6 +137,54 @@ function parseToDate(val: string): Date | undefined {
   return undefined;
 }
 
+function MonthYearSelect({
+  options,
+  value,
+  onChange,
+  disabled,
+}: DropdownProps) {
+  const normalizedValue: string | number | undefined =
+    typeof value === "string" || typeof value === "number" ? value : undefined;
+
+  // Solo acota la lista de AÑOS: desde el año actual hasta YEAR_SELECT_MAX.
+  // Los meses (values 0-11) y las opciones no numéricas quedan intactos.
+  const CURRENT_YEAR = new Date().getFullYear();
+  const optionsFiltradas = (options ?? []).filter((option) => {
+    const esOpcionDeAño =
+      typeof option.value === "number" && option.value >= YEAR_OPTION_THRESHOLD;
+    if (!esOpcionDeAño) return true;
+    return option.value >= CURRENT_YEAR && option.value <= YEAR_SELECT_MAX;
+  });
+
+  // Si el año activo quedó fuera del rango (p. ej. navegaste a un año pasado),
+  // se agrega como opción para no dejar el select huérfano.
+  const anioActivo = typeof normalizedValue === "number" ? normalizedValue : undefined;
+  const yaExiste = optionsFiltradas.some(
+    (option) => Number(option.value) === Number(anioActivo),
+  );
+  const optionsFinales =
+    anioActivo !== undefined && !yaExiste
+      ? [...optionsFiltradas, { value: anioActivo, label: String(anioActivo) }]
+      : optionsFiltradas;
+
+  return (
+    <CustomSelect
+      value={normalizedValue}
+      buttonClassName="h-8 rounded-lg px-2.5 text-xs"
+      onChange={(newValue: string | number) => {
+        onChange?.({
+          target: { value: String(newValue) },
+        } as React.ChangeEvent<HTMLSelectElement>);
+      }}
+      options={optionsFinales.map((option) => ({
+        value: option.value,
+        label: option.label,
+      }))}
+      disabled={disabled}
+    />
+  );
+}
+
 export const DateInput = React.forwardRef<HTMLInputElement, DateInputProps>(
   (
     {
@@ -140,6 +197,7 @@ export const DateInput = React.forwardRef<HTMLInputElement, DateInputProps>(
       id,
       name,
       placement = "bottom-start",
+      monthYearSelects = true,
     },
     ref,
   ) => {
@@ -335,21 +393,23 @@ export const DateInput = React.forwardRef<HTMLInputElement, DateInputProps>(
         />
 
         {/* Botón de apertura de calendario */}
-        <button
-          type="button"
-          tabIndex={-1}
-          disabled={disabled}
-          onClick={() => {
-            if (disabled) return;
-            const rect = internalInputRef.current?.getBoundingClientRect();
-            if (rect) setCoords(computePopoverCoords(rect, placement));
-            setIsOpen((prev) => !prev);
-          }}
-          aria-label="Abrir selector de fecha"
-          className="absolute right-2 top-1/2 -translate-y-1/2 cursor-pointer rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-slate-800 dark:hover:text-slate-300"
-        >
-          <CalendarIcon className="h-4 w-4 shrink-0" />
-        </button>
+        <Tooltip content="Abrir calendario" placement="top">
+          <button
+            type="button"
+            tabIndex={-1}
+            disabled={disabled}
+            onClick={() => {
+              if (disabled) return;
+              const rect = internalInputRef.current?.getBoundingClientRect();
+              if (rect) setCoords(computePopoverCoords(rect, placement));
+              setIsOpen((prev) => !prev);
+            }}
+            aria-label="Abrir selector de fecha"
+            className="absolute right-2 top-1/2 -translate-y-1/2 cursor-pointer rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+          >
+            <CalendarIcon className="h-4 w-4 shrink-0" />
+          </button>
+        </Tooltip>
 
         {/* Popover de Calendario: portal al body para escapar del clipping/overflow de los modales */}
         {isOpen &&
@@ -361,25 +421,29 @@ export const DateInput = React.forwardRef<HTMLInputElement, DateInputProps>(
               aria-modal="true"
               aria-label="Calendario de selección de fecha"
               style={coords as React.CSSProperties}
-              className="fixed z-[9999] min-w-[280px] animate-entry-up rounded-2xl border border-slate-200 bg-white p-3 shadow-xl dark:border-slate-800 dark:bg-[#0B1120]"
+              className="fixed z-[9999] min-w-[300px] animate-entry-up rounded-2xl border border-slate-200 bg-white p-3 shadow-xl dark:border-slate-800 dark:bg-[#0B1120]"
             >
               <DayPicker
                 mode="single"
                 selected={selectedDate}
+                defaultMonth={selectedDate}
                 onSelect={handleDaySelect}
                 locale={es}
+                captionLayout={monthYearSelects ? "dropdown" : undefined}
+                endMonth={new Date(YEAR_SELECT_MAX, 11, 31)}
                 classNames={{
                   root: "p-1 select-none",
                   months: "relative flex flex-col",
                   month: "space-y-2",
-                  month_caption: "flex justify-center items-center h-8 mb-1",
+                  month_caption: "flex justify-center items-center h-10 mb-1",
                   caption_label:
                     "text-sm font-semibold capitalize text-slate-800 dark:text-slate-100",
-                  nav: "absolute inset-x-0 z-10 flex h-8 items-center justify-between",
+                  dropdowns: "flex items-center justify-center gap-2",
+                  nav: "pointer-events-none absolute inset-x-0 z-10 flex h-10 items-center justify-between",
                   button_previous:
-                    "h-7 w-7 bg-transparent p-0 opacity-70 hover:opacity-100 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center cursor-pointer transition-colors",
+                    "pointer-events-auto h-7 w-7 bg-transparent p-0 opacity-70 hover:opacity-100 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center cursor-pointer transition-colors",
                   button_next:
-                    "h-7 w-7 bg-transparent p-0 opacity-70 hover:opacity-100 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center cursor-pointer transition-colors",
+                    "pointer-events-auto h-7 w-7 bg-transparent p-0 opacity-70 hover:opacity-100 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center cursor-pointer transition-colors",
                   month_grid: "w-full border-collapse",
                   weekdays: "flex justify-between mb-1",
                   weekday:
@@ -397,6 +461,8 @@ export const DateInput = React.forwardRef<HTMLInputElement, DateInputProps>(
                     ) : (
                       <ChevronRight className="h-4 w-4" />
                     ),
+                  MonthsDropdown: MonthYearSelect,
+                  YearsDropdown: MonthYearSelect,
                 }}
               />
             </div>,

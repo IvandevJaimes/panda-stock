@@ -752,6 +752,7 @@ export function InventoryPage() {
         onClose={() => setIsCreateProductOpen(false)}
         categorias={categories}
         onSuccess={() => void refreshProductos()}
+        onCategoriaCreada={addCategory}
       />
 
       {selectedProductForDetail && (
@@ -831,6 +832,7 @@ export function InventoryPage() {
             );
           });
         }}
+        onCategoriaCreada={addCategory}
         onOpenLotes={() => {
           if (productForQuickActions) {
             setProductForQuickActions(null);
