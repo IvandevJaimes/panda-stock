@@ -41,7 +41,7 @@ export function HeaderMini({ producto, titulo, onBack }: HeaderMiniProps) {
             <div className="truncate text-xs text-slate-500">
               Stock actual:{" "}
               <span className="font-semibold text-slate-700 dark:text-slate-300">
-                {producto.stockActual}
+                {producto.stockActual} und
               </span>{" "}
               | Código:{" "}
               <span className="font-mono">

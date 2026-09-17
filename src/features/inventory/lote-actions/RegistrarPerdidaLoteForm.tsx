@@ -96,7 +96,7 @@ export function RegistrarPerdidaLoteForm({
       />
       <div className="space-y-4">
         <Input
-          label={`Disponible para descontar: ${lote.cantidadActual}`}
+          label={`Disponible para descontar: ${lote.cantidadActual} und`}
           type="number"
           step="any"
           min="1"
@@ -113,7 +113,7 @@ export function RegistrarPerdidaLoteForm({
               minimo: (val) => Number(val) >= 1 || "Debe ser al menos 1",
               noMayorQueStock: (val) =>
                 Number(val) <= lote.cantidadActual ||
-                `No puede superar el stock del lote (${lote.cantidadActual})`,
+                `No puede superar el stock del lote (${lote.cantidadActual} und)`,
             },
           })}
         />

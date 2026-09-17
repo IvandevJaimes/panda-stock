@@ -15,10 +15,6 @@ import {
   CustomSelect,
   type SelectOption,
 } from "../../components/ui/CustomSelect";
-import {
-  OptionGroup,
-  type OptionGroupOption,
-} from "../../components/ui/OptionGroup";
 import { DateInput } from "../../components/ui/DateInput";
 import { MargenGananciaHint } from "../../components/ui/MargenGananciaHint";
 import { cn } from "../../lib/cn";
@@ -28,7 +24,6 @@ import type {
   Categoria,
   Marca,
   Producto,
-  TipoVenta,
   UnidadMedida,
 } from "../../../electron/db/types";
 import { Tooltip } from "../../components/ui/Tooltip";
@@ -47,7 +42,6 @@ export interface FormValues {
   codigo: string;
   categoriaId: number;
   marca: string;
-  tipoVenta: TipoVenta;
   unidadMedida: UnidadMedida;
   costo: string;
   precioVenta: string;
@@ -55,12 +49,6 @@ export interface FormValues {
   stockMinimo: string;
   vencimiento?: string;
 }
-
-const OPCIONES_TIPO_VENTA: OptionGroupOption<TipoVenta>[] = [
-  { value: "unidad", label: "Unidad" },
-  { value: "caja", label: "Caja" },
-  { value: "combo", label: "Combo" },
-];
 
 const SUGERENCIAS_LIMITE = 8;
 
@@ -70,7 +58,6 @@ const VALORES_INICIALES: DefaultValues<FormValues> = {
   codigo: "",
   categoriaId: 0,
   marca: "",
-  tipoVenta: "unidad",
   unidadMedida: "unidad",
   costo: "",
   precioVenta: "",
@@ -440,27 +427,6 @@ export function CreateProductModal({
             )}
           />
           <FieldError error={errors.codigo?.message} />
-        </div>
-
-        {/* Fila 4 (ancho completo): Tipo de Venta */}
-        <div className="flex flex-col gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 dark:border-slate-700/60 dark:bg-slate-800/40">
-          <Controller
-            name="tipoVenta"
-            control={control}
-            rules={{ required: "Selecciona un tipo de venta" }}
-            
-            render={({ field }) => (
-              <OptionGroup
-                label="Tipo de venta"
-                options={OPCIONES_TIPO_VENTA}
-                value={field.value}
-                onChange={(valor) => field.onChange(valor as TipoVenta)}
-                disabled={isSubmitting}
-                error={!!errors.tipoVenta}
-              />
-            )}
-          />
-          <FieldError error={errors.tipoVenta?.message} />
         </div>
 
         {/* Fila 5 (dos columnas): Precios (Costo y Venta) */}

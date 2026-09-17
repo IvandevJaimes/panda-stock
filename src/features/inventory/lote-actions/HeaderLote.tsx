@@ -44,7 +44,7 @@ export function HeaderLote({
             <div className="truncate text-xs text-slate-500">
               Stock en lote:{" "}
               <span className="font-semibold text-slate-700 dark:text-slate-300">
-                {lote.cantidadActual}
+                {lote.cantidadActual} und
               </span>{" "}
               | Costo:{" "}
               <span className="font-mono">

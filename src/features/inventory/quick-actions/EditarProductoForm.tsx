@@ -16,10 +16,6 @@ import {
   CustomSelect,
   type SelectOption,
 } from "../../../components/ui/CustomSelect";
-import {
-  OptionGroup,
-  type OptionGroupOption,
-} from "../../../components/ui/OptionGroup";
 import { cn } from "../../../lib/cn";
 import { productosService } from "../../../services/productos.service";
 import { marcasService } from "../../../services/marcas.service";
@@ -27,7 +23,6 @@ import type {
   Categoria,
   Marca,
   Producto,
-  TipoVenta,
 } from "../../../../electron/db/types";
 import { HeaderMini } from "./HeaderMini";
 import { ACCION_LABEL, FORM_ID } from "./types";
@@ -48,16 +43,9 @@ interface FormValues {
   codigo: string;
   categoriaId: number;
   marca: string;
-  tipoVenta: TipoVenta;
   precioVenta: string;
   stockMinimo: string;
 }
-
-const OPCIONES_TIPO_VENTA: OptionGroupOption<TipoVenta>[] = [
-  { value: "unidad", label: "Unidad" },
-  { value: "caja", label: "Caja" },
-  { value: "combo", label: "Combo" },
-];
 
 const SUGERENCIAS_LIMITE = 8;
 
@@ -90,7 +78,6 @@ export function EditarProductoForm({
       codigo: producto.codigoInterno ?? "",
       categoriaId: producto.categoriaId ?? 0,
       marca: "",
-      tipoVenta: producto.tipoVenta,
       precioVenta: String(producto.precioVenta),
       stockMinimo: String(producto.stockMinimo),
     },
@@ -162,7 +149,6 @@ export function EditarProductoForm({
     const categoriaId =
       Number(val.categoriaId) > 0 ? Number(val.categoriaId) : null;
     const marca = val.marca?.trim() || null;
-    const tipoVenta = val.tipoVenta;
     const precioVenta = Number(val.precioVenta) || 0;
     const stockMinimo =
       Math.max(0, Math.round(Number(val.stockMinimo) || 0));
@@ -185,7 +171,6 @@ export function EditarProductoForm({
       variante !== (producto.variante ?? null) ||
       categoriaId !== (producto.categoriaId ?? null) ||
       marca !== (marcaNombreActual || null) ||
-      tipoVenta !== producto.tipoVenta ||
       precioVenta !== producto.precioVenta ||
       stockMinimo !== producto.stockMinimo ||
       (codigoInterno ?? producto.codigoInterno) !==
@@ -213,7 +198,6 @@ export function EditarProductoForm({
         categoriaId:
           Number(data.categoriaId) > 0 ? Number(data.categoriaId) : null,
         marca: data.marca.trim() || null,
-        tipoVenta: data.tipoVenta,
         precioVenta: Number(data.precioVenta),
         stockMinimo: Math.max(0, Math.round(Number(data.stockMinimo) || 0)),
       };
@@ -496,26 +480,6 @@ export function EditarProductoForm({
             )}
           </div>
           <FieldError error={errors.codigo?.message} />
-        </div>
-
-        {/* Fila 4: Tipo de Venta */}
-        <div className="flex flex-col gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 dark:border-slate-700/60 dark:bg-slate-800/40">
-          <Controller
-            name="tipoVenta"
-            control={control}
-            rules={{ required: "Selecciona un tipo de venta" }}
-            render={({ field }) => (
-              <OptionGroup
-                label="Tipo de venta"
-                options={OPCIONES_TIPO_VENTA}
-                value={field.value}
-                onChange={(valor) => field.onChange(valor as TipoVenta)}
-                disabled={isSubmitting}
-                error={!!errors.tipoVenta}
-              />
-            )}
-          />
-          <FieldError error={errors.tipoVenta?.message} />
         </div>
 
         {/* Fila 5: Precio de Venta y Stock Mínimo */}

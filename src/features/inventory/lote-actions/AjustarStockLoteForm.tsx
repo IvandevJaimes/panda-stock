@@ -93,7 +93,7 @@ export function AjustarStockLoteForm({
       <div className="space-y-4">
         <div>
           <Input
-            label={`Stock actual en este lote: ${lote.cantidadActual}`}
+            label={`Stock actual en este lote: ${lote.cantidadActual} und`}
             type="number"
             step="any"
             min="0"

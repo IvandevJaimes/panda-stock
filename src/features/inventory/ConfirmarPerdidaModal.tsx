@@ -93,7 +93,7 @@ export function ConfirmarPerdidaModal({
               Stock a descontar
             </dt>
             <dd className="text-right font-semibold tabular-nums text-slate-800 dark:text-slate-100">
-              {lote.cantidadActual}
+              {lote.cantidadActual} und
             </dd>
             <dt className="text-slate-500 dark:text-slate-400">
               Costo unitario

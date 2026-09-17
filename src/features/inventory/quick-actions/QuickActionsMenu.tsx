@@ -10,6 +10,8 @@ import {
   SlidersHorizontal,
   Tags,
   AlertCircle,
+  TrendingDown,
+  TrendingUp,
 } from "lucide-react";
 import { cn } from "../../../lib/cn";
 import { evaluateExpiry } from "../../../lib/dateUtils";
@@ -92,9 +94,17 @@ export function QuickActionsMenu({
   onConfirmarPerdida,
   onOpenLotes,
 }: QuickActionsMenuProps) {
-  const precioMayoreo =
-    producto.precioVenta > 0 ? producto.precioVenta * 0.9 : null;
   const loteIndisponible = lotesCargando || !tieneLoteActivo;
+
+  const margenDelta = producto.precioVenta - producto.costo;
+  const esGanancia = margenDelta > 0;
+  const margenPorcentaje =
+    producto.costo > 0 ? (margenDelta / producto.costo) * 100 : null;
+  const margenTooltip = `Margen: ${
+    margenPorcentaje !== null
+      ? `${margenPorcentaje.toFixed(1).replace(/\.0$/, "")}%`
+      : "—"
+  } · ${margenDelta > 0 ? "+" : ""}$${margenDelta.toFixed(2)}`;
 
   const estado = derivarEstado(producto, loteVencido, loteActivoPorVencer);
   const infoEstado = estado !== "normal" ? estadoInfo[estado] : null;
@@ -162,16 +172,33 @@ export function QuickActionsMenu({
         </div>
 
         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-slate-100 pt-2 dark:border-slate-800">
-          <span className="text-xs font-medium text-slate-400 dark:text-slate-500">
-            Precio{" "}
-            <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-              {formatearPrecio(producto.precioVenta)}
-            </span>
-            {precioMayoreo !== null && (
-              <span className="ml-1 font-normal text-slate-400 dark:text-slate-500">
-                / {formatearPrecio(precioMayoreo)} mayoreo
+          <span className="inline-flex items-center gap-1 text-xs font-medium leading-none text-slate-400 dark:text-slate-500">
+            Precio
+            <Tooltip content={margenTooltip} placement="top">
+              <span className="inline-flex shrink-0 items-center gap-1 align-middle">
+                {esGanancia ? (
+                  <TrendingUp
+                    className="h-3 w-3 shrink-0 align-middle text-emerald-600 dark:text-emerald-400"
+                    aria-hidden
+                  />
+                ) : (
+                  <TrendingDown
+                    className="h-3 w-3 shrink-0 align-middle text-red-600 dark:text-red-400"
+                    aria-hidden
+                  />
+                )}
+                <span
+                  className={cn(
+                    "font-semibold leading-none",
+                    esGanancia
+                      ? "text-emerald-600 dark:text-emerald-400"
+                      : "text-red-600 dark:text-red-400",
+                  )}
+                >
+                  {formatearPrecio(producto.precioVenta)}
+                </span>
               </span>
-            )}
+            </Tooltip>
           </span>
           <span className="text-xs font-medium text-slate-400 dark:text-slate-500">
             Stock{" "}
@@ -185,7 +212,7 @@ export function QuickActionsMenu({
                     : "text-emerald-600 dark:text-emerald-400",
               )}
             >
-              {producto.stockActual}
+              {producto.stockActual} und
             </span>
           </span>
           <span className="text-xs font-medium text-slate-400 dark:text-slate-500">

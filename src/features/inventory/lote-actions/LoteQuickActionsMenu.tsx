@@ -44,7 +44,7 @@ export function LoteQuickActionsMenu({
                   : "text-emerald-600 dark:text-emerald-400",
               )}
             >
-              {lote.cantidadActual}
+              {lote.cantidadActual} und
             </span>
           </span>
           <span className="text-xs font-medium text-slate-400 dark:text-slate-500">

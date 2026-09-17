@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import {
   AlertTriangle,
+  ArrowDownLeft,
+  ArrowDownRight,
+  ArrowUpRight,
   Barcode,
   Boxes,
   CalendarDays,
@@ -10,11 +13,14 @@ import {
   History,
   Info,
   Layers,
+  Loader2,
   Package,
   PackageX,
   Pencil,
   Plus,
   QrCode,
+  RotateCcw,
+  ShoppingCart,
   Trash2,
   TrendingDown,
   TrendingUp,
@@ -23,9 +29,11 @@ import {
 } from "lucide-react";
 import { TabsModal, type TabsModalTab } from "../../components/ui/TabsModal";
 import { Button } from "../../components/ui/Button";
+import { EmptyStateCompact } from "../../components/ui/EmptyStateCompact";
 import { cn } from "../../lib/cn";
 import { evaluateExpiry } from "../../lib/dateUtils";
 import { lotesService } from "../../services/lotes.service";
+import { movimientosService } from "../../services/movimientos.service";
 import { ConfirmarPerdidaModal } from "./ConfirmarPerdidaModal";
 import {
   DETALLE_DIAS_VENCER,
@@ -36,7 +44,12 @@ import {
   relativeTextVencimiento,
   tintPanelLoteActivo,
 } from "./loteHelpers";
-import type { Lote, Producto, TipoVenta } from "../../../electron/db/types";
+import type {
+  Lote,
+  MovimientoStock,
+  Producto,
+  TipoMovimientoStock,
+} from "../../../electron/db/types";
 
 // Preparación para el historial de auditoría (kardex) de la sección Movimientos:
 // interface MovimientoDetalle {
@@ -62,10 +75,71 @@ export interface ProductDetailModalProps {
   onMutated?: () => void;
 }
 
-const TIPO_VENTA_LABEL: Record<TipoVenta, string> = {
-  unidad: "Por unidad",
-  caja: "Por caja",
-  combo: "Por combo",
+const MOVIMIENTO_CONFIG: Record<
+  TipoMovimientoStock,
+  {
+    label: string;
+    signo: 1 | -1;
+    icon: LucideIcon;
+    iconClases: string;
+    badgeClases: string;
+    cantidadClases: string;
+  }
+> = {
+  entrada: {
+    label: "Entrada",
+    signo: 1,
+    icon: ArrowDownLeft,
+    iconClases: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+    badgeClases:
+      "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300",
+    cantidadClases: "text-emerald-600 dark:text-emerald-400",
+  },
+  venta: {
+    label: "Venta",
+    signo: -1,
+    icon: ShoppingCart,
+    iconClases: "bg-sky-500/10 text-sky-600 dark:text-sky-400",
+    badgeClases:
+      "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900/50 dark:bg-sky-950/40 dark:text-sky-300",
+    cantidadClases: "text-sky-600 dark:text-sky-400",
+  },
+  ajuste_positivo: {
+    label: "Ajuste positivo",
+    signo: 1,
+    icon: ArrowUpRight,
+    iconClases: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+    badgeClases:
+      "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-300",
+    cantidadClases: "text-amber-600 dark:text-amber-400",
+  },
+  ajuste_negativo: {
+    label: "Ajuste negativo",
+    signo: -1,
+    icon: ArrowDownRight,
+    iconClases: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+    badgeClases:
+      "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-300",
+    cantidadClases: "text-amber-600 dark:text-amber-400",
+  },
+  merma: {
+    label: "Merma",
+    signo: -1,
+    icon: PackageX,
+    iconClases: "bg-red-500/10 text-red-600 dark:text-red-400",
+    badgeClases:
+      "border-red-200 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300",
+    cantidadClases: "text-red-600 dark:text-red-400",
+  },
+  devolucion: {
+    label: "Devolución",
+    signo: 1,
+    icon: RotateCcw,
+    iconClases: "bg-violet-500/10 text-violet-600 dark:text-violet-400",
+    badgeClases:
+      "border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-900/50 dark:bg-violet-950/40 dark:text-violet-300",
+    cantidadClases: "text-violet-600 dark:text-violet-400",
+  },
 };
 
 function formatearPrecio(valor: number): string {
@@ -194,9 +268,13 @@ export function ProductDetailModal({
 }: ProductDetailModalProps) {
   const [lotes, setLotes] = useState<Lote[] | null>(null);
   const [perdidaSeleccion, setPerdidaSeleccion] = useState<Lote | null>(null);
+  const [movimientos, setMovimientos] = useState<MovimientoStock[] | null>(
+    null,
+  );
 
-  // Los lotes se cargan al abrir el modal. null = cargando; los setState viven
-  // en callbacks asíncronos (.then/.catch), respetando react-hooks/set-state-in-effect.
+  // Los lotes y movimientos se cargan al abrir el modal. null = cargando; los
+  // setState viven en callbacks asíncronos (.then/.catch), respetando
+  // react-hooks/set-state-in-effect.
   useEffect(() => {
     if (!isOpen) return;
     let activo = true;
@@ -210,6 +288,17 @@ export function ProductDetailModal({
       .catch(() => {
         if (!activo) return;
         setLotes([]);
+      });
+
+    void movimientosService
+      .getAll({ productoId: product.id })
+      .then((data) => {
+        if (!activo) return;
+        setMovimientos(data);
+      })
+      .catch(() => {
+        if (!activo) return;
+        setMovimientos([]);
       });
 
     return () => {
@@ -254,6 +343,10 @@ export function ProductDetailModal({
       .getByProducto(product.id)
       .then(setLotes)
       .catch(() => setLotes([]));
+    void movimientosService
+      .getAll({ productoId: product.id })
+      .then(setMovimientos)
+      .catch(() => setMovimientos([]));
   };
 
   const pestanas: TabsModalTab[] = [
@@ -292,28 +385,27 @@ export function ProductDetailModal({
               <Dato etiqueta="Variante / Detalle">
                 {product.variante || "—"}
               </Dato>
-              <Dato etiqueta="Tipo de venta">
-                {TIPO_VENTA_LABEL[product.tipoVenta]}
-              </Dato>
             </dl>
           </section>
 
           {/* Sección 2: Identificación (detección automática del tipo de código) */}
-          <section className="py-4">
-            <SectionTitle icon={esCodigoBarras ? Barcode : QrCode}>
-              Identificación y códigos
-            </SectionTitle>
-            <div className="flex flex-col gap-1">
-              <Dato
-                etiqueta={
-                  esCodigoBarras ? "Código de barras" : "Código interno"
-                }
-                mono
-              >
-                {valorCodigo}
-              </Dato>
-            </div>
-          </section>
+          {(product.codigoInterno || product.codigosBarras) && (
+            <section className="py-4">
+              <SectionTitle icon={esCodigoBarras ? Barcode : QrCode}>
+                Identificación y códigos
+              </SectionTitle>
+              <div className="flex flex-col gap-1">
+                <Dato
+                  etiqueta={
+                    esCodigoBarras ? "Código de barras" : "Código interno"
+                  }
+                  mono
+                >
+                  {valorCodigo}
+                </Dato>
+              </div>
+            </section>
+          )}
 
           {/* Sección 3: Stock */}
           <section className="py-4">
@@ -327,7 +419,7 @@ export function ProductDetailModal({
                     "text-red-600 dark:text-red-400",
                 )}
               >
-                {product.stockActual}
+                {product.stockActual} und
               </Dato>
               <Dato etiqueta="Stock mínimo">
                 {product.stockMinimo > 0 ? product.stockMinimo : "Sin mínimo"}
@@ -377,10 +469,10 @@ export function ProductDetailModal({
                     </div>
                     <div className="min-w-0">
                       <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                        Lote activo
+Lote activo
                       </span>
-                      <span className="block truncate font-mono text-base font-bold tracking-wide text-slate-900 dark:text-white">
-                        {loteIdentidad}
+                      <span className="text-sm font-semibold tabular-nums text-slate-800 dark:text-slate-100">
+                        {loteActivo.cantidadActual} und
                       </span>
                     </div>
                   </div>
@@ -576,21 +668,104 @@ export function ProductDetailModal({
       label: "Movimientos",
       icon: History,
       content: (
-        <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-slate-200 bg-slate-50/40 p-10 text-center dark:border-slate-700/60 dark:bg-slate-900/20">
-          <div className="bg-slate-100 p-3 rounded-full dark:bg-slate-800/60">
-            <History
-              className="h-6 w-6 text-slate-400 dark:text-slate-500"
-              strokeWidth={1.75}
+        <>
+          {movimientos === null ? (
+            <div className="flex items-center justify-center gap-2 py-16 text-sm text-slate-400 dark:text-slate-500">
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              Cargando movimientos…
+            </div>
+          ) : movimientos.length === 0 ? (
+            <EmptyStateCompact
+              icon={
+                <History
+                  className="h-6 w-6"
+                  strokeWidth={1.75}
+                  aria-hidden
+                />
+              }
+              title="Sin movimientos"
+              description="Las entradas, salidas y ajustes manuales de stock de este producto se registrarán aquí automáticamente."
             />
-          </div>
-          <p className="text-sm font-medium text-slate-600 dark:text-slate-300">
-            Sin movimientos recientes
-          </p>
-          <p className="max-w-xs text-xs text-slate-400 dark:text-slate-500">
-            Las entradas, salidas y ajustes manuales de stock se registrarán
-            aquí automáticamente.
-          </p>
-        </div>
+          ) : (
+            <ul className="flex flex-col gap-2">
+              {movimientos.map((movimiento) => {
+                const config =
+                  MOVIMIENTO_CONFIG[movimiento.tipo] ??
+                  MOVIMIENTO_CONFIG.entrada;
+                const Icono = config.icon;
+                return (
+                  <li
+                    key={movimiento.id}
+                    className="flex items-center gap-3 rounded-xl border border-slate-200 px-3 py-2.5 dark:border-slate-800"
+                  >
+                    <div
+                      className={cn(
+                        "grid h-9 w-9 shrink-0 place-items-center rounded-lg",
+                        config.iconClases,
+                      )}
+                    >
+                      <Icono className="h-4 w-4" strokeWidth={2} aria-hidden />
+                    </div>
+
+                    {/* Izquierda: tipo + motivo */}
+                    <div className="flex min-w-0 flex-col items-start gap-0.5">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                        <span
+                          className={cn(
+                            "inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold",
+                            config.badgeClases,
+                          )}
+                        >
+                          {config.label}
+                        </span>
+                        {movimiento.loteId !== null && (
+                          <span className="text-[11px] font-medium text-slate-400 dark:text-slate-500">
+                            Lote #{movimiento.loteId}
+                          </span>
+                        )}
+                      </div>
+                      {movimiento.motivo && (
+                        <p className="truncate text-xs text-slate-500 dark:text-slate-400">
+                          {movimiento.motivo}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Centro: fecha */}
+                    <div className="flex-1 text-center">
+                      <span className="text-sm font-semibold tabular-nums text-slate-800 dark:text-slate-100">
+                        {formatearFechaHora(movimiento.fechaHora)}
+                      </span>
+                    </div>
+
+                    {/* Derecha: cantidad */}
+                    <div className="flex shrink-0 flex-col items-end gap-0.5">
+                      <span
+                        className={cn(
+                          "text-base font-bold tabular-nums",
+                          config.cantidadClases,
+                        )}
+                      >
+                        {config.signo === 1 ? "+" : "−"}
+                        {movimiento.cantidad}
+                        <span className="ml-0.5 text-xs font-medium">
+                          und
+                        </span>
+                      </span>
+                      {movimiento.stockAnterior !== null &&
+                        movimiento.stockPosterior !== null && (
+                          <span className="text-[10px] font-medium tabular-nums text-slate-400 dark:text-slate-500">
+                            {movimiento.stockAnterior} →{" "}
+                            {movimiento.stockPosterior}
+                          </span>
+                        )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </>
       ),
     },
   ];

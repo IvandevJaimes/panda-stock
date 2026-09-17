@@ -266,7 +266,10 @@ export function ProductCard({
                   : "text-slate-900 dark:text-slate-100",
             )}
           >
-            {stock}
+            {stock}{" "}
+            <span className="text-xs font-medium text-slate-400 dark:text-slate-500">
+              und
+            </span>
           </span>
           {minStock > 0 && (
             <div className="mt-0.5 h-1 w-10 overflow-hidden rounded-full bg-slate-200/80 dark:bg-slate-700/60">

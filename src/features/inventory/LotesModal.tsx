@@ -599,7 +599,7 @@ function LoteCard({
                 stockHealthIndicator(lote.cantidadActual, lote.cantidadInicial),
               )}
             >
-              {lote.cantidadActual}
+              {lote.cantidadActual} und
             </span>
           </div>
         )}
