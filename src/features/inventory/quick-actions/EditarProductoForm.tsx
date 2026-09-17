@@ -9,6 +9,7 @@ import {
 import { toast } from "sonner";
 import { FieldError } from "../../../components/ui/FieldError";
 import { CapitalizedInput } from "../../../components/ui/CapitalizedInput";
+import { MargenGananciaHint } from "../../../components/ui/MargenGananciaHint";
 import { CreateCategoryModal } from "../../../components/inventory/CreateCategoryModal";
 import { Tooltip } from "../../../components/ui/Tooltip";
 import {
@@ -548,6 +549,10 @@ export function EditarProductoForm({
                   ? "border-red-500 focus:border-red-500 focus:ring-4 focus:ring-red-500/10"
                   : "border-slate-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700/80",
               )}
+            />
+            <MargenGananciaHint
+              costo={producto.costo}
+              precio={Number(val.precioVenta) || 0}
             />
             <FieldError error={errors.precioVenta?.message} />
           </div>

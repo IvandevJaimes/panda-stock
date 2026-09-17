@@ -7,6 +7,8 @@ import {
   Pencil,
   Plus,
   Trash2,
+  TrendingDown,
+  TrendingUp,
 } from "lucide-react";
 import type { Producto } from "../../../electron/db/types";
 import { Tooltip } from "./Tooltip";
@@ -49,6 +51,7 @@ export interface ProductCardProps {
   onOpenLotes?: (producto: Producto) => void;
   onDeleteProduct?: (producto: Producto) => void;
   onOpenDetail?: () => void;
+  onEditPrice?: (producto: Producto) => void;
   onConfirmarPerdida?: () => void;
   onAgregarInventario?: () => void;
   className?: string;
@@ -86,6 +89,7 @@ export function ProductCard({
   onOpenLotes,
   onDeleteProduct,
   onOpenDetail,
+  onEditPrice,
   onConfirmarPerdida,
   onAgregarInventario,
   className,
@@ -120,6 +124,25 @@ export function ProductCard({
           codigo?.toLowerCase().includes(terminoConsulta.toLowerCase()),
         )
       : undefined;
+
+  // Margen derivado del costo: verde si hay ganancia, rojo si no.
+  const costo = producto?.costo ?? null;
+  const margenDelta =
+    costo !== null && price !== undefined ? price - costo : null;
+  const esGanancia = margenDelta !== null && margenDelta > 0;
+  const margenPorcentaje =
+    costo !== null && costo > 0 && margenDelta !== null
+      ? (margenDelta / costo) * 100
+      : null;
+
+  const margenTooltip =
+    margenDelta === null
+      ? ""
+      : `Margen: ${
+          margenPorcentaje !== null
+            ? `${margenPorcentaje.toFixed(1).replace(/\.0$/, "")}%`
+            : "—"
+        } · ${margenDelta > 0 ? "+" : ""}$${margenDelta.toFixed(2)}`;
 
   return (
     <div
@@ -170,9 +193,42 @@ export function ProductCard({
               </span>
             </span>
           )}
-          <span className="shrink-0 font-display text-[11px] font-semibold text-emerald-600 sm:text-xs dark:text-emerald-400">
-            ${price.toFixed(2)}
-          </span>
+          <Tooltip
+            content={margenTooltip}
+            placement="top"
+            disabled={margenDelta === null}
+          >
+            <span className="inline-flex shrink-0 items-center gap-1">
+                {margenDelta !== null &&
+                  (esGanancia ? (
+                    <TrendingUp
+                      className="h-3 w-3 text-emerald-600 dark:text-emerald-400"
+                      aria-hidden
+                    />
+                  ) : (
+                    <TrendingDown
+                      className="h-3 w-3 text-red-600 dark:text-red-400"
+                      aria-hidden
+                    />
+                  ))}
+                <button
+                  type="button"
+                  aria-label={`Editar precio de ${name}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (producto) onEditPrice?.(producto);
+                  }}
+                  className={cn(
+                    "cursor-pointer select-none rounded px-0.5 font-display text-[11px] font-semibold transition-colors hover:underline sm:text-xs",
+                    esGanancia || margenDelta === null
+                      ? "text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300"
+                      : "text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300",
+                  )}
+                >
+                  ${price.toFixed(2)}
+                </button>
+              </span>
+          </Tooltip>
         </div>
         <div className="mt-0.5 min-w-0">
           <TruncatedText

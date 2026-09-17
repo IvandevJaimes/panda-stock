@@ -662,6 +662,11 @@ export function InventoryPage() {
                   );
                   if (detalle) setSelectedProductForDetail(detalle);
                 }}
+                onEditPrice={
+                  raw
+                    ? (p) => abrirAccionesRapidas(p, "precio-venta")
+                    : undefined
+                }
                 onConfirmarPerdida={
                   producto.status === "vencido" && producto.stock > 0
                     ? () => {

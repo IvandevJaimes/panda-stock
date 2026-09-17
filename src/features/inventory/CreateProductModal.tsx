@@ -20,6 +20,7 @@ import {
   type OptionGroupOption,
 } from "../../components/ui/OptionGroup";
 import { DateInput } from "../../components/ui/DateInput";
+import { MargenGananciaHint } from "../../components/ui/MargenGananciaHint";
 import { cn } from "../../lib/cn";
 import { productosService } from "../../services/productos.service";
 import { marcasService } from "../../services/marcas.service";
@@ -108,6 +109,8 @@ export function CreateProductModal({
   const marcasRef = React.useRef<HTMLDivElement>(null);
   const valorMarca = useWatch({ control, name: "marca" }) ?? "";
   const valorVariante = useWatch({ control, name: "variante" }) ?? "";
+  const valorCosto = useWatch({ control, name: "costo" }) ?? "";
+  const valorPrecioVenta = useWatch({ control, name: "precioVenta" }) ?? "";
 
   const marcasSugeridas = React.useMemo(() => {
     if (!marcasDropdown) return [];
@@ -223,7 +226,7 @@ export function CreateProductModal({
   return (
     <Modal
       isOpen={isOpen}
-      maxWidth="lg"
+      maxWidth="2xl"
       onClose={onClose}
       title="Nuevo Producto"
     >
@@ -524,6 +527,10 @@ export function CreateProductModal({
                   ? "border-red-500 focus:border-red-500 focus:ring-4 focus:ring-red-500/10"
                   : "border-slate-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700/80",
               )}
+            />
+            <MargenGananciaHint
+              costo={Number(valorCosto) || 0}
+              precio={Number(valorPrecioVenta) || 0}
             />
             <FieldError error={errors.precioVenta?.message} />
           </div>

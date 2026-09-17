@@ -16,6 +16,8 @@ import {
   Plus,
   QrCode,
   Trash2,
+  TrendingDown,
+  TrendingUp,
   XCircle,
   type LucideIcon,
 } from "lucide-react";
@@ -224,6 +226,12 @@ export function ProductDetailModal({
     .filter(Boolean);
   const precioMayoreo =
     product.precioVenta > 0 ? product.precioVenta * 0.9 : null;
+  const margenDelta = product.precioVenta - (product.costo ?? 0);
+  const margenPorcentaje =
+    (product.costo ?? 0) > 0
+      ? (margenDelta / (product.costo ?? 0)) * 100
+      : null;
+  const margenEsGanancia = margenDelta > 0;
   const esCodigoBarras = /^\d{8,14}$/.test(
     product.codigoInterno || product.codigosBarras || "",
   );
@@ -497,7 +505,12 @@ export function ProductDetailModal({
               </Dato>
               <Dato
                 etiqueta="Precio de venta"
-                className="text-base font-bold text-emerald-600 dark:text-emerald-400"
+                className={cn(
+                  "text-base font-bold",
+                  margenEsGanancia
+                    ? "text-emerald-600 dark:text-emerald-400"
+                    : "text-red-600 dark:text-red-400",
+                )}
               >
                 {formatearPrecio(product.precioVenta)}
               </Dato>
@@ -506,6 +519,35 @@ export function ProductDetailModal({
               </Dato>
               <Dato etiqueta="Valor del inventario">
                 {formatearPrecio(product.stockActual * (product.costo ?? 0))}
+              </Dato>
+              <Dato
+                etiqueta="Margen de ganancia"
+                className={cn(
+                  "tabular-nums",
+                  margenEsGanancia
+                    ? "text-emerald-600 dark:text-emerald-400"
+                    : "text-red-600 dark:text-red-400",
+                )}
+              >
+                <span className="inline-flex items-center gap-1">
+                  {margenEsGanancia ? (
+                    <TrendingUp
+                      className="h-3.5 w-3.5 shrink-0 text-emerald-500 dark:text-emerald-400"
+                      aria-hidden
+                    />
+                  ) : (
+                    <TrendingDown
+                      className="h-3.5 w-3.5 shrink-0 text-red-500 dark:text-red-400"
+                      aria-hidden
+                    />
+                  )}
+                  {margenPorcentaje !== null
+                    ? `${margenPorcentaje.toFixed(1).replace(/\.0$/, "")}%`
+                    : "—"}
+                  {" · "}
+                  {margenDelta > 0 ? "+" : ""}
+                  {formatearPrecio(margenDelta)}
+                </span>
               </Dato>
             </dl>
             <p className="mt-2 text-[11px] font-medium text-slate-400 dark:text-slate-500">

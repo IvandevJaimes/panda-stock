@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 import { Input } from "../../../components/ui/Input";
+import { MargenGananciaHint } from "../../../components/ui/MargenGananciaHint";
 import { productosService } from "../../../services/productos.service";
 import type { Producto } from "../../../../electron/db/types";
 import { HeaderMini } from "./HeaderMini";
@@ -86,12 +87,18 @@ export function ModificarPrecioForm({ producto, precioInicial, onCancel, onSucce
             })}
           />
           {precioValido && (
-            <p className="mt-1.5 text-xs text-slate-500">
-              Mayoreo proyectado (-10%):{" "}
-              <span className="font-semibold text-slate-700 dark:text-slate-300">
-                {formatearPrecio(nuevoPrecioNum * 0.9)}
-              </span>
-            </p>
+            <>
+              <p className="mt-1.5 text-xs text-slate-500">
+                Mayoreo proyectado (-10%):{" "}
+                <span className="font-semibold text-slate-700 dark:text-slate-300">
+                  {formatearPrecio(nuevoPrecioNum * 0.9)}
+                </span>
+              </p>
+              <MargenGananciaHint
+                costo={producto.costo}
+                precio={nuevoPrecioNum}
+              />
+            </>
           )}
         </div>
       </div>
