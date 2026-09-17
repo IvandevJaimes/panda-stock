@@ -23,6 +23,7 @@ import {
   lotes,
   marcas,
   movimientosStock,
+  negocio,
   pagos,
   productos,
   seguridadReportes,
@@ -43,6 +44,8 @@ import type {
   Lote,
   Marca,
   MovimientoStock,
+  Negocio,
+  NegocioInput,
   NuevoEmpleado,
   NuevoLote,
   Producto,
@@ -77,6 +80,66 @@ export function changePin(pinActual: string, pinNuevo: string): boolean {
     .run()
 
   return true
+}
+
+export function getNegocio(): Negocio | null {
+  const fila = getDb()
+    .select({
+      id: negocio.id,
+      nombre: negocio.nombre,
+      logoPath: negocio.logoPath,
+      actualizadoEn: negocio.actualizadoEn,
+    })
+    .from(negocio)
+    .where(eq(negocio.id, 1))
+    .get()
+
+  return fila ?? null
+}
+
+export function updateNegocio(data: NegocioInput): Negocio {
+  const db = getDb()
+  const set: Record<string, unknown> = { actualizadoEn: new Date().toISOString() }
+
+  if (data.nombre !== undefined) set.nombre = (data.nombre as string | null | undefined)?.trim() ?? null
+  if (data.logoPath !== undefined) set.logoPath = (data.logoPath as string | null | undefined) ?? null
+  if (data.password !== undefined && data.password) set.passwordHash = sha256(data.password)
+
+  const existe = db
+    .select({ id: negocio.id })
+    .from(negocio)
+    .where(eq(negocio.id, 1))
+    .get()
+
+  if (!existe) {
+    db.insert(negocio)
+      .values({
+        id: 1,
+        nombre: (data.nombre as string | null | undefined)?.trim() ?? null,
+        logoPath: (data.logoPath as string | null | undefined) ?? null,
+        passwordHash: data.password ? sha256(data.password) : null,
+        actualizadoEn: new Date().toISOString(),
+      })
+      .run()
+  } else {
+    db.update(negocio).set(set).where(eq(negocio.id, 1)).run()
+  }
+
+  const publico = getDb()
+    .select({
+      id: negocio.id,
+      nombre: negocio.nombre,
+      logoPath: negocio.logoPath,
+      actualizadoEn: negocio.actualizadoEn,
+    })
+    .from(negocio)
+    .where(eq(negocio.id, 1))
+    .get()
+
+  if (!publico) {
+    throw new Error("No se pudo guardar la informacion del negocio")
+  }
+  return publico
 }
 
 export function getEmpleados(): Empleado[] {
@@ -301,6 +364,7 @@ function mapNuevoProducto(data: Record<string, unknown>) {
     stockActual: stockInicial >= 0 ? stockInicial : 0,
     stockMinimo: Number(data.stockMinimo ?? 0),
     vencimiento: (data.vencimiento as string | null | undefined) ?? null,
+    imgPath: (data.imgPath as string | null | undefined) ?? null,
     activo: true,
     creadoEn: ahora,
   }
@@ -379,6 +443,7 @@ export function updateProducto(id: number, data: Record<string, unknown>): Produ
   if (data.precioVenta !== undefined) set.precioVenta = data.precioVenta
   if (data.stockMinimo !== undefined) set.stockMinimo = data.stockMinimo
   if (data.vencimiento !== undefined) set.vencimiento = (data.vencimiento as string | null | undefined) ?? null
+  if (data.imgPath !== undefined) set.imgPath = (data.imgPath as string | null | undefined) ?? null
 
   const fila = db.update(productos).set(set).where(eq(productos.id, id)).returning().get()
   if (!fila) throw new Error('Producto no encontrado')

@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS "productos" (
 	"stock_actual" real DEFAULT 0 NOT NULL,
 	"stock_minimo" real DEFAULT 0 NOT NULL,
 	"vencimiento" text,
+	"img_path" text,
 	"activo" integer DEFAULT true NOT NULL,
 	"creado_en" text NOT NULL,
 	"actualizado_en" text,
@@ -139,5 +140,13 @@ CREATE INDEX IF NOT EXISTS "movimientos_stock_producto_id_idx" ON "movimientos_s
 CREATE TABLE IF NOT EXISTS "seguridad_reportes" (
 	"id" integer PRIMARY KEY NOT NULL,
 	"pin_hash" text NOT NULL,
+	"actualizado_en" text NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS "negocio" (
+	"id" integer PRIMARY KEY NOT NULL,
+	"nombre" text,
+	"logo_path" text,
+	"password_hash" text,
 	"actualizado_en" text NOT NULL
 );

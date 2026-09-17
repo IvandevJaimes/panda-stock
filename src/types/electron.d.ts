@@ -14,6 +14,8 @@ import type {
   Lote,
   Marca,
   MovimientoStock,
+  Negocio,
+  NegocioInput,
   NuevoEmpleado,
   NuevoLote,
   Producto,
@@ -34,6 +36,10 @@ declare global {
       seguridad: {
         verifyPin: (pin: string) => Promise<boolean>
         changePin: (pinActual: string, pinNuevo: string) => Promise<boolean>
+      }
+      negocio: {
+        get: () => Promise<Negocio | null>
+        update: (data: NegocioInput) => Promise<Negocio>
       }
       empleados: {
         getAll: () => Promise<Empleado[]>

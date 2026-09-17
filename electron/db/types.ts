@@ -7,6 +7,19 @@ export type TipoTarifa = 'minorista' | 'mayoreo'
 export type TipoMovimientoStock = 'entrada' | 'venta' | 'ajuste_positivo' | 'ajuste_negativo' | 'merma' | 'devolucion'
 export type TipoAjusteStock = 'ajuste_positivo' | 'ajuste_negativo' | 'merma'
 
+export type Negocio = {
+  id: number
+  nombre: string | null
+  logoPath: string | null
+  actualizadoEn: string
+}
+
+export type NegocioInput = {
+  nombre?: string | null
+  logoPath?: string | null
+  password?: string
+}
+
 export type Empleado = {
   id: number
   nombre: string
@@ -67,6 +80,7 @@ export type Producto = {
   stockActual: number
   stockMinimo: number
   vencimiento: string | null
+  imgPath: string | null
   activo: boolean
   creadoEn: string
   actualizadoEn: string | null
@@ -87,6 +101,7 @@ export type NuevoProducto = {
   stockActual?: number
   stockMinimo?: number
   vencimiento?: string | null
+  imgPath?: string | null
 }
 
 export type Lote = {

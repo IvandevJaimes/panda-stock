@@ -31,6 +31,7 @@ import {
   getMovimientosStock,
   getProductoById,
   getProductos,
+  getNegocio,
   getReportesSummary,
   getVentaDetalle,
   getVentas,
@@ -43,6 +44,7 @@ import {
   updateProducto,
   updateLote,
   deleteLote,
+  updateNegocio,
   verifyPin,
 } from "./db/repository.ts";
 import type {
@@ -53,6 +55,7 @@ import type {
   FiltrosProducto,
   FiltrosReportes,
   FiltrosVentas,
+  NegocioInput,
   NuevoEmpleado,
   NuevoLote,
   VentaCompletaInput,
@@ -104,6 +107,11 @@ function registerIpcHandlers() {
     "seguridad:change-pin",
     (_event, pinActual: string, pinNuevo: string) =>
       changePin(pinActual, pinNuevo),
+  );
+
+  ipcMain.handle("negocio:get", () => getNegocio());
+  ipcMain.handle("negocio:update", (_event, data: NegocioInput) =>
+    updateNegocio(data),
   );
 
   ipcMain.handle("empleados:get-all", () => getEmpleados());

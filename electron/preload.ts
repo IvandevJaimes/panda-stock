@@ -10,6 +10,7 @@ import type {
   FiltrosVentas,
   NuevoEmpleado,
   NuevoLote,
+  NegocioInput,
   VentaCompletaInput,
 } from "./db/types.ts";
 
@@ -27,6 +28,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
     verifyPin: (pin: string) => ipcRenderer.invoke("seguridad:verify-pin", pin),
     changePin: (pinActual: string, pinNuevo: string) =>
       ipcRenderer.invoke("seguridad:change-pin", pinActual, pinNuevo),
+  },
+  negocio: {
+    get: () => ipcRenderer.invoke("negocio:get"),
+    update: (data: NegocioInput) => ipcRenderer.invoke("negocio:update", data),
   },
   empleados: {
     getAll: () => ipcRenderer.invoke("empleados:get-all"),

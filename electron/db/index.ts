@@ -60,4 +60,17 @@ export function initDatabase(): void {
       .values({ id: 1, pinHash: sha256('1234'), actualizadoEn: ahora })
       .run()
   }
+
+  const negocioExistente = database
+    .select({ id: schema.negocio.id })
+    .from(schema.negocio)
+    .where(eq(schema.negocio.id, 1))
+    .get()
+
+  if (!negocioExistente) {
+    database
+      .insert(schema.negocio)
+      .values({ id: 1, nombre: null, logoPath: null, passwordHash: null, actualizadoEn: ahora })
+      .run()
+  }
 }
