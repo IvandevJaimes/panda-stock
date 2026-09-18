@@ -1,53 +1,142 @@
-import { useEffect, type ReactNode } from 'react'
-import { X } from 'lucide-react'
+import { useEffect, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { X } from "lucide-react";
+import { cn } from "../../lib/cn";
 
-type ModalProps = {
-  open: boolean
-  onClose: () => void
-  title?: string
-  children: ReactNode
+export interface ModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  title?: string;
+  subtitle?: string;
+  headerIcon?: ReactNode;
+  children: ReactNode;
+  className?: string;
+  maxWidth?: "sm" | "md" | "lg" | "xl" | "2xl";
+  /** Altura fija del modal (ej: "h-[70vh]"). Con tiempo, el contenido scrollea internamente. */
+  height?: string;
+  /** Barra inferior fija. El contenido scrollea entre cabecera y footer. */
+  footer?: ReactNode;
 }
 
-export function Modal({ open, onClose, title, children }: ModalProps) {
+const maxWidthClasses = {
+  sm: "max-w-sm",
+  md: "max-w-md",
+  lg: "max-w-lg",
+  xl: "max-w-xl",
+  "2xl": "max-w-2xl",
+} as const;
+
+export function Modal({
+  isOpen,
+  onClose,
+  title,
+  subtitle,
+  headerIcon,
+  children,
+  className,
+  maxWidth = "md",
+  height,
+  footer,
+}: ModalProps) {
   useEffect(() => {
-    if (!open) return
+    if (!isOpen) return;
+
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === "Escape") onClose();
+    };
+
+    // 1. Fallback estándar para el body
+    document.body.classList.add("overflow-hidden");
+
+    // 2. Congelar el contenedor interno real del layout
+    const scrollContainer = document.getElementById("main-layout-scroll");
+    if (scrollContainer) {
+      scrollContainer.classList.add("!overflow-hidden");
     }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [open, onClose])
 
-  if (!open) return null
+    document.addEventListener("keydown", onKey);
 
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      role="dialog"
-      aria-modal="true"
-    >
+    return () => {
+      document.body.classList.remove("overflow-hidden");
+      if (scrollContainer) {
+        scrollContainer.classList.remove("!overflow-hidden");
+      }
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [isOpen, onClose]);
+
+  if (!isOpen) return null;
+
+  // createPortal hacia document.body: el modal queda fuera del árbol de la vista,
+  // así ningún contenedor con transform/filter/overflow puede desfasar su layout.
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex overflow-y-auto p-4 sm:p-6">
+      {/* Overlay: fixed inset-0, anclado al viewport visible sin importar el scroll */}
       <div
-        className="absolute inset-0 bg-black/50"
+        className="fixed inset-0 bg-black/60 backdrop-blur-xs animate-entry-fade"
         onClick={onClose}
         aria-hidden="true"
       />
-      <div className="relative w-full max-w-lg rounded-lg border border-gray-200 bg-white p-6 shadow-lg dark:border-gray-800 dark:bg-gray-900">
-        <div className="mb-4 flex items-center justify-between">
+
+      {/* Contenedor del Modal: m-auto centra y evita clipping si el contenido supera el viewport */}
+      <div
+        className={cn(
+          "relative m-auto w-full flex max-h-[90vh] flex-col rounded-2xl border border-slate-200 bg-white shadow-xl dark:border-slate-800 dark:bg-[#111827] animate-entry-up",
+          maxWidthClasses[maxWidth],
+          height,
+          className,
+        )}
+        role="dialog"
+        aria-modal="true"
+      >
+        {/* Cabecera */}
+        <div className="flex shrink-0 items-center border-b border-slate-100 px-6 py-4 dark:border-slate-800/60">
           {title && (
-            <h3 className="font-display text-lg font-semibold text-gray-900 dark:text-gray-50">
-              {title}
-            </h3>
+            <div className="flex min-w-0 items-center gap-2.5">
+              {headerIcon && (
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                  {headerIcon}
+                </span>
+              )}
+              <div className="min-w-0">
+                <h2 className="truncate font-display text-lg font-semibold text-slate-900 dark:text-white">
+                  {title}
+                </h2>
+                {subtitle && (
+                  <p className="mt-0.5 truncate text-xs font-medium text-slate-400 dark:text-slate-500">
+                    {subtitle}
+                  </p>
+                )}
+              </div>
+            </div>
           )}
           <button
             onClick={onClose}
-            className="cursor-pointer rounded-md p-1 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
-            aria-label="Cerrar"
+            className="ml-auto -mr-2 cursor-pointer rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+            aria-label="Cerrar modal"
           >
-            <X size={18} />
+            <X className="h-4 w-4" />
           </button>
         </div>
-        {children}
+
+        {/* Contenido scrolleable */}
+        <div
+          className={cn(
+            "custom-scrollbar overflow-y-auto p-6",
+            footer && "min-h-0 flex-1",
+          )}
+        >
+          {children}
+        </div>
+
+        {/* Footer fijo */}
+        {footer && (
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-slate-100 px-6 py-4 dark:border-slate-800/60">
+            {footer}
+          </div>
+        )}
       </div>
-    </div>
-  )
+    </div>,
+    document.body,
+  );
 }

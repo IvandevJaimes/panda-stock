@@ -2,19 +2,34 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+@utility scrollbar-none {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge legacy */
+  &::-webkit-scrollbar {
+    display: none; /* Chromium/WebKit */
+  }
+}
+
 @theme {
   --color-primary: #10b981;
   --color-primary-hover: #059669;
   --color-secondary: #1e2733;
+  --font-sans: "Nunito Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Rubik", ui-sans-serif, system-ui, sans-serif;
 }
 
-:root {
-  --font-sans: 'Nunito Sans', system-ui, sans-serif;
-  --font-display: 'Rubik', system-ui, sans-serif;
-}
-
-*{
+* {
   user-select: none;
+
+}
+
+/* Reset del tooltip de Tippy: sin fondo ni padding nativos, estilizado por Tailwind */
+.tippy-box {
+  background-color: transparent !important;
+}
+
+.tippy-content {
+  padding: 0 !important;
 }
 
 body {
@@ -37,4 +52,121 @@ h4,
 h5,
 h6 {
   font-family: var(--font-display);
+}
+
+* {
+  ::-webkit-scrollbar {
+    width: 3px;
+    height: 5px;
+    cursor: pointer;
+  }
+
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: rgba(148, 163, 184, 0.35);
+    border-radius: 9999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(100, 116, 139, 0.6);
+    width: 7px;
+    height: 7px;
+  }
+
+  .dark * {
+    scrollbar-color: rgba(71, 85, 105, 0.45) transparent;
+  }
+
+  .dark *::-webkit-scrollbar-thumb {
+    background-color: rgba(71, 85, 105, 0.45);
+  }
+
+  .dark *::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(100, 116, 139, 0.7);
+  }
+}
+
+/* ==========================================================================
+   Animaciones de entrada — GPU accelerated (solo transform + opacity)
+   ========================================================================== */
+
+@keyframes entryFadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes entryFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-entry-up {
+  animation: entryFadeInUp 200ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: opacity, transform;
+}
+
+.animate-entry-fade {
+  animation: entryFadeIn 180ms ease-out both;
+  will-change: opacity;
+}
+
+@keyframes shakeError {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20%,
+  60% {
+    transform: translateX(-4px);
+  }
+  40%,
+  80% {
+    transform: translateX(4px);
+  }
+}
+
+.animate-shake {
+  animation: shakeError 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+  will-change: transform;
+}
+
+/* Stagger delays para listas y grillas */
+.stagger-1 {
+  animation-delay: 30ms;
+}
+.stagger-2 {
+  animation-delay: 60ms;
+}
+.stagger-3 {
+  animation-delay: 90ms;
+}
+.stagger-4 {
+  animation-delay: 120ms;
+}
+.stagger-5 {
+  animation-delay: 150ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-entry-up,
+  .animate-entry-fade,
+  .animate-shake {
+    animation: none !important;
+    transform: none !important;
+    opacity: 1 !important;
+  }
 }

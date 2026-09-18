@@ -1,30 +1,46 @@
-import type { ReactNode } from 'react'
-import { Inbox } from 'lucide-react'
+import type { HTMLAttributes, ReactNode } from "react";
+import { cn } from "../../lib/cn";
 
-type EmptyStateProps = {
-  title: string
-  description?: string
-  icon?: ReactNode
-  action?: ReactNode
+export interface EmptyStateProps extends HTMLAttributes<HTMLDivElement> {
+  icon?: ReactNode;
+  title: string;
+  description?: string;
+  action?: ReactNode;
 }
 
-export function EmptyState({ title, description, icon, action }: EmptyStateProps) {
+export function EmptyState({
+  icon,
+  title,
+  description,
+  action,
+  className,
+  ...props
+}: EmptyStateProps) {
   return (
-    <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-gray-200 py-16 text-center dark:border-gray-800">
-      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500">
-        {icon ?? <Inbox size={22} />}
-      </div>
-      <div>
-        <p className="font-display font-semibold text-gray-900 dark:text-gray-50">
-          {title}
+    <div
+      className={cn(
+        "flex w-full animate-entry-fade flex-col items-center justify-center p-8 text-center md:p-12",
+        className,
+      )}
+      {...props}
+    >
+      {icon && (
+        <div className="mb-4 flex items-center justify-center text-slate-400 dark:text-slate-500/70">
+          {icon}
+        </div>
+      )}
+
+      <h3 className="mb-1.5 text-base font-semibold text-slate-800 dark:text-slate-200 sm:text-lg">
+        {title}
+      </h3>
+
+      {description && (
+        <p className="mx-auto mb-6 max-w-sm text-sm text-slate-500 dark:text-slate-400">
+          {description}
         </p>
-        {description && (
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            {description}
-          </p>
-        )}
-      </div>
-      {action}
+      )}
+
+      {action && <div className="mt-2">{action}</div>}
     </div>
-  )
+  );
 }

@@ -1,30 +1,22 @@
 import { Outlet } from 'react-router-dom'
-import { useTheme } from '../../hooks/useTheme'
 import { Header } from './Header'
-import { Navigation } from './Navigation'
+import { SettingsDrawer } from './SettingsDrawer'
 
+/**
+ * Layout principal de la aplicación.
+ * Estructura: Topbar horizontal fijo arriba + área central con scroll + drawer colapsable a la derecha.
+ */
 export function AppLayout() {
-  useTheme()
-
   return (
-    <div className="flex h-screen w-full bg-white text-gray-900 dark:bg-[#0b0f14] dark:text-gray-50">
-      <aside className="flex h-full w-60 shrink-0 flex-col border-r border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
-        <div className="flex h-14 items-center border-b border-gray-200 px-6 dark:border-gray-800">
-          <span className="font-display text-lg font-bold text-primary">
-            PANDA
-          </span>
-          <span className="font-display text-lg font-light text-gray-400 dark:text-gray-500">
-            STOCK
-          </span>
-        </div>
-        <Navigation />
-      </aside>
-      <main className="flex h-full min-w-0 flex-1 flex-col">
-        <Header />
-        <div className="flex-1 overflow-auto p-6">
-          <Outlet />
-        </div>
+    <div className="flex h-screen w-full max-w-full flex-col overflow-hidden bg-[#f4f6f8] text-[#16202c] dark:bg-[#0b0f17] dark:text-[#e8ecf2]">
+      <Header />
+      <main
+        id="main-layout-scroll"
+        className="flex-1 transform-gpu overflow-y-auto overscroll-contain px-4 pb-4 will-change-transform md:px-6 md:pb-6"
+      >
+        <Outlet />
       </main>
+      <SettingsDrawer />
     </div>
   )
 }

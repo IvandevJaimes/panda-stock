@@ -4,7 +4,7 @@ type PagePlaceholderProps = {
 
 export function PagePlaceholder({ title }: PagePlaceholderProps) {
   return (
-    <div className="flex h-full items-center justify-center">
+    <div className="flex h-full items-center justify-center pt-4 md:pt-6">
       <p className="font-display text-xl font-semibold text-gray-400 dark:text-gray-500">
         {title}
       </p>

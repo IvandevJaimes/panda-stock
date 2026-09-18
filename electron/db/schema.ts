@@ -15,6 +15,14 @@ export const seguridadReportes = sqliteTable('seguridad_reportes', {
   actualizadoEn: text('actualizado_en').notNull(),
 })
 
+export const negocio = sqliteTable('negocio', {
+  id: integer('id').primaryKey(),
+  nombre: text('nombre'),
+  logoPath: text('logo_path'),
+  passwordHash: text('password_hash'),
+  actualizadoEn: text('actualizado_en').notNull(),
+})
+
 export const empleados = sqliteTable('empleados', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   nombre: text('nombre').notNull(),
@@ -41,17 +49,18 @@ export const productos = sqliteTable(
     categoriaId: integer('categoria_id').references(() => categorias.id),
     marcaId: integer('marca_id').references(() => marcas.id),
     nombre: text('nombre').notNull(),
-    codigoInterno: text('codigo_interno').notNull(),
+    codigoInterno: text('codigo_interno'),
     codigosBarras: text('codigos_barras'),
+    variante: text('variante'),
     tipoVenta: text('tipo_venta').$type<TipoVenta>().notNull().default('unidad'),
     unidadMedida: text('unidad_medida').$type<UnidadMedida>().notNull().default('unidad'),
     costo: real('costo').notNull().default(0),
     porcentajeGanancia: real('porcentaje_ganancia').notNull().default(0),
     precioVenta: real('precio_venta').notNull().default(0),
-    precioMayoreo: real('precio_mayoreo').notNull().default(0),
     stockActual: real('stock_actual').notNull().default(0),
     stockMinimo: real('stock_minimo').notNull().default(0),
     vencimiento: text('vencimiento'),
+    imgPath: text('img_path'),
     activo: integer('activo', { mode: 'boolean' }).notNull().default(true),
     creadoEn: text('creado_en').notNull(),
     actualizadoEn: text('actualizado_en'),
@@ -136,9 +145,7 @@ export const movimientosStock = sqliteTable(
   'movimientos_stock',
   {
     id: integer('id').primaryKey({ autoIncrement: true }),
-    productoId: integer('producto_id')
-      .notNull()
-      .references(() => productos.id),
+    productoId: integer('producto_id').references(() => productos.id),
     loteId: integer('lote_id').references(() => lotes.id),
     ventaId: integer('venta_id').references(() => ventas.id),
     tipo: text('tipo').$type<TipoMovimientoStock>().notNull(),
