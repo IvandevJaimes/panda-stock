@@ -451,11 +451,40 @@ export function updateProducto(id: number, data: Record<string, unknown>): Produ
 }
 
 export function deleteProducto(id: number): void {
-  getDb()
-    .update(productos)
-    .set({ activo: false, actualizadoEn: new Date().toISOString() })
-    .where(eq(productos.id, id))
-    .run()
+  getDb().transaction((tx) => {
+    const lotesDelProducto = tx
+      .select()
+      .from(lotes)
+      .where(eq(lotes.productoId, id))
+      .all()
+
+    // Borrar físicamente cada lote preservando historial: se nullean las
+    // referencias en movimientos y detalle de ventas (auditoría intacta).
+    for (const lote of lotesDelProducto) {
+      tx.update(movimientosStock)
+        .set({ loteId: null })
+        .where(eq(movimientosStock.loteId, lote.id))
+        .run()
+      tx.update(detalleVentas)
+        .set({ loteId: null })
+        .where(eq(detalleVentas.loteId, lote.id))
+        .run()
+      tx.delete(lotes).where(eq(lotes.id, lote.id)).run()
+    }
+
+    // Conservar historial contable/auditoría: las filas de movimientos y
+    // detalle de ventas permanecen, solo se pierde el vínculo al producto.
+    tx.update(movimientosStock)
+      .set({ productoId: null })
+      .where(eq(movimientosStock.productoId, id))
+      .run()
+    tx.update(detalleVentas)
+      .set({ productoId: null })
+      .where(eq(detalleVentas.productoId, id))
+      .run()
+
+    tx.delete(productos).where(eq(productos.id, id)).run()
+  })
 }
 
 export function getAlertasStock(): Producto[] {

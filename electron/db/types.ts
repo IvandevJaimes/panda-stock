@@ -236,7 +236,7 @@ export type VentaDetalle = {
 
 export type MovimientoStock = {
   id: number
-  productoId: number
+  productoId: number | null
   loteId: number | null
   ventaId: number | null
   tipo: TipoMovimientoStock

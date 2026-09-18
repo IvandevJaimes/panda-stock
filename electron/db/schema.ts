@@ -145,9 +145,7 @@ export const movimientosStock = sqliteTable(
   'movimientos_stock',
   {
     id: integer('id').primaryKey({ autoIncrement: true }),
-    productoId: integer('producto_id')
-      .notNull()
-      .references(() => productos.id),
+    productoId: integer('producto_id').references(() => productos.id),
     loteId: integer('lote_id').references(() => lotes.id),
     ventaId: integer('venta_id').references(() => ventas.id),
     tipo: text('tipo').$type<TipoMovimientoStock>().notNull(),
