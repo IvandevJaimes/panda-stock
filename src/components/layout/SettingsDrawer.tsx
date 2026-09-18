@@ -1,5 +1,4 @@
 import { useEffect, type ReactNode } from "react";
-import { useNavigate } from "react-router-dom";
 import {
   Briefcase,
   Sun,
@@ -68,7 +67,6 @@ function DrawerSection({ title, icon: Icon, children }: DrawerSectionProps) {
 }
 
 export function SettingsDrawer() {
-  const navigate = useNavigate();
   const isOpen = useUIStore((state) => state.isRightSidebarOpen);
   const closeRightSidebar = useUIStore((state) => state.closeRightSidebar);
   const theme = useUIStore((state) => state.theme);
@@ -88,11 +86,6 @@ export function SettingsDrawer() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [isOpen, closeRightSidebar]);
-
-  const handleVerReportes = () => {
-    closeRightSidebar();
-    navigate("/reports");
-  };
 
   return (
     <>
@@ -172,20 +165,24 @@ export function SettingsDrawer() {
           </DrawerSection>
         </div>
 
-        {/* Acción principal */}
+        {/* Acción principal — bloqueada (reportes no desarrollados) */}
         <div className="border-t border-slate-200 p-5 dark:border-slate-800/80">
           <button
             type="button"
-            onClick={handleVerReportes}
+            disabled
+            aria-disabled="true"
             className={cn(
-              "flex h-11 w-full items-center justify-center gap-2 rounded-xl",
-              "bg-emerald-500 font-display text-sm font-bold text-slate-950",
-              "transition-colors duration-150 hover:bg-emerald-400",
+              "flex h-11 w-full cursor-not-allowed items-center justify-center gap-2 rounded-xl",
+              "bg-emerald-500/40 font-display text-sm font-bold text-slate-950/50",
+              "dark:bg-emerald-500/20 dark:text-emerald-200/50",
             )}
           >
             <TrendingUp size={18} />
             Ver reportes
           </button>
+          <p className="mt-2 text-center text-[11px] font-medium text-slate-400 dark:text-slate-500">
+            Próximamente
+          </p>
         </div>
       </aside>
     </>

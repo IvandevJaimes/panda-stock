@@ -3,10 +3,16 @@ import {
   BrowserWindow,
   ipcMain,
   Menu,
+  protocol,
 } from "electron";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { initDatabase } from "./db/index.ts";
+import {
+  ensureAssetsFolders,
+  registerPandaAssetProtocol,
+  saveLogoFile,
+} from "./assets.ts";
 import {
   changePin,
   closeCaja,
@@ -56,6 +62,7 @@ import type {
   FiltrosReportes,
   FiltrosVentas,
   NegocioInput,
+  NegocioSetupInput,
   NuevoEmpleado,
   NuevoLote,
   VentaCompletaInput,
@@ -64,6 +71,20 @@ import type {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const isDev = !app.isPackaged;
+
+// Registro el esquema custom panda-asset:// antes del arranque de la app para poder
+// servir los assets locales (logo del negocio, imágenes de productos) al renderer.
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: "panda-asset",
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      stream: true,
+    },
+  },
+]);
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -113,6 +134,19 @@ function registerIpcHandlers() {
   ipcMain.handle("negocio:update", (_event, data: NegocioInput) =>
     updateNegocio(data),
   );
+  ipcMain.handle("negocio:setup", (_event, data: NegocioSetupInput) => {
+    const nombre = (data.nombre ?? "").trim();
+    if (nombre.length < 2) {
+      throw new Error("El nombre del negocio debe tener al menos 2 caracteres");
+    }
+
+    let logoPath: string | null | undefined;
+    if (data.logo) {
+      logoPath = saveLogoFile(data.logo.data, data.logo.extension);
+    }
+
+    return updateNegocio({ nombre, logoPath });
+  });
 
   ipcMain.handle("empleados:get-all", () => getEmpleados());
   ipcMain.handle("empleados:create", (_event, data: NuevoEmpleado) =>
@@ -212,6 +246,8 @@ function registerIpcHandlers() {
 
 app.whenReady().then(() => {
   initDatabase();
+  ensureAssetsFolders();
+  registerPandaAssetProtocol();
   registerIpcHandlers();
 
   // Remueve el menú de aplicación global (también en desarrollo).

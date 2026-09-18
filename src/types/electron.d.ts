@@ -16,6 +16,7 @@ import type {
   MovimientoStock,
   Negocio,
   NegocioInput,
+  NegocioSetupInput,
   NuevoEmpleado,
   NuevoLote,
   Producto,
@@ -40,6 +41,7 @@ declare global {
       negocio: {
         get: () => Promise<Negocio | null>
         update: (data: NegocioInput) => Promise<Negocio>
+        setup: (data: NegocioSetupInput) => Promise<Negocio>
       }
       empleados: {
         getAll: () => Promise<Empleado[]>
