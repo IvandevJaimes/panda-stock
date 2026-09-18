@@ -1,0 +1,54 @@
+appId: com.pandastock.pos
+productName: Panda Stock
+copyright: Copyright © 2026 Panda Stock
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - dist/**
+  - dist-electron/**
+  - electron/db/migrations/**
+
+asar: true
+asarUnpack:
+  - "**/node_modules/better-sqlite3/**"
+
+npmRebuild: true
+electronLanguages:
+  - es
+
+win:
+  icon: build/icon.png
+  target:
+    - target: nsis
+      arch:
+        - x64
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  shortcutName: Panda Stock
+
+mac:
+  icon: build/icon.png
+  category: public.app-category.business
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+
+linux:
+  icon: build/icon.png
+  category: Office
+  maintainer: Panda Stock
+  target:
+    - target: AppImage
+      arch:
+        - x64
+    - target: deb
+      arch:
+        - x64
