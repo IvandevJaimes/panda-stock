@@ -20,7 +20,7 @@ export const useNegocioStore = create<NegocioStore>((set) => ({
     set({
       nombre: negocio.nombre ?? '',
       logoPath: negocio.logoPath ?? null,
-      logoUrl: buildAssetUrl(negocio.logoPath),
+      logoUrl: buildAssetUrl(negocio.logoPath, negocio.actualizadoEn),
       cargado: true,
     }),
   limpiar: () =>
