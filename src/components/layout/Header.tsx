@@ -32,12 +32,13 @@ interface MainNavItem {
   to: string;
   label: string;
   icon: LucideIcon;
+  bloqueado?: boolean;
 }
 
 const mainNavItems: MainNavItem[] = [
-  { to: "/pos", label: "Ventas", icon: ShoppingBag },
+  { to: "/pos", label: "Ventas", icon: ShoppingBag, bloqueado: true },
   { to: "/inventory", label: "Inventario", icon: Package },
-  { to: "/reports", label: "Reportes", icon: TrendingUp },
+  { to: "/reports", label: "Reportes", icon: TrendingUp, bloqueado: true },
 ];
 
 export function Header() {
@@ -80,25 +81,41 @@ export function Header() {
 
       {/* ── Navegación principal (píldoras) ── */}
       <nav className="flex min-w-0 flex-1 items-center  gap-1 sm:gap-1.5">
-        {mainNavItems.map(({ to, label, icon: Icon }) => (
-          <Tooltip key={to} content={label}>
-            <NavLink
-              to={to}
-              className={({ isActive }) =>
-                cn(
-                  "inline-flex items-center justify-center gap-2 rounded-full border px-2.5 py-2 sm:px-4",
-                  "font-display text-sm font-medium transition-colors duration-150",
-                  isActive
-                    ? "border-emerald-500/30 bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400"
-                    : "border-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800/60 dark:hover:text-white",
-                )
-              }
-            >
-              <Icon size={17} className="shrink-0" />
-              <span className="hidden md:inline">{label}</span>
-            </NavLink>
-          </Tooltip>
-        ))}
+        {mainNavItems.map(({ to, label, icon: Icon, bloqueado }) =>
+          bloqueado ? (
+            <Tooltip key={to} content="Próximamente">
+              <span
+                aria-disabled="true"
+                className={cn(
+                  "inline-flex cursor-not-allowed select-none items-center justify-center gap-2 rounded-full border border-transparent px-2.5 py-2 sm:px-4",
+                  "font-display text-sm font-medium text-slate-400",
+                  "dark:text-slate-600",
+                )}
+              >
+                <Icon size={17} className="shrink-0" />
+                <span className="hidden md:inline">{label}</span>
+              </span>
+            </Tooltip>
+          ) : (
+            <Tooltip key={to} content={label}>
+              <NavLink
+                to={to}
+                className={({ isActive }) =>
+                  cn(
+                    "inline-flex items-center justify-center gap-2 rounded-full border px-2.5 py-2 sm:px-4",
+                    "font-display text-sm font-medium transition-colors duration-150",
+                    isActive
+                      ? "border-emerald-500/30 bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400"
+                      : "border-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800/60 dark:hover:text-white",
+                  )
+                }
+              >
+                <Icon size={17} className="shrink-0" />
+                <span className="hidden md:inline">{label}</span>
+              </NavLink>
+            </Tooltip>
+          ),
+        )}
       </nav>
 
       {/* ── Acciones ── */}
@@ -203,29 +220,18 @@ export function Header() {
           </button>
         </Tooltip>
 
-        {/* Notificaciones */}
-        <Tooltip content="Notificaciones y alertas de stock">
-          <button
-            aria-label="Notificaciones"
+        {/* Notificaciones — bloqueado (función no desarrollada) */}
+        <Tooltip content="Próximamente">
+          <span
+            aria-disabled="true"
             className={cn(
-              "relative grid h-9 w-9 cursor-pointer place-items-center rounded-xl sm:h-10 sm:w-10",
-              "border border-slate-200 bg-slate-100 text-slate-600",
-              "transition-colors duration-150 hover:bg-slate-200 hover:text-slate-900",
-              "dark:border-slate-700/60 dark:bg-slate-800/40 dark:text-slate-300",
-              "dark:hover:bg-slate-800/60 dark:hover:text-white",
+              "relative grid h-9 w-9 cursor-not-allowed select-none place-items-center rounded-xl sm:h-10 sm:w-10",
+              "border border-slate-200 bg-slate-100 text-slate-400",
+              "dark:border-slate-700/60 dark:bg-slate-800/40 dark:text-slate-600",
             )}
           >
             <Bell size={18} />
-            <span
-              className={cn(
-                "absolute -right-1.5 -top-1.5 grid h-4.5 min-w-4.5 place-items-center rounded-full",
-                "border border-white bg-red-500 px-1 text-[10px] font-bold leading-none text-white",
-                "dark:border-[#111827]",
-              )}
-            >
-              6
-            </span>
-          </button>
+          </span>
         </Tooltip>
 
         {/* Configuración → abre el panel lateral derecho */}
