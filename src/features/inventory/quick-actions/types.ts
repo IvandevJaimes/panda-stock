@@ -12,7 +12,7 @@ export type QuickActionView =
 export const ACCION_LABEL: Record<Exclude<QuickActionView, "menu">, string> = {
   "agregar-inventario": "Agregar Inventario",
   "ajustar-stock": "Ajustar Stock",
-  "registrar-perdida": "Registrar Pérdida",
+  "registrar-perdida": "Registrar merma",
   "precio-venta": "Modificar Precio de Venta",
   "editar-codigo": "Editar Código",
   "variante-detalle": "Editar Variante / Detalle",

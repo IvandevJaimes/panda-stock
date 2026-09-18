@@ -10,7 +10,7 @@ export const ACCION_LABEL_LOTE: Record<
   string
 > = {
   "ajustar-stock": "Ajustar Stock",
-  "registrar-perdida": "Registrar Pérdida",
+  "registrar-perdida": "Registrar merma",
   "editar-vencimiento": "Modificar Vencimiento",
   "editar-costo": "Editar Costo de Entrada",
 };

@@ -1,8 +1,6 @@
 import {
   Barcode,
-  ChevronRight,
   DollarSign,
-  Layers,
   Minus,
   PackageX,
   Pencil,
@@ -18,6 +16,7 @@ import { evaluateExpiry } from "../../../lib/dateUtils";
 import type { Producto } from "../../../../electron/db/types";
 import { formatearCodigo, formatearPrecio } from "./formatters";
 import { Tooltip } from "../../../components/ui/Tooltip";
+import { BotonGestionarLotes } from "./BotonGestionarLotes";
 import type { QuickActionView } from "./types";
 
 type EstadoProducto =
@@ -243,6 +242,7 @@ export function QuickActionsMenu({
           type="button"
           onClick={() => onNavigate("ajustar-stock")}
           aria-disabled={loteIndisponible}
+          disabled={loteIndisponible}
           className={cn(
             "flex cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2 py-2.5 text-xs font-medium text-slate-700 shadow-sm transition-colors dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100",
             loteIndisponible
@@ -261,6 +261,7 @@ export function QuickActionsMenu({
               : onNavigate("registrar-perdida")
           }
           aria-disabled={loteIndisponible}
+          disabled={loteIndisponible}
           className={cn(
             "flex cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-red-600 px-2 py-2.5 text-xs font-semibold text-white shadow-sm transition-colors dark:bg-red-600",
             loteIndisponible
@@ -273,7 +274,7 @@ export function QuickActionsMenu({
           ) : (
             <Minus className="h-3.5 w-3.5" aria-hidden />
           )}
-          {loteVencido ? "Confirmar pérdida" : "Registrar pérdida"}
+          {loteVencido ? "Confirmar pérdida" : "Registrar merma"}
         </button>
       </div>
 
@@ -365,20 +366,9 @@ export function QuickActionsMenu({
         Editar toda la información del producto
       </button>
 
-      <button
-        type="button"
-        onClick={onOpenLotes}
-        className="mt-3 flex w-full cursor-pointer items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-emerald-700 shadow-sm transition-all hover:bg-emerald-50 hover:text-emerald-800 dark:border-slate-700 dark:bg-slate-800/80 dark:text-emerald-400 dark:hover:bg-slate-700/80 dark:hover:text-emerald-300"
-      >
-        <span className="flex items-center gap-2">
-          <Layers className="h-4 w-4" aria-hidden />
-          Gestionar / Editar Lotes
-        </span>
-        <span className="flex items-center gap-1 text-xs font-medium text-slate-500 transition-colors dark:text-slate-400">
-          Ver vencimientos y partidas
-          <ChevronRight className="h-3.5 w-3.5" aria-hidden />
-        </span>
-      </button>
+      <div className="mt-3">
+        <BotonGestionarLotes onOpenLotes={onOpenLotes} />
+      </div>
     </>
   );
 }

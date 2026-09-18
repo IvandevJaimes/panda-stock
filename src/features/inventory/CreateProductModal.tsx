@@ -108,14 +108,17 @@ export function CreateProductModal({
     return coincidencias.slice(0, SUGERENCIAS_LIMITE);
   }, [marcas, marcasDropdown, valorMarca]);
 
+  const obtenerMarcas = React.useCallback((): Promise<Marca[]> => {
+    return marcasService.getAll();
+  }, []);
+
   // Carga las marcas cada vez que se abre el modal (el backend ya las devuelve
   // ordenadas por id descendente: las más recientes primero). Los setState viven
   // en callbacks asíncronos (.then), respetando react-hooks/set-state-in-effect.
   React.useEffect(() => {
     if (!isOpen) return;
     let activo = true;
-    void marcasService
-      .getAll()
+    void obtenerMarcas()
       .then((data) => {
         if (!activo) return;
         setMarcas(data);
@@ -127,7 +130,7 @@ export function CreateProductModal({
     return () => {
       activo = false;
     };
-  }, [isOpen]);
+  }, [isOpen, obtenerMarcas]);
 
   // Cerrar el dropdown al hacer clic fuera del contenedor de marca. El setState
   // vive dentro del callback del listener (asíncrono), no viola set-state-in-effect.
@@ -155,58 +158,86 @@ export function CreateProductModal({
     label: cat.nombre,
   }));
 
-  const onSubmit = async (data: FormValues) => {
-    try {
-      // Normalización defensiva: garantiza ISO YYYY-MM-DD o null.
-      // Acepta DD/MM/YYYY y DD/MM/YY (año de 2 dígitos expandido a 20XX)
-      let vencimientoNormalizado: string | null = null;
-      if (data.vencimiento) {
-        const esIso = /^\d{4}-\d{2}-\d{2}$/.test(data.vencimiento);
-        if (esIso) {
-          vencimientoNormalizado = data.vencimiento;
-        } else {
-          const [dia, mes, anio] = data.vencimiento.split("/");
-          if (dia && mes && anio && anio.length >= 2 && anio.length <= 4) {
-            const anioCompleto = anio.length === 2 ? `20${anio}` : anio;
-            vencimientoNormalizado = `${anioCompleto}-${mes.padStart(2, "0")}-${dia.padStart(2, "0")}`;
-          }
+  const crearProducto = async (data: FormValues) => {
+    // Normalización defensiva: garantiza ISO YYYY-MM-DD o null.
+    // Acepta DD/MM/YYYY y DD/MM/YY (año de 2 dígitos expandido a 20XX)
+    let vencimientoNormalizado: string | null = null;
+    if (data.vencimiento) {
+      const esIso = /^\d{4}-\d{2}-\d{2}$/.test(data.vencimiento);
+      if (esIso) {
+        vencimientoNormalizado = data.vencimiento;
+      } else {
+        const [dia, mes, anio] = data.vencimiento.split("/");
+        if (dia && mes && anio && anio.length >= 2 && anio.length <= 4) {
+          const anioCompleto = anio.length === 2 ? `20${anio}` : anio;
+          vencimientoNormalizado = `${anioCompleto}-${mes.padStart(2, "0")}-${dia.padStart(2, "0")}`;
         }
       }
+    }
 
-      const payload = {
-        ...data,
-        nombre: data.nombre.trim(),
-        variante: data.variante?.trim() || null,
-        codigoInterno: data.codigo.trim(),
-        codigosBarras: data.codigo.trim() || null,
-        vencimiento: vencimientoNormalizado,
-        categoriaId:
-          Number(data.categoriaId) > 0 ? Number(data.categoriaId) : null,
-        marca: data.marca.trim() || null,
-      };
+    const payload = {
+      ...data,
+      nombre: data.nombre.trim(),
+      variante: data.variante?.trim() || null,
+      codigoInterno: data.codigo.trim(),
+      codigosBarras: data.codigo.trim() || null,
+      vencimiento: vencimientoNormalizado,
+      categoriaId:
+        Number(data.categoriaId) > 0 ? Number(data.categoriaId) : null,
+      marca: data.marca.trim() || null,
+    };
 
-      const nuevoProducto = await productosService.create(payload);
+    return productosService.create(payload);
+  };
+
+  const manejarErrorCreacion = (error: unknown) => {
+    console.error("Error al crear producto:", error);
+    const mensaje =
+      error instanceof Error ? error.message : "Error al crear el producto";
+
+    if (
+      mensaje.toLowerCase().includes("unique") &&
+      mensaje.toLowerCase().includes("codigo_interno")
+    ) {
+      setError("codigo", {
+        type: "manual",
+        message: "Este código ya está en uso",
+      });
+      toast.error("El código ya existe en otro producto");
+    } else {
+      toast.error(mensaje);
+    }
+  };
+
+  const onSubmit = async (data: FormValues) => {
+    try {
+      const nuevoProducto = await crearProducto(data);
 
       toast.success("Producto creado exitosamente");
       onSuccess?.(nuevoProducto);
       onClose();
     } catch (error: unknown) {
-      console.error("Error al crear producto:", error);
-      const mensaje =
-        error instanceof Error ? error.message : "Error al crear el producto";
+      manejarErrorCreacion(error);
+    }
+  };
 
-      if (
-        mensaje.toLowerCase().includes("unique") &&
-        mensaje.toLowerCase().includes("codigo_interno")
-      ) {
-        setError("codigo", {
-          type: "manual",
-          message: "Este código ya está en uso",
+  const onSubmitGuardarOtro = async (data: FormValues) => {
+    try {
+      const nuevoProducto = await crearProducto(data);
+
+      toast.success("Producto creado exitosamente");
+      onSuccess?.(nuevoProducto);
+      reset(VALORES_INICIALES);
+      void obtenerMarcas()
+        .then((data) => {
+          setMarcas(data);
+          setMarcasDropdown(false);
+        })
+        .catch(() => {
+          // El autocomplete es una ayuda: si falla, el alta sigue con texto libre
         });
-        toast.error("El código ya existe en otro producto");
-      } else {
-        toast.error(mensaje);
-      }
+    } catch (error: unknown) {
+      manejarErrorCreacion(error);
     }
   };
 
@@ -607,6 +638,18 @@ export function CreateProductModal({
             className="cursor-pointer rounded-xl px-4 py-2 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-100 disabled:opacity-50 dark:text-slate-300 dark:hover:bg-slate-800"
           >
             Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleSubmit(onSubmitGuardarOtro)()}
+            disabled={isSubmitting}
+            className="flex min-w-[140px] cursor-pointer items-center justify-center rounded-xl border border-emerald-600/40 bg-emerald-500/5 px-4 py-2 text-sm font-semibold text-emerald-700 transition-all hover:bg-emerald-500/10 active:scale-95 disabled:opacity-70 disabled:active:scale-100 dark:text-emerald-400"
+          >
+            {isSubmitting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              "Guardar y crear otro"
+            )}
           </button>
           <button
             type="submit"

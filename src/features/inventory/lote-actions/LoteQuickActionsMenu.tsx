@@ -85,7 +85,7 @@ export function LoteQuickActionsMenu({
           ) : (
             <Minus className="h-3.5 w-3.5" aria-hidden />
           )}
-          {loteVencido ? "Confirmar pérdida" : "Registrar pérdida"}
+          {loteVencido ? "Confirmar pérdida" : "Registrar merma"}
         </button>
       </div>
 

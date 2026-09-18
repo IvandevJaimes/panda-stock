@@ -26,6 +26,8 @@ import { LotesModal } from "./LotesModal";
 import { ConfirmarPerdidaModal } from "./ConfirmarPerdidaModal";
 import { esLoteVencido } from "./loteHelpers";
 import { ProductQuickActionsModal } from "./quick-actions";
+import { AccionGlobalModal } from "./quick-actions/AccionGlobalModal";
+import type { AccionGlobal } from "./quick-actions/AccionGlobalModal";
 import type { QuickActionView } from "./quick-actions/types";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { useCategories } from "../../hooks/useCategories";
@@ -143,8 +145,10 @@ export function InventoryPage() {
     producto: Producto;
     lote: Lote;
   } | null>(null);
+  const [accionGlobal, setAccionGlobal] = useState<AccionGlobal | null>(null);
   const [editingCategory, setEditingCategory] = useState<Categoria | null>(null);
   const [deletingCategory, setDeletingCategory] = useState<Categoria | null>(null);
+  const [deletingProduct, setDeletingProduct] = useState<Producto | null>(null);
   const { categories, addCategory, updateCategory, removeCategory } =
     useCategories();
 
@@ -332,6 +336,10 @@ export function InventoryPage() {
     }),
     [productos],
   );
+
+  // Ajuste de stock y merma requieren un lote activo (stock > 0): sin productos
+  // con stock, esas acciones globales no tienen sentido y se bloquean.
+  const hayStockDisponible = productos.some((p) => p.stock > 0);
 
   return (
     <div className="flex flex-col gap-3 pt-4 md:pt-6">
@@ -543,7 +551,8 @@ export function InventoryPage() {
             <Button
               variant="primary"
               icon={<Plus size={16} />}
-              onClick={() => toast.info("Alta de inventario en desarrollo")}
+              onClick={() => setAccionGlobal("agregar-inventario")}
+              disabled={productos.length === 0}
               className="whitespace-nowrap"
             >
               Agregar Inventario
@@ -551,7 +560,8 @@ export function InventoryPage() {
             <Button
               variant="outline"
               icon={<SlidersHorizontal size={16} />}
-              onClick={() => toast.info("Ajuste de stock en desarrollo")}
+              onClick={() => setAccionGlobal("ajustar-stock")}
+              disabled={!hayStockDisponible}
               className="whitespace-nowrap"
             >
               Ajustar stock
@@ -559,10 +569,11 @@ export function InventoryPage() {
             <Button
               variant="danger"
               icon={<Minus size={16} />}
-              onClick={() => toast.info("Registro de pérdida en desarrollo")}
+              onClick={() => setAccionGlobal("registrar-perdida")}
+              disabled={!hayStockDisponible}
               className="whitespace-nowrap"
             >
-              Registrar pérdida
+              Registrar merma
             </Button>
           </div>
         </div>
@@ -652,9 +663,7 @@ export function InventoryPage() {
                     : undefined
                 }
                 onDeleteProduct={
-                  raw
-                    ? (p) => toast.info(`Eliminar ${p.nombre} en desarrollo`)
-                    : undefined
+                  raw ? (p) => setDeletingProduct(p) : undefined
                 }
                 onOpenDetail={() => {
                   const detalle = productosCrudos.find(
@@ -752,6 +761,34 @@ export function InventoryPage() {
         description={`¿Estás seguro de que deseas eliminar la categoría "${deletingCategory?.nombre}"? Esta acción no se puede deshacer.`}
       />
 
+      <ConfirmModal
+        isOpen={deletingProduct !== null}
+        onClose={() => setDeletingProduct(null)}
+        onConfirm={async () => {
+          if (!deletingProduct) return;
+          try {
+            await productosService.delete(deletingProduct.id);
+            setProductForQuickActions((prev) =>
+              prev?.id === deletingProduct.id ? null : prev,
+            );
+            setLotesProducto((prev) =>
+              prev?.id === deletingProduct.id ? null : prev,
+            );
+            toast.success(`Producto "${deletingProduct.nombre}" eliminado`);
+            void refreshProductos();
+          } catch (error) {
+            toast.error(
+              error instanceof Error
+                ? error.message
+                : "No se pudo eliminar el producto",
+            );
+            throw error;
+          }
+        }}
+        title="Eliminar producto"
+        description={`¿Estás seguro de que deseas eliminar "${deletingProduct?.nombre}"? Se eliminarán sus lotes. Los movimientos y las ventas históricas se conservan para auditoría, pero quedan desvinculados del producto. Esta acción no se puede deshacer.`}
+      />
+
       <CreateProductModal
         isOpen={isCreateProductOpen}
         onClose={() => setIsCreateProductOpen(false)}
@@ -791,8 +828,8 @@ export function InventoryPage() {
             setSelectedProductForDetail(null);
           }}
           onDelete={() => {
+            setDeletingProduct(selectedProductForDetail);
             setSelectedProductForDetail(null);
-            toast.info("Eliminar producto en desarrollo");
           }}
           onMutated={() => {
             void refreshProductos().then((dataActualizada) => {
@@ -887,6 +924,16 @@ export function InventoryPage() {
           setPerdidaSeleccion(null);
           void refreshProductos();
         }}
+      />
+
+      <AccionGlobalModal
+        isOpen={accionGlobal !== null}
+        accion={accionGlobal}
+        productos={productosCrudos}
+        marcas={marcas}
+        categorias={categories}
+        onClose={() => setAccionGlobal(null)}
+        onSuccess={() => void refreshProductos()}
       />
     </div>
   );
