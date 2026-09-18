@@ -1,18 +1,32 @@
+import { useState } from "react";
 import { NavLink } from "react-router-dom";
 import {
   Bell,
+  Eye,
   Moon,
   Package,
+  Pencil,
   Settings,
   ShoppingBag,
+  Store,
   Sun,
   TrendingUp,
   type LucideIcon,
 } from "lucide-react";
 import { useSettingsStore } from "../../stores/settings.store";
+import { useNegocioStore } from "../../stores/negocio.store";
 import { useUIStore } from "../../stores/ui.store";
 import { cn } from "../../lib/cn";
 import { Tooltip } from "../ui/Tooltip";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../ui/DropdownMenu";
+import { BusinessSetupModal } from "../../features/onboarding/BusinessSetupModal";
+import { ImageLightbox } from "../ui/ImageLightbox";
+import { toast } from "sonner";
 
 interface MainNavItem {
   to: string;
@@ -28,11 +42,19 @@ const mainNavItems: MainNavItem[] = [
 
 export function Header() {
   const storeName = useSettingsStore((state) => state.storeName);
+  const negocioNombre = useNegocioStore((state) => state.nombre);
+  const negocioLogoUrl = useNegocioStore((state) => state.logoUrl);
+  const setNegocio = useNegocioStore((state) => state.setNegocio);
   const theme = useUIStore((state) => state.theme);
   const toggleTheme = useUIStore((state) => state.toggleTheme);
   const toggleRightSidebar = useUIStore((state) => state.toggleRightSidebar);
+  const [logoFallidoUrl, setLogoFallidoUrl] = useState<string | null>(null);
+  const [verLogoAbierto, setVerLogoAbierto] = useState(false);
+  const [editarNegocioAbierto, setEditarNegocioAbierto] = useState(false);
 
   const isDark = theme === "dark";
+  const hayNegocio = negocioNombre.length > 0 || negocioLogoUrl !== null;
+  const logoCaido = negocioLogoUrl !== null && logoFallidoUrl === negocioLogoUrl;
 
   return (
     <header className="flex h-16 shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3 text-slate-900 dark:border-slate-800 dark:bg-[#111827] dark:text-slate-200 md:gap-4 md:px-6 lg:gap-6">
@@ -81,6 +103,83 @@ export function Header() {
 
       {/* ── Acciones ── */}
       <div className="flex shrink-0 items-center gap-2">
+        {/* Información del negocio */}
+        {hayNegocio && (
+          <>
+            <DropdownMenu placement="bottom-end">
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="Opciones del negocio"
+                  className="flex cursor-pointer items-center gap-2.5 rounded-xl px-1 py-1 transition-colors duration-150 hover:bg-slate-100 dark:hover:bg-slate-800/60"
+                >
+                  <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                    {negocioNombre}
+                  </span>
+                  {negocioLogoUrl && !logoCaido ? (
+                    <img
+                      key={negocioLogoUrl}
+                      src={negocioLogoUrl}
+                      alt="Logo del negocio"
+                      onError={() => setLogoFallidoUrl(negocioLogoUrl)}
+                      draggable={false}
+                      className="h-13 w-13 shrink-0 rounded-full border border-slate-200 object-cover object-center dark:border-slate-700"
+                    />
+                  ) : (
+                    <span className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                      <Store size={26} aria-hidden="true" />
+                    </span>
+                  )}
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <DropdownMenuItem
+                  icon={<Eye size={16} />}
+                  onClick={() => {
+                    if (negocioLogoUrl) {
+                      setVerLogoAbierto(true);
+                    } else {
+                      toast.info("El negocio todavía no tiene un logo cargado");
+                    }
+                  }}
+                >
+                  Ver logo
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  icon={<Pencil size={16} />}
+                  onClick={() => setEditarNegocioAbierto(true)}
+                >
+                  Editar información
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <div
+              aria-hidden="true"
+              className=" h-8 w-px shrink-0 bg-slate-200 dark:bg-slate-700/60 "
+            />
+          </>
+        )}
+
+        <ImageLightbox
+          open={verLogoAbierto && negocioLogoUrl !== null}
+          onClose={() => setVerLogoAbierto(false)}
+          src={negocioLogoUrl ?? ""}
+          alt="Logo del negocio"
+        />
+
+        <BusinessSetupModal
+          isOpen={editarNegocioAbierto}
+          closable
+          onClose={() => setEditarNegocioAbierto(false)}
+          initialNombre={negocioNombre}
+          initialLogoUrl={negocioLogoUrl}
+          onSuccess={(negocio) => {
+            setNegocio(negocio);
+            setEditarNegocioAbierto(false);
+          }}
+        />
+
         {/* Alternar tema */}
         <Tooltip
           content={isDark ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}

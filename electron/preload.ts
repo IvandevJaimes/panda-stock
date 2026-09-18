@@ -11,6 +11,7 @@ import type {
   NuevoEmpleado,
   NuevoLote,
   NegocioInput,
+  NegocioSetupInput,
   VentaCompletaInput,
 } from "./db/types.ts";
 
@@ -32,6 +33,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   negocio: {
     get: () => ipcRenderer.invoke("negocio:get"),
     update: (data: NegocioInput) => ipcRenderer.invoke("negocio:update", data),
+    setup: (data: NegocioSetupInput) =>
+      ipcRenderer.invoke("negocio:setup", data),
   },
   empleados: {
     getAll: () => ipcRenderer.invoke("empleados:get-all"),

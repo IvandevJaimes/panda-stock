@@ -20,6 +20,19 @@ export type NegocioInput = {
   password?: string
 }
 
+export type NegocioLogoUpload = {
+  /** Bytes de la imagen viajando por IPC (structured clone conserva ArrayBuffer). */
+  data: ArrayBuffer
+  /** Extensión original del archivo: png | jpg | jpeg | webp. */
+  extension: string
+}
+
+/** Entrada del onboarding del negocio: nombre obligatorio + logo opcional. */
+export type NegocioSetupInput = {
+  nombre: string
+  logo?: NegocioLogoUpload | null
+}
+
 export type Empleado = {
   id: number
   nombre: string

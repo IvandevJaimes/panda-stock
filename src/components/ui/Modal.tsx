@@ -16,6 +16,8 @@ export interface ModalProps {
   height?: string;
   /** Barra inferior fija. El contenido scrollea entre cabecera y footer. */
   footer?: ReactNode;
+  /** Si es false: sin botón X, sin cierre por Escape ni por click en el overlay. Requiere onClose {} no-op. */
+  closeable?: boolean;
 }
 
 const maxWidthClasses = {
@@ -37,6 +39,7 @@ export function Modal({
   maxWidth = "md",
   height,
   footer,
+  closeable = true,
 }: ModalProps) {
   useEffect(() => {
     if (!isOpen) return;
@@ -54,16 +57,20 @@ export function Modal({
       scrollContainer.classList.add("!overflow-hidden");
     }
 
-    document.addEventListener("keydown", onKey);
+    if (closeable) {
+      document.addEventListener("keydown", onKey);
+    }
 
     return () => {
       document.body.classList.remove("overflow-hidden");
       if (scrollContainer) {
         scrollContainer.classList.remove("!overflow-hidden");
       }
-      document.removeEventListener("keydown", onKey);
+      if (closeable) {
+        document.removeEventListener("keydown", onKey);
+      }
     };
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, closeable]);
 
   if (!isOpen) return null;
 
@@ -74,7 +81,7 @@ export function Modal({
       {/* Overlay: fixed inset-0, anclado al viewport visible sin importar el scroll */}
       <div
         className="fixed inset-0 bg-black/60 backdrop-blur-xs animate-entry-fade"
-        onClick={onClose}
+        onClick={closeable ? onClose : undefined}
         aria-hidden="true"
       />
 
@@ -110,13 +117,15 @@ export function Modal({
               </div>
             </div>
           )}
-          <button
-            onClick={onClose}
-            className="ml-auto -mr-2 cursor-pointer rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
-            aria-label="Cerrar modal"
-          >
-            <X className="h-4 w-4" />
-          </button>
+          {closeable && (
+            <button
+              onClick={onClose}
+              className="ml-auto -mr-2 cursor-pointer rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+              aria-label="Cerrar modal"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
         </div>
 
         {/* Contenido scrolleable */}
