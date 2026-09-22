@@ -67,7 +67,9 @@ type OrdenInventario =
   | "nombre_asc"
   | "nombre_desc"
   | "stock_asc"
-  | "stock_desc";
+  | "stock_desc"
+  | "sin_marca"
+  | "sin_minimo";
 
 const OPCIONES_ORDEN: { value: OrdenInventario; label: string }[] = [
   { value: "creado_desc", label: "Más nuevos primero" },
@@ -76,6 +78,8 @@ const OPCIONES_ORDEN: { value: OrdenInventario; label: string }[] = [
   { value: "nombre_desc", label: "Alfabético Z→A" },
   { value: "stock_asc", label: "Menor stock" },
   { value: "stock_desc", label: "Mayor stock" },
+  { value: "sin_marca", label: "Sin marca" },
+  { value: "sin_minimo", label: "Sin mínimo" },
 ];
 
 function ordenarProductos(
@@ -107,6 +111,9 @@ function ordenarProductos(
       return [...productos].sort(
         (a, b) => b.stockActual - a.stockActual || comparadorNombre(a, b),
       );
+    case "sin_marca":
+    case "sin_minimo":
+      return [...productos];
   }
 }
 
@@ -283,13 +290,16 @@ export function InventoryPage() {
     }
   }, [obtenerProductos, obtenerMarcas]);
 
-  const productos = useMemo(
-    () =>
-      ordenarProductos(productosCrudos, orden).map((p) =>
-        mapearProducto(p, categories, marcas),
-      ),
-    [productosCrudos, orden, categories, marcas],
-  );
+  const productos = useMemo(() => {
+    const filtrados = productosCrudos.filter(
+      (p) =>
+        (orden !== "sin_marca" || p.marcaId === null) &&
+        (orden !== "sin_minimo" || p.stockMinimo === 0),
+    );
+    return ordenarProductos(filtrados, orden).map((p) =>
+      mapearProducto(p, categories, marcas),
+    );
+  }, [productosCrudos, orden, categories, marcas]);
 
   const handleKpiClick = (filter: KpiFilter) => {
     setActiveKpiFilter((prev) => {
