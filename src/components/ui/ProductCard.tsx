@@ -159,7 +159,7 @@ export function ProductCard({
       )}
     >
 {/* 0. Imagen pegada al borde izquierdo y a los extremos verticales */}
-      <div className="flex h-full w-13 shrink-0 items-center justify-center overflow-hidden bg-slate-200/60 sm:w-15 dark:bg-slate-800/60">
+      <div className="flex h-full border-r border-0.5 border-slate-200 dark:border-slate-800/80 w-13 shrink-0 items-center justify-center overflow-hidden bg-slate-200/60 sm:w-15 dark:bg-slate-800/60">
         {(() => {
           const imgUrl = producto?.imgPath
             ? buildAssetUrl(producto.imgPath)

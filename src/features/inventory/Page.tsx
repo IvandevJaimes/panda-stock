@@ -10,6 +10,7 @@ import {
   Minus,
   Search,
   SlidersHorizontal,
+  Store,
   X,
   XCircle,
 } from "lucide-react";
@@ -24,6 +25,7 @@ import { CreateProductModal } from "./CreateProductModal";
 import { ProductDetailModal } from "./ProductDetailModal";
 import { LotesModal } from "./LotesModal";
 import { ConfirmarPerdidaModal } from "./ConfirmarPerdidaModal";
+import { MarcasModal } from "./MarcasModal";
 import { esLoteVencido } from "./loteHelpers";
 import { ProductQuickActionsModal } from "./quick-actions";
 import { AccionGlobalModal } from "./quick-actions/AccionGlobalModal";
@@ -35,6 +37,7 @@ import { Input } from "../../components/ui/Input";
 import { KpiCard } from "../../components/ui/KpiCard";
 import { Pagination } from "../../components/ui/Pagination";
 import { Pill } from "../../components/ui/Pill";
+import { CustomSelect } from "../../components/ui/CustomSelect";
 import {
   ProductCard,
   type ProductStatus,
@@ -57,6 +60,55 @@ type KpiFilter =
   | "expiring_soon"
   | "out_of_stock"
   | "expired";
+
+type OrdenInventario =
+  | "creado_desc"
+  | "creado_asc"
+  | "nombre_asc"
+  | "nombre_desc"
+  | "stock_asc"
+  | "stock_desc";
+
+const OPCIONES_ORDEN: { value: OrdenInventario; label: string }[] = [
+  { value: "creado_desc", label: "Más nuevos primero" },
+  { value: "creado_asc", label: "Más antiguos primero" },
+  { value: "nombre_asc", label: "Alfabético A→Z" },
+  { value: "nombre_desc", label: "Alfabético Z→A" },
+  { value: "stock_asc", label: "Menor stock" },
+  { value: "stock_desc", label: "Mayor stock" },
+];
+
+function ordenarProductos(
+  productos: ProductoConLoteActivo[],
+  orden: OrdenInventario,
+): ProductoConLoteActivo[] {
+  const comparadorNombre = (
+    a: ProductoConLoteActivo,
+    b: ProductoConLoteActivo,
+  ) => a.nombre.localeCompare(b.nombre, "es");
+  switch (orden) {
+    case "creado_desc":
+      return [...productos].sort((a, b) =>
+        b.creadoEn.localeCompare(a.creadoEn),
+      );
+    case "creado_asc":
+      return [...productos].sort((a, b) =>
+        a.creadoEn.localeCompare(b.creadoEn),
+      );
+    case "nombre_asc":
+      return [...productos].sort(comparadorNombre);
+    case "nombre_desc":
+      return [...productos].sort((a, b) => comparadorNombre(b, a));
+    case "stock_asc":
+      return [...productos].sort(
+        (a, b) => a.stockActual - b.stockActual || comparadorNombre(a, b),
+      );
+    case "stock_desc":
+      return [...productos].sort(
+        (a, b) => b.stockActual - a.stockActual || comparadorNombre(a, b),
+      );
+  }
+}
 
 type ProductoInventario = {
   id: number;
@@ -126,18 +178,23 @@ function derivarStatus(p: ProductoInventario): ProductStatus {
   return "normal";
 }
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 50;
 
 export function InventoryPage() {
   const [busqueda, setBusqueda] = useState("");
   const [activeKpiFilter, setActiveKpiFilter] = useState<KpiFilter>("all");
   const [paginaActual, setPaginaActual] = useState(1);
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [orden, setOrden] = useState<OrdenInventario>("creado_desc");
   const [isCreateCategoryOpen, setIsCreateCategoryOpen] = useState(false);
   const [isCreateProductOpen, setIsCreateProductOpen] = useState(false);
-  const [selectedProductForDetail, setSelectedProductForDetail] = useState<Producto | null>(null);
-  const [productForQuickActions, setProductForQuickActions] = useState<Producto | null>(null);
-  const [vistaAccionInicial, setVistaAccionInicial] = useState<QuickActionView>("menu");
+  const [marcasAbiertas, setMarcasAbiertas] = useState(false);
+  const [selectedProductForDetail, setSelectedProductForDetail] =
+    useState<Producto | null>(null);
+  const [productForQuickActions, setProductForQuickActions] =
+    useState<Producto | null>(null);
+  const [vistaAccionInicial, setVistaAccionInicial] =
+    useState<QuickActionView>("menu");
   const [aperturaAcciones, setAperturaAcciones] = useState(0);
   const [lotesProducto, setLotesProducto] = useState<Producto | null>(null);
   const [abrirInventarioAuto, setAbrirInventarioAuto] = useState(false);
@@ -146,24 +203,37 @@ export function InventoryPage() {
     lote: Lote;
   } | null>(null);
   const [accionGlobal, setAccionGlobal] = useState<AccionGlobal | null>(null);
-  const [editingCategory, setEditingCategory] = useState<Categoria | null>(null);
-  const [deletingCategory, setDeletingCategory] = useState<Categoria | null>(null);
+  const [editingCategory, setEditingCategory] = useState<Categoria | null>(
+    null,
+  );
+  const [deletingCategory, setDeletingCategory] = useState<Categoria | null>(
+    null,
+  );
   const [deletingProduct, setDeletingProduct] = useState<Producto | null>(null);
   const { categories, addCategory, updateCategory, removeCategory } =
     useCategories();
 
-  const [productosCrudos, setProductosCrudos] = useState<ProductoConLoteActivo[]>([]);
+  const [productosCrudos, setProductosCrudos] = useState<
+    ProductoConLoteActivo[]
+  >([]);
   const [marcas, setMarcas] = useState<Marca[]>([]);
   const [cargandoProductos, setCargandoProductos] = useState(true);
   const [errorProductos, setErrorProductos] = useState<string | null>(null);
 
-  const obtenerProductos = useCallback(async (): Promise<ProductoConLoteActivo[]> => {
+  const obtenerProductos = useCallback(async (): Promise<
+    ProductoConLoteActivo[]
+  > => {
     const data = await productosService.getAll();
     return data.filter((p) => p.activo);
   }, []);
 
   const obtenerMarcas = useCallback(async (): Promise<Marca[]> => {
     return marcasService.getAll();
+  }, []);
+
+  const recargarMarcas = useCallback(async () => {
+    const data = await marcasService.getAll();
+    setMarcas(data);
   }, []);
 
   // Fetch inicial al montar. Los setState viven en callbacks asíncronos (.then/.catch)
@@ -190,7 +260,9 @@ export function InventoryPage() {
     };
   }, [obtenerProductos, obtenerMarcas]);
 
-  const refreshProductos = useCallback(async (): Promise<ProductoConLoteActivo[]> => {
+  const refreshProductos = useCallback(async (): Promise<
+    ProductoConLoteActivo[]
+  > => {
     setCargandoProductos(true);
     setErrorProductos(null);
     try {
@@ -212,8 +284,11 @@ export function InventoryPage() {
   }, [obtenerProductos, obtenerMarcas]);
 
   const productos = useMemo(
-    () => productosCrudos.map((p) => mapearProducto(p, categories, marcas)),
-    [productosCrudos, categories, marcas],
+    () =>
+      ordenarProductos(productosCrudos, orden).map((p) =>
+        mapearProducto(p, categories, marcas),
+      ),
+    [productosCrudos, orden, categories, marcas],
   );
 
   const handleKpiClick = (filter: KpiFilter) => {
@@ -227,12 +302,14 @@ export function InventoryPage() {
   const hayFiltroActivo =
     busqueda.trim() !== "" ||
     activeKpiFilter !== "all" ||
-    selectedCategory !== "all";
+    selectedCategory !== "all" ||
+    orden !== "creado_desc";
 
   const limpiarFiltros = () => {
     setBusqueda("");
     setActiveKpiFilter("all");
     setSelectedCategory("all");
+    setOrden("creado_desc");
     setPaginaActual(1);
   };
 
@@ -288,9 +365,7 @@ export function InventoryPage() {
 
     const coincideCategoria = (p: ProductoInventario) => {
       if (selectedCategory === "all") return true;
-      const catSel = categories.find(
-        (c) => String(c.id) === selectedCategory,
-      );
+      const catSel = categories.find((c) => String(c.id) === selectedCategory);
       return catSel ? p.category === catSel.nombre : false;
     };
 
@@ -345,9 +420,9 @@ export function InventoryPage() {
     <div className="flex flex-col gap-3 pt-4 md:pt-6">
       {/* ── Encabezado ── */}
       <div className="flex flex-row items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col md:flex-row items-center md:gap-3">
           <h1 className="font-display text-xl font-bold text-slate-900 dark:text-white sm:text-2xl">
-            Control de inventario
+            Inventario
           </h1>
           <span className="select-none rounded-full border border-slate-200 bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600 dark:border-slate-700/80 dark:bg-slate-800 dark:text-slate-300">
             <span className="font-display text-base font-bold text-emerald-600 dark:text-emerald-400">
@@ -356,7 +431,15 @@ export function InventoryPage() {
             {productos.length === 1 ? "producto" : "productos"}
           </span>
         </div>
-
+        <div className="flex items-center gap-2">
+                  <Button
+          variant="outline"
+          icon={<Store size={16} />}
+          onClick={() => setMarcasAbiertas(true)}
+          className="whitespace-nowrap rounded-2xl"
+        >
+          Marcas
+        </Button>
         {/* Botón Grande Esquinado */}
         <Button
           variant="primary"
@@ -366,6 +449,8 @@ export function InventoryPage() {
           <PackagePlus className="h-5 w-5" />
           <span>Nuevo producto</span>
         </Button>
+        </div>
+
       </div>
 
       {/* ── KPIs ── */}
@@ -470,7 +555,9 @@ export function InventoryPage() {
                 active={selectedCategory === String(categoria.id)}
                 onSelect={() => {
                   setSelectedCategory((prev) =>
-                    prev === String(categoria.id) ? "all" : String(categoria.id),
+                    prev === String(categoria.id)
+                      ? "all"
+                      : String(categoria.id),
                   );
                   setPaginaActual(1);
                 }}
@@ -525,6 +612,15 @@ export function InventoryPage() {
                 ) : undefined
               }
             />
+            <CustomSelect
+              options={OPCIONES_ORDEN}
+              value={orden}
+              onChange={(value) => {
+                setOrden(value as OrdenInventario);
+                setPaginaActual(1);
+              }}
+              className="w-44 shrink-0 sm:w-48"
+            />
             <Tooltip
               content={
                 hayFiltroActivo ? "Limpiar todos los filtros" : undefined
@@ -548,6 +644,11 @@ export function InventoryPage() {
             </Tooltip>
           </div>
           <div className="flex flex-nowrap items-center gap-2.5 overflow-x-auto pb-1 lg:pb-0">
+            <div
+              className="h-6 w-px shrink-0 self-center bg-slate-200 sm:h-7 dark:bg-slate-700/60"
+              aria-hidden="true"
+            />
+
             <Button
               variant="primary"
               icon={<Plus size={16} />}
@@ -662,9 +763,7 @@ export function InventoryPage() {
                       }
                     : undefined
                 }
-                onDeleteProduct={
-                  raw ? (p) => setDeletingProduct(p) : undefined
-                }
+                onDeleteProduct={raw ? (p) => setDeletingProduct(p) : undefined}
                 onOpenDetail={() => {
                   const detalle = productosCrudos.find(
                     (p) => p.id === producto.id,
@@ -721,6 +820,19 @@ export function InventoryPage() {
           addCategory(newCategory);
           setSelectedCategory(String(newCategory.id));
           toast.success(`Categoría "${newCategory.nombre}" creada`);
+        }}
+      />
+
+      <MarcasModal
+        isOpen={marcasAbiertas}
+        onClose={() => setMarcasAbiertas(false)}
+        marcas={marcas}
+        productos={productosCrudos}
+        onChanged={() => void recargarMarcas()}
+        onSelectMarca={(nombre) => {
+          setBusqueda(nombre);
+          setMarcasAbiertas(false);
+          setPaginaActual(1);
         }}
       />
 

@@ -95,12 +95,14 @@ export function ProductImageBox({
   }
 
   const botonClases =
-    'grid h-9 w-9 cursor-pointer select-none place-items-center rounded-full border border-white/20 bg-slate-900/80 text-white shadow-md backdrop-blur-md transition-colors hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-60'
+    'grid h-9 w-9 cursor-pointer select-none place-items-center rounded-full border shadow-md backdrop-blur-md transition-colors disabled:cursor-not-allowed disabled:opacity-60 ' +
+    'border-slate-300/80 bg-white text-slate-600 shadow-slate-900/10 hover:bg-slate-100 ' +
+    'dark:border-white/25 dark:bg-slate-900/85 dark:text-white dark:shadow-black/40 dark:hover:bg-slate-800'
 
   return (
     <div
       className={cn(
-        'relative shrink-0 rounded-2xl bg-slate-200/60 dark:bg-slate-800/60',
+        'relative shrink-0 rounded-2xl border border-slate-300/70 bg-slate-200/60 dark:border-slate-700/60 dark:bg-slate-800/60',
         className,
       )}
     >

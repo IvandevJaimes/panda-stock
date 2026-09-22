@@ -132,7 +132,7 @@ export function Modal({
         <div
           className={cn(
             "custom-scrollbar overflow-y-auto p-6",
-            footer && "min-h-0 flex-1",
+            (footer || height) && "min-h-0 flex-1",
           )}
         >
           {children}
