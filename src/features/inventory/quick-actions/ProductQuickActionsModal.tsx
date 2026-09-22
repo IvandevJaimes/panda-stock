@@ -153,6 +153,7 @@ export function ProductQuickActionsModal({
                 : undefined
             }
             onOpenLotes={onOpenLotes}
+            onImagenChanged={handleActionComplete}
           />
         )}
 

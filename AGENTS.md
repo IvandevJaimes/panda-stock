@@ -104,4 +104,5 @@ Todos los commits deben seguir el estándar de **Conventional Commits traducido 
   - `rtk git status`, `rtk git diff`, `rtk git log`
   - `rtk pnpm test`, `rtk pnpm build`
   - `rtk find ...`, `rtk ls ...`
+- **Búsqueda de código con `tgrep`:** Para encontrar funciones, componentes, imports, referencias, usos de API/variables o explorar el repositorio, utiliza `tgrep "<patrón>" <directorio>` (ej: `tgrep "useEffect" .`) en lugar de `grep`, `rg` o búsquedas manuales. No usar `tgrep` para edición, ejecución o diagnóstico.
 - Nunca ejecutes comandos que vuelquen directorios completos como `find .` o `ls -R` sin filtros; limita la búsqueda con `-maxdepth` o herramientas acotadas.

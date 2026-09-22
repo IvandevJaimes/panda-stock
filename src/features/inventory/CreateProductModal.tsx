@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { Modal } from "../../components/ui/Modal";
 import { FieldError } from "../../components/ui/FieldError";
 import { CapitalizedInput } from "../../components/ui/CapitalizedInput";
+import { ProductImageField } from "../../components/ui/ProductImageField";
 import { CreateCategoryModal } from "../../components/inventory/CreateCategoryModal";
 import {
   CustomSelect,
@@ -48,6 +49,8 @@ export interface FormValues {
   stockActual: string;
   stockMinimo: string;
   vencimiento?: string;
+  /** Foto pendiente de subir: se persiste tras crear el producto. */
+  imagen: File | null;
 }
 
 const SUGERENCIAS_LIMITE = 8;
@@ -64,6 +67,7 @@ const VALORES_INICIALES: DefaultValues<FormValues> = {
   stockActual: "",
   stockMinimo: "",
   vencimiento: "",
+  imagen: null,
 };
 
 export function CreateProductModal({
@@ -185,9 +189,24 @@ export function CreateProductModal({
       categoriaId:
         Number(data.categoriaId) > 0 ? Number(data.categoriaId) : null,
       marca: data.marca.trim() || null,
+      imagen: undefined,
     };
 
-    return productosService.create(payload);
+    const nuevoProducto = await productosService.create(payload);
+
+    // La foto se persiste recién tras tener el producto creado (necesita su id).
+    if (data.imagen) {
+      try {
+        await productosService.setImage(nuevoProducto.id, data.imagen);
+      } catch (error) {
+        toast.warning(
+          "Producto creado, pero no se pudo guardar la foto: " +
+            (error instanceof Error ? error.message : "error desconocido"),
+        );
+      }
+    }
+
+    return nuevoProducto;
   };
 
   const manejarErrorCreacion = (error: unknown) => {
@@ -249,6 +268,20 @@ export function CreateProductModal({
       title="Nuevo Producto"
     >
       <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
+        {/* Filas 1 y 2 con el campo de foto a la izquierda */}
+        <div className="flex items-center gap-4">
+          <Controller
+            name="imagen"
+            control={control}
+            render={({ field }) => (
+              <ProductImageField
+                value={field.value}
+                onChange={field.onChange}
+                className="h-28 w-28 shrink-0 sm:h-32 sm:w-32"
+              />
+            )}
+          />
+          <div className="flex min-w-0 flex-1 flex-col gap-4">
         {/* Fila 1 (dos columnas): Nombre y Marca */}
         <div className="grid grid-cols-2 gap-4">
           <div className="flex flex-col gap-1.5">
@@ -415,6 +448,8 @@ export function CreateProductModal({
               )}
             />
             <FieldError error={errors.categoriaId?.message} />
+          </div>
+        </div>
           </div>
         </div>
 

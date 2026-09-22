@@ -26,7 +26,7 @@ import {
 } from "../ui/DropdownMenu";
 import { BusinessSetupModal } from "../../features/onboarding/BusinessSetupModal";
 import { ImageLightbox } from "../ui/ImageLightbox";
-import pandaStockLogo from "../../assets/panda-stock-logo.png";
+import pandaStockLogo from "../../assets/panda-stock-logo.svg";
 import { toast } from "sonner";
 
 interface MainNavItem {

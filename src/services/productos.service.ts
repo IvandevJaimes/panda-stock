@@ -4,6 +4,8 @@ import type {
   ProductoConLoteActivo,
 } from '../../electron/db/types'
 import { toErrorMessage } from './errors'
+import { bumpAssetVersion } from '../lib/assets'
+import { MIME_A_EXTENSION, MAX_LOGO_SIZE } from '../features/onboarding/business.schema'
 
 function limpiarBarras(codigosBarra: string | null | undefined): string | null {
   if (!codigosBarra?.trim()) return null
@@ -92,6 +94,36 @@ export const productosService = {
   async getAlerts(): Promise<Producto[]> {
     try {
       return await window.electronAPI.productos.getAlerts()
+    } catch (error) {
+      throw new Error(toErrorMessage(error), { cause: error })
+    }
+  },
+
+  async setImage(productoId: number, imagen: File): Promise<Producto> {
+    const extension = MIME_A_EXTENSION[imagen.type]
+    if (!extension) {
+      throw new Error('La imagen debe ser PNG, JPG o WebP')
+    }
+    if (imagen.size > MAX_LOGO_SIZE) {
+      throw new Error('La imagen no puede superar los 5 MB')
+    }
+
+    try {
+      const producto = await window.electronAPI.productos.setImage(
+        productoId,
+        await imagen.arrayBuffer(),
+        extension,
+      )
+      if (producto.imgPath) bumpAssetVersion(producto.imgPath)
+      return producto
+    } catch (error) {
+      throw new Error(toErrorMessage(error), { cause: error })
+    }
+  },
+
+  async removeImage(productoId: number): Promise<Producto> {
+    try {
+      return await window.electronAPI.productos.removeImage(productoId)
     } catch (error) {
       throw new Error(toErrorMessage(error), { cause: error })
     }

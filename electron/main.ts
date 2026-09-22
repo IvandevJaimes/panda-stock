@@ -13,6 +13,8 @@ import {
   ensureAssetsFolders,
   registerPandaAssetProtocol,
   saveLogoFile,
+  saveProductImage,
+  deleteAssetFile,
 } from "./assets.ts";
 import {
   changePin,
@@ -226,6 +228,18 @@ function registerIpcHandlers() {
   ipcMain.handle("productos:delete", (_event, id: number) =>
     deleteProducto(id),
   );
+  ipcMain.handle(
+    "productos:set-image",
+    (_event, productoId: number, data: ArrayBuffer, extension: string) => {
+      const imgPath = saveProductImage(data, extension, productoId);
+      return updateProducto(productoId, { imgPath });
+    },
+  );
+  ipcMain.handle("productos:remove-image", (_event, productoId: number) => {
+    const producto = getProductoById(productoId);
+    if (producto?.imgPath) deleteAssetFile(producto.imgPath);
+    return updateProducto(productoId, { imgPath: null });
+  });
   ipcMain.handle("productos:get-alerts", () => getAlertasStock());
 
   ipcMain.handle("lotes:get-by-producto", (_event, productoId: number) =>

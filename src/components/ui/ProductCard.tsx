@@ -22,6 +22,8 @@ import { TruncatedText } from "./TruncatedText";
 import { HighlightMatch } from "./HighlightMatch";
 import { Button } from "./Button";
 import { cn } from "../../lib/cn";
+import { buildAssetUrl } from "../../lib/assets";
+import { getProductPlaceholder } from "../../lib/productPlaceholder";
 import { evaluateExpiry } from "../../lib/dateUtils";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 
@@ -150,12 +152,29 @@ export function ProductCard({
       onClick={onOpenDetail}
       aria-label={name}
       className={cn(
-        "w-full h-14 sm:h-16 px-3 sm:px-4 rounded-2xl cursor-pointer border transition-colors duration-150 select-none shadow-xs overflow-hidden animate-entry-up",
-        "grid grid-cols-[minmax(0,1fr)_auto] min-w-0 items-center gap-3 sm:gap-4",
+        "w-full h-14 sm:h-16 rounded-2xl cursor-pointer border transition-colors duration-150 select-none shadow-xs overflow-hidden animate-entry-up",
+        "grid grid-cols-[auto_minmax(0,1fr)_auto] min-w-0 items-stretch gap-3 sm:gap-4",
         statusStyles[resolvedStatus] || statusStyles.normal,
         className,
       )}
     >
+{/* 0. Imagen pegada al borde izquierdo y a los extremos verticales */}
+      <div className="flex h-full w-13 shrink-0 items-center justify-center overflow-hidden bg-slate-200/60 sm:w-15 dark:bg-slate-800/60">
+        {(() => {
+          const imgUrl = producto?.imgPath
+            ? buildAssetUrl(producto.imgPath)
+            : null;
+          return (
+            <img
+              src={imgUrl ?? getProductPlaceholder(producto?.id)}
+              alt={imgUrl ? name : `${name} sin foto`}
+              loading="lazy"
+              className="h-full w-full object-cover"
+            />
+          );
+        })()}
+      </div>
+
       {/* 1. Izquierda: Información del producto (nombre, variante, precio, marca · categoría) */}
       <div className="flex min-w-0 flex-col justify-center">
         <div className="flex min-w-0 items-center gap-1.5">
@@ -253,7 +272,7 @@ export function ProductCard({
       </div>
 
       {/* 2. Derecha: métricas y acciones agrupadas */}
-      <div className="flex min-w-0 items-center justify-end gap-4 sm:gap-6 md:gap-8">
+      <div className="flex min-w-0 items-center justify-end gap-4 pr-3 sm:gap-6 sm:pr-4 md:gap-8">
         {/* Bloque de stock: número destacado + mínimo */}
         <div className="flex shrink-0 flex-col items-end justify-center gap-0.5">
           <span

@@ -1,5 +1,5 @@
 import { app, protocol } from 'electron'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 
 const ASSET_EXTENSIONES_PERMITIDAS = new Set(['png', 'jpg', 'jpeg', 'webp'])
@@ -32,6 +32,34 @@ export function saveLogoFile(data: Uint8Array | ArrayBuffer, extension: string):
   const rutaRelativa = `assets/branchLogo/logo.${ext}`
   writeFileSync(path.join(getAssetsRoot(), rutaRelativa), bytes)
   return rutaRelativa
+}
+
+/** Guarda la foto de un producto bajo assets/productsImg y devuelve la ruta relativa. */
+export function saveProductImage(
+  data: Uint8Array | ArrayBuffer,
+  extension: string,
+  productoId: number,
+): string {
+  const ext = extension.replace(/^\./, '').toLowerCase()
+  if (!ASSET_EXTENSIONES_PERMITIDAS.has(ext)) {
+    throw new Error(`Extensión de imagen no permitida: "${extension}"`)
+  }
+  const bytes = data instanceof Uint8Array ? data : new Uint8Array(data)
+  const rutaRelativa = `assets/productsImg/producto_${productoId}.${ext}`
+  writeFileSync(path.join(getAssetsRoot(), rutaRelativa), bytes)
+  return rutaRelativa
+}
+
+/** Borra un archivo de assets si existe. Nunca sale del root (anti-traversal). */
+export function deleteAssetFile(rutaRelativa: string): void {
+  const root = getAssetsRoot()
+  const abs = path.resolve(root, rutaRelativa)
+  if (abs === root || !abs.startsWith(root + path.sep)) return
+  try {
+    unlinkSync(abs)
+  } catch {
+    // Archivo inexistente o ya eliminado: se ignora
+  }
 }
 
 /**
