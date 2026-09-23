@@ -91,6 +91,15 @@ export const productosService = {
     }
   },
 
+  /** Soft delete: alterna el flag activo sin borrar filas. Devuelve el producto actualizado. */
+  async toggle(id: number, activo: boolean): Promise<Producto> {
+    try {
+      return await window.electronAPI.productos.toggle(id, activo)
+    } catch (error) {
+      throw new Error(toErrorMessage(error), { cause: error })
+    }
+  },
+
   async getAlerts(): Promise<Producto[]> {
     try {
       return await window.electronAPI.productos.getAlerts()

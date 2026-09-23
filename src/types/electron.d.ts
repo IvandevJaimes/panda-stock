@@ -67,6 +67,7 @@ declare global {
         create: (data: Record<string, unknown>) => Promise<Producto>
         update: (id: number, data: Record<string, unknown>) => Promise<Producto>
         delete: (id: number) => Promise<void>
+        toggle: (id: number, activo: boolean) => Promise<Producto>
         setImage: (productoId: number, data: ArrayBuffer, extension: string) => Promise<Producto>
         removeImage: (productoId: number) => Promise<Producto>
         getAlerts: () => Promise<Producto[]>

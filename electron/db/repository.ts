@@ -499,6 +499,15 @@ export function updateProducto(id: number, data: Record<string, unknown>): Produ
   return fila
 }
 
+export function toggleProducto(id: number, activo: boolean): Producto {
+  return getDb()
+    .update(productos)
+    .set({ activo, actualizadoEn: new Date().toISOString() })
+    .where(eq(productos.id, id))
+    .returning()
+    .get()
+}
+
 export function deleteProducto(id: number): void {
   getDb().transaction((tx) => {
     const lotesDelProducto = tx

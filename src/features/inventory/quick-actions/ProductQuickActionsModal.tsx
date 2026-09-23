@@ -13,6 +13,7 @@ import { EditarVarianteForm } from "./EditarVarianteForm";
 import { ModificarPrecioForm } from "./ModificarPrecioForm";
 import { QuickActionsMenu } from "./QuickActionsMenu";
 import { StockMinimoForm } from "./StockMinimoForm";
+import { ToggleActivoProducto } from "../ToggleActivoProducto";
 import { AjustarStockLoteForm } from "../lote-actions/AjustarStockLoteForm";
 import { RegistrarPerdidaLoteForm } from "../lote-actions/RegistrarPerdidaLoteForm";
 import { FORM_ID, SUBMIT_LABEL, type QuickActionView } from "./types";
@@ -133,6 +134,13 @@ export function ProductQuickActionsModal({
       onClose={handleClose}
       maxWidth="xl"
       title="Acciones Rápidas"
+      headerExtra={
+        <ToggleActivoProducto
+          producto={product}
+          onChanged={onSuccess}
+          onDesactivado={handleClose}
+        />
+      }
     >
       <div className="flex flex-col">
         {vistaActual === "menu" && (

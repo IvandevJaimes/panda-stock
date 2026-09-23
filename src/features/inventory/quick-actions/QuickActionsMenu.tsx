@@ -14,6 +14,7 @@ import {
 import { cn } from "../../../lib/cn";
 import { evaluateExpiry } from "../../../lib/dateUtils";
 import type { Producto } from "../../../../electron/db/types";
+import type { ReactElement } from "react";
 import { formatearCodigo, formatearPrecio } from "./formatters";
 import { Tooltip } from "../../../components/ui/Tooltip";
 import { ProductImageBox } from "../../../components/ui/ProductImageBox";
@@ -158,23 +159,23 @@ export function QuickActionsMenu({
           </h3>
           <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
             {[
-              marcaNombre && (
+              marcaNombre ? (
                 <span
                   key="marca"
                   className="text-xs font-semibold uppercase tracking-wide text-emerald-600 dark:text-emerald-400"
                 >
                   {marcaNombre}
                 </span>
-              ),
-              categoriaNombre && (
+              ) : null,
+              categoriaNombre ? (
                 <span
                   key="categoria"
                   className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500"
                 >
                   {categoriaNombre}
                 </span>
-              ),
-              (producto.codigoInterno || producto.codigosBarras) && (
+              ) : null,
+              producto.codigoInterno || producto.codigosBarras ? (
                 <span
                   key="codigo"
                   className="font-mono text-xs text-slate-400 dark:text-slate-500"
@@ -183,9 +184,9 @@ export function QuickActionsMenu({
                     producto.codigoInterno || producto.codigosBarras,
                   )}
                 </span>
-              ),
+              ) : null,
             ]
-              .filter(Boolean)
+              .filter((chip): chip is ReactElement => chip !== null)
               .map((chip, index) => (
                 <span key={chip.key} className="flex items-center gap-2">
                   {index > 0 && (

@@ -21,6 +21,8 @@ export interface TabsModalProps {
   defaultTabId?: string;
   maxWidth?: string;
   className?: string;
+  /** Contenido extra a la derecha del título (antes del botón de cerrar). */
+  headerExtra?: ReactNode;
 }
 
 function IconoTab({ icon }: { icon: LucideIcon | ReactNode }) {
@@ -40,6 +42,7 @@ export function TabsModal({
   defaultTabId,
   maxWidth = "max-w-2xl",
   className,
+  headerExtra,
 }: TabsModalProps) {
   const [tabActiva, setTabActiva] = useState(
     () =>
@@ -125,13 +128,16 @@ export function TabsModal({
                 {title}
               </h2>
             )}
-            <button
-              onClick={onClose}
-              className="ml-auto -mr-2 cursor-pointer rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
-              aria-label="Cerrar modal"
-            >
-              <X className="h-4 w-4" />
-            </button>
+            <div className="ml-auto flex items-center gap-3">
+              {headerExtra}
+              <button
+                onClick={onClose}
+                className="-mr-2 cursor-pointer rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+                aria-label="Cerrar modal"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
           </div>
 
           {/* Subheader contextual: anclado entre la cabecera y el cuerpo, sin scroll */}

@@ -48,6 +48,7 @@ import {
   processSale,
   scanProductByCode,
   toggleEmpleado,
+  toggleProducto,
   updateCategoria,
   updateMarca,
   updateProducto,
@@ -227,6 +228,9 @@ function registerIpcHandlers() {
   );
   ipcMain.handle("productos:delete", (_event, id: number) =>
     deleteProducto(id),
+  );
+  ipcMain.handle("productos:toggle", (_event, id: number, activo: boolean) =>
+    toggleProducto(id, activo),
   );
   ipcMain.handle(
     "productos:set-image",

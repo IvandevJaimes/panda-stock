@@ -35,6 +35,7 @@ import { evaluateExpiry } from "../../lib/dateUtils";
 import { lotesService } from "../../services/lotes.service";
 import { movimientosService } from "../../services/movimientos.service";
 import { ConfirmarPerdidaModal } from "./ConfirmarPerdidaModal";
+import { ToggleActivoProducto } from "./ToggleActivoProducto";
 import {
   DETALLE_DIAS_VENCER,
   esLoteVencido,
@@ -779,6 +780,13 @@ Lote activo
         title="Detalle del producto"
         tabs={pestanas}
         maxWidth="max-w-2xl"
+        headerExtra={
+          <ToggleActivoProducto
+            producto={product}
+            onChanged={onMutated}
+            onDesactivado={onClose}
+          />
+        }
         subheaderClassName={
           loteActivo
             ? tintSubheader(loteActivo.fechaVence, productoStockBajo)

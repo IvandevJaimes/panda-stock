@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
+  Archive,
+  ArrowLeft,
   Boxes,
   Clock,
   FilterX,
@@ -10,7 +12,6 @@ import {
   Minus,
   Search,
   SlidersHorizontal,
-  Store,
   X,
   XCircle,
 } from "lucide-react";
@@ -196,6 +197,7 @@ export function InventoryPage() {
   const [isCreateCategoryOpen, setIsCreateCategoryOpen] = useState(false);
   const [isCreateProductOpen, setIsCreateProductOpen] = useState(false);
   const [marcasAbiertas, setMarcasAbiertas] = useState(false);
+  const [verInactivos, setVerInactivos] = useState(false);
   const [selectedProductForDetail, setSelectedProductForDetail] =
     useState<Producto | null>(null);
   const [productForQuickActions, setProductForQuickActions] =
@@ -205,6 +207,7 @@ export function InventoryPage() {
   const [aperturaAcciones, setAperturaAcciones] = useState(0);
   const [lotesProducto, setLotesProducto] = useState<Producto | null>(null);
   const [abrirInventarioAuto, setAbrirInventarioAuto] = useState(false);
+  const [togglingActivoId, setTogglingActivoId] = useState<number | null>(null);
   const [perdidaSeleccion, setPerdidaSeleccion] = useState<{
     producto: Producto;
     lote: Lote;
@@ -230,8 +233,7 @@ export function InventoryPage() {
   const obtenerProductos = useCallback(async (): Promise<
     ProductoConLoteActivo[]
   > => {
-    const data = await productosService.getAll();
-    return data.filter((p) => p.activo);
+    return productosService.getAll();
   }, []);
 
   const obtenerMarcas = useCallback(async (): Promise<Marca[]> => {
@@ -290,8 +292,9 @@ export function InventoryPage() {
     }
   }, [obtenerProductos, obtenerMarcas]);
 
-  const productos = useMemo(() => {
-    const filtrados = productosCrudos.filter(
+  const productosActivos = useMemo(() => {
+    const activos = productosCrudos.filter((p) => p.activo);
+    const filtrados = activos.filter(
       (p) =>
         (orden !== "sin_marca" || p.marcaId === null) &&
         (orden !== "sin_minimo" || p.stockMinimo === 0),
@@ -300,6 +303,20 @@ export function InventoryPage() {
       mapearProducto(p, categories, marcas),
     );
   }, [productosCrudos, orden, categories, marcas]);
+
+  const productos = useMemo(() => {
+    const visibles = productosCrudos.filter((p) =>
+      verInactivos ? !p.activo : p.activo,
+    );
+    const filtrados = visibles.filter(
+      (p) =>
+        (orden !== "sin_marca" || p.marcaId === null) &&
+        (orden !== "sin_minimo" || p.stockMinimo === 0),
+    );
+    return ordenarProductos(filtrados, orden).map((p) =>
+      mapearProducto(p, categories, marcas),
+    );
+  }, [productosCrudos, orden, categories, marcas, verInactivos]);
 
   const handleKpiClick = (filter: KpiFilter) => {
     setActiveKpiFilter((prev) => {
@@ -310,12 +327,14 @@ export function InventoryPage() {
   };
 
   const hayFiltroActivo =
+    verInactivos ||
     busqueda.trim() !== "" ||
     activeKpiFilter !== "all" ||
     selectedCategory !== "all" ||
     orden !== "creado_desc";
 
   const limpiarFiltros = () => {
+    setVerInactivos(false);
     setBusqueda("");
     setActiveKpiFilter("all");
     setSelectedCategory("all");
@@ -334,6 +353,28 @@ export function InventoryPage() {
     setAperturaAcciones((n) => n + 1);
     setProductForQuickActions(producto);
   };
+
+  const handleToggleActivo = useCallback(
+    async (producto: Producto, activo: boolean) => {
+      setTogglingActivoId(producto.id);
+      try {
+        await productosService.toggle(producto.id, activo);
+        toast.success(
+          activo
+            ? `Producto "${producto.nombre}" reactivado`
+            : `Producto "${producto.nombre}" desactivado`,
+        );
+        await refreshProductos();
+      } catch (err) {
+        toast.error(
+          err instanceof Error ? err.message : "No se pudo cambiar el estado",
+        );
+      } finally {
+        setTogglingActivoId(null);
+      }
+    },
+    [refreshProductos],
+  );
 
   const handleConfirmarPerdida = async (producto: Producto) => {
     try {
@@ -362,6 +403,8 @@ export function InventoryPage() {
     return counts;
   }, [productos]);
   const totalProducts = productos.length;
+  const totalActivos = productosCrudos.filter((p) => p.activo).length;
+  const totalInactivos = productosCrudos.filter((p) => !p.activo).length;
 
   const filasFiltradas = useMemo(() => {
     const texto = normalizar(busqueda.trim());
@@ -413,61 +456,93 @@ export function InventoryPage() {
 
   const kpis = useMemo(
     () => ({
-      stockBajo: productos.filter((p) => p.stock < p.minStock && p.stock > 0)
+      stockBajo: productosActivos.filter(
+        (p) => p.stock < p.minStock && p.stock > 0,
+      ).length,
+      porVencer: productosActivos.filter((p) => p.status === "por-vencer")
         .length,
-      porVencer: productos.filter((p) => p.status === "por-vencer").length,
-      agotados: productos.filter((p) => p.stock === 0).length,
-      vencidos: productos.filter((p) => p.status === "vencido").length,
+      agotados: productosActivos.filter((p) => p.stock === 0).length,
+      vencidos: productosActivos.filter((p) => p.status === "vencido").length,
     }),
-    [productos],
+    [productosActivos],
   );
 
   // Ajuste de stock y merma requieren un lote activo (stock > 0): sin productos
   // con stock, esas acciones globales no tienen sentido y se bloquean.
-  const hayStockDisponible = productos.some((p) => p.stock > 0);
+  const hayStockDisponible = productosActivos.some((p) => p.stock > 0);
 
   return (
     <div className="flex flex-col gap-3 pt-4 md:pt-6">
       {/* ── Encabezado ── */}
       <div className="flex flex-row items-center justify-between gap-3">
-        <div className="flex flex-col md:flex-row items-center md:gap-3">
-          <h1 className="font-display text-xl font-bold text-slate-900 dark:text-white sm:text-2xl">
-            Inventario
-          </h1>
-          <span className="select-none rounded-full border border-slate-200 bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600 dark:border-slate-700/80 dark:bg-slate-800 dark:text-slate-300">
-            <span className="font-display text-base font-bold text-emerald-600 dark:text-emerald-400">
+        <div className="flex  items-center gap-2">
+          {verInactivos && (
+            <div className="flex items-center gap-2">
+            <Tooltip content="Volver a los productos activos" placement="top">
+              <button
+                type="button"
+                onClick={limpiarFiltros}
+                aria-label="Volver al inventario activo"
+                className="grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-xl border border-slate-200 text-slate-500 transition-colors hover:border-slate-300 hover:text-slate-700 dark:border-slate-700/80 dark:text-slate-400 dark:hover:border-slate-600 dark:hover:text-slate-200"
+              >
+                <ArrowLeft className="h-4.5 w-4.5" />
+              </button>
+            </Tooltip>
+            <h1 className="font-display text-xl font-bold text-slate-900 dark:text-white sm:text-2xl">
+              {verInactivos ? "Desactivados" : "Inventario"}
+            </h1>
+            </div>
+          )}
+          {!verInactivos && (
+            <h1 className="font-display text-xl font-bold text-slate-900 dark:text-white sm:text-2xl">
+              Inventario
+            </h1>
+          )}
+          <Tooltip
+            content={
+              verInactivos
+                ? `${productos.length} ${
+                    productos.length === 1 ? "desactivado" : "desactivados"
+                  }`
+                : `${productos.length} ${
+                    productos.length === 1 ? "producto" : "productos"
+                  }`
+            }
+            placement="top"
+          >
+            <span className="inline-flex shrink-0 select-none items-center rounded-full border border-slate-200 bg-slate-100 px-2.5 py-0.5 font-display text-base font-bold text-emerald-600 dark:border-slate-700/80 dark:bg-slate-800 dark:text-emerald-400">
               {productos.length}
-            </span>{" "}
-            {productos.length === 1 ? "producto" : "productos"}
-          </span>
+            </span>
+          </Tooltip>
         </div>
         <div className="flex items-center gap-2">
-                  <Button
-          variant="outline"
-          icon={<Store size={16} />}
-          onClick={() => setMarcasAbiertas(true)}
-          className="whitespace-nowrap rounded-2xl"
-        >
-          Marcas
-          <span className="ml-1 select-none rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600 dark:border-slate-700/80 dark:bg-slate-800 dark:text-slate-300">
-            {marcas.filter((m) => m.activo).length}
-          </span>
-        </Button>
-        {/* Botón Grande Esquinado */}
-        <Button
-          variant="primary"
-          onClick={() => setIsCreateProductOpen(true)}
-          className="h-10 shrink-0 gap-2 rounded-2xl px-4 text-sm font-bold shadow-xs sm:h-12 sm:px-6 sm:text-base"
-        >
-          <PackagePlus className="h-5 w-5" />
-          <span>Nuevo producto</span>
-        </Button>
+          <Button
+            variant="outline"
+            
+            onClick={() => setMarcasAbiertas(true)}
+            className="whitespace-nowrap rounded-2xl px-2 py-2 text-xs sm:text-sm "
+          >
+            Marcas
+            <span className=" select-none rounded-full  border border-slate-200 bg-slate-100 px-2  py-0.5 text-[10px] sm:text-xs font-semibold text-slate-600 dark:border-slate-700/80 dark:bg-slate-800 dark:text-slate-300">
+              {marcas.filter((m) => m.activo).length}
+            </span>
+          </Button>
+          {/* Botón Grande Esquinado */}
+          <Button
+            variant="primary"
+            onClick={() => setIsCreateProductOpen(true)}
+            className="h-10 shrink-0 gap-2 rounded-2xl px-4 text-sm font-bold shadow-xs sm:h-12 sm:px-6 sm:text-base"
+          >
+            <PackagePlus className="h-5 w-5" />
+            <span>Nuevo producto</span>
+          </Button>
         </div>
 
       </div>
 
       {/* ── KPIs ── */}
-      <div className="mt-2 grid grid-cols-2 gap-2.5 sm:gap-3.5 lg:grid-cols-4">
+      {!verInactivos && (
+        <div className="mt-2 grid grid-cols-2 gap-2.5 sm:gap-3.5 lg:grid-cols-4">
         <KpiCard
           className="animate-entry-up stagger-1"
           icon={<AlertTriangle className="h-4 w-4 sm:h-4.5 sm:w-4.5" />}
@@ -516,75 +591,78 @@ export function InventoryPage() {
           isActive={activeKpiFilter === "expired"}
           activeColor="red"
         />
-      </div>
+        </div>
+      )}
 
       {/* ── Contenedor sticky: categorías + toolbar se anclan al top al scrollear ── */}
       <div className="sticky top-0 z-20 flex w-full min-w-0 flex-col gap-2.5 border-slate-200/80 bg-[#f4f6f8] pt-3 pb-3 transition-colors select-none relative after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-3 after:bg-gradient-to-b after:from-slate-900/10 after:to-transparent after:content-[''] dark:border-slate-800/60 dark:bg-[#0b0f17] dark:after:from-black/45">
-        {/* ── Barra de categorías: anclaje fijo + carrusel desplazable ── */}
-        <div className="flex w-full items-center select-none">
-          {/* 1. Anclaje fijo: botón Nueva + separador + fondo opaco + máscara degradada */}
-          <div className="relative z-10 flex shrink-0 items-center bg-[#f4f6f8]  pb-2 dark:bg-[#0b0f17]">
-            <Tooltip content="Crear una nueva categoría" placement="top">
-              <button
-                type="button"
-                onClick={() => setIsCreateCategoryOpen(true)}
-                aria-label="Nueva categoría"
-                className={cn(
-                  "h-8 px-3 rounded-full text-xs font-semibold shrink-0 select-none",
-                  "flex items-center gap-1.5 transition-all duration-150 shadow-xs cursor-pointer",
-                  "bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 border border-emerald-500/30",
-                  "dark:bg-emerald-500/10 dark:hover:bg-emerald-500/20 dark:text-emerald-400 dark:border-emerald-500/30",
-                  "active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40",
-                )}
-              >
-                <Plus className="h-4 w-4 stroke-[2.5]" />
-                <span>Nueva</span>
-              </button>
-            </Tooltip>
+        {!verInactivos && (
+          /* ── Barra de categorías: anclaje fijo + carrusel desplazable ── */
+          <div className="flex w-full items-center select-none">
+            {/* 1. Anclaje fijo: botón Nueva + separador + fondo opaco + máscara degradada */}
+            <div className="relative z-10 flex shrink-0 items-center bg-[#f4f6f8]  pb-2 dark:bg-[#0b0f17]">
+              <Tooltip content="Crear una nueva categoría" placement="top">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateCategoryOpen(true)}
+                  aria-label="Nueva categoría"
+                  className={cn(
+                    "h-8 px-3 rounded-full text-xs font-semibold shrink-0 select-none",
+                    "flex items-center gap-1.5 transition-all duration-150 shadow-xs cursor-pointer",
+                    "bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 border border-emerald-500/30",
+                    "dark:bg-emerald-500/10 dark:hover:bg-emerald-500/20 dark:text-emerald-400 dark:border-emerald-500/30",
+                    "active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40",
+                  )}
+                >
+                  <Plus className="h-4 w-4 stroke-[2.5]" />
+                  <span>Nueva</span>
+                </button>
+              </Tooltip>
 
-            <div
-              className="mx-2.5 h-4 w-px shrink-0 bg-slate-300 dark:bg-slate-700/60"
-              aria-hidden="true"
-            />
-          </div>
+              <div
+                className="mx-2.5 h-4 w-px shrink-0 bg-slate-300 dark:bg-slate-700/60"
+                aria-hidden="true"
+              />
+            </div>
 
-          {/* 2. Carrusel desplazable: Todas + categorías */}
-          <div className="custom-scrollbar flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto pl-1 pb-2 pr-8 sm:pr-10">
-            <Pill
-              label="Todas"
-              active={selectedCategory === "all"}
-              showActions={false}
-              count={totalProducts}
-              onSelect={() => {
-                setSelectedCategory("all");
-                setPaginaActual(1);
-              }}
-            />
-            {categories.map((categoria) => (
+            {/* 2. Carrusel desplazable: Todas + categorías */}
+            <div className="custom-scrollbar flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto pl-1 pb-2 pr-8 sm:pr-10">
               <Pill
-                key={categoria.id}
-                label={categoria.nombre}
-                count={categoryCounts[categoria.nombre] || 0}
-                active={selectedCategory === String(categoria.id)}
-                canDelete={(categoryCounts[categoria.nombre] || 0) === 0}
+                label="Todas"
+                active={selectedCategory === "all"}
+                showActions={false}
+                count={totalProducts}
                 onSelect={() => {
-                  setSelectedCategory((prev) =>
-                    prev === String(categoria.id)
-                      ? "all"
-                      : String(categoria.id),
-                  );
+                  setSelectedCategory("all");
                   setPaginaActual(1);
                 }}
-                onEdit={() => setEditingCategory(categoria)}
-                onDelete={() => setDeletingCategory(categoria)}
               />
-            ))}
-            <div
-              className="w-6 shrink-0 pointer-events-none"
-              aria-hidden="true"
-            />
+              {categories.map((categoria) => (
+                <Pill
+                  key={categoria.id}
+                  label={categoria.nombre}
+                  count={categoryCounts[categoria.nombre] || 0}
+                  active={selectedCategory === String(categoria.id)}
+                  canDelete={(categoryCounts[categoria.nombre] || 0) === 0}
+                  onSelect={() => {
+                    setSelectedCategory((prev) =>
+                      prev === String(categoria.id)
+                        ? "all"
+                        : String(categoria.id),
+                    );
+                    setPaginaActual(1);
+                  }}
+                  onEdit={() => setEditingCategory(categoria)}
+                  onDelete={() => setDeletingCategory(categoria)}
+                />
+              ))}
+              <div
+                className="w-6 shrink-0 pointer-events-none"
+                aria-hidden="true"
+              />
+            </div>
           </div>
-        </div>
+        )}
 
         {/* ── Barra de herramientas ── */}
         <div className="flex pt-0.5 w-full  min-w-0 flex-col items-stretch justify-between gap-3 lg:flex-row lg:items-center">
@@ -617,15 +695,58 @@ export function InventoryPage() {
                 ) : undefined
               }
             />
-            <CustomSelect
-              options={OPCIONES_ORDEN}
-              value={orden}
-              onChange={(value) => {
-                setOrden(value as OrdenInventario);
-                setPaginaActual(1);
-              }}
-              className="w-44 shrink-0 sm:w-48"
-            />
+            {!verInactivos && (
+              <CustomSelect
+                options={OPCIONES_ORDEN}
+                value={orden}
+                onChange={(value) => {
+                  setOrden(value as OrdenInventario);
+                  setPaginaActual(1);
+                }}
+                className="w-44 shrink-0 sm:w-48"
+              />
+            )}
+            <Tooltip
+              content={
+                verInactivos
+                  ? "Volver a los productos activos"
+                  : `Ver los productos desactivados (${totalInactivos})`
+              }
+              placement="top"
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  setVerInactivos((prev) => !prev);
+                  setActiveKpiFilter("all");
+                  setSelectedCategory("all");
+                  setOrden("creado_desc");
+                  setPaginaActual(1);
+                }}
+                aria-pressed={verInactivos}
+                aria-label={
+                  verInactivos ? "Ver productos activos" : "Ver desactivados"
+                }
+                className={cn(
+                  "flex shrink-0 select-none cursor-pointer items-center gap-1.5 rounded-xl border px-2 py-2 text-sm font-medium transition-colors duration-150",
+                  verInactivos
+                    ? "border-slate-300 bg-slate-200 text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                    : "border-slate-200 text-slate-400 hover:border-slate-300 hover:text-slate-600 dark:border-slate-700/80 dark:text-slate-500 dark:hover:border-slate-600 dark:hover:text-slate-300",
+                )}
+              >
+                <Archive className="h-5 w-5" />
+                <span
+                  className={cn(
+                    "select-none rounded-full px-1.5 py-0.5 text-xs font-semibold leading-none",
+                    verInactivos
+                      ? "bg-slate-700 text-slate-100 dark:bg-slate-600 dark:text-white"
+                      : "bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-400",
+                  )}
+                >
+                  {verInactivos ? totalActivos : totalInactivos}
+                </span>
+              </button>
+            </Tooltip>
             <Tooltip
               content={
                 hayFiltroActivo ? "Limpiar todos los filtros" : undefined
@@ -649,38 +770,42 @@ export function InventoryPage() {
             </Tooltip>
           </div>
           <div className="flex flex-nowrap items-center gap-2.5 overflow-x-auto pb-1 lg:pb-0">
+            {!verInactivos && (
+            <>
             <div
               className="h-6 w-px hidden lg:block shrink-0 self-center bg-slate-200 sm:h-7 dark:bg-slate-700/60"
               aria-hidden="true"
             />
 
             <Button
-              variant="primary"
-              icon={<Plus size={16} />}
-              onClick={() => setAccionGlobal("agregar-inventario")}
-              disabled={productos.length === 0}
-              className="whitespace-nowrap"
-            >
-              Agregar Inventario
-            </Button>
-            <Button
-              variant="outline"
-              icon={<SlidersHorizontal size={16} />}
-              onClick={() => setAccionGlobal("ajustar-stock")}
-              disabled={!hayStockDisponible}
-              className="whitespace-nowrap"
-            >
-              Ajustar stock
-            </Button>
-            <Button
-              variant="danger"
-              icon={<Minus size={16} />}
-              onClick={() => setAccionGlobal("registrar-perdida")}
-              disabled={!hayStockDisponible}
-              className="whitespace-nowrap"
-            >
-              Registrar merma
-            </Button>
+                variant="primary"
+                icon={<Plus size={16} />}
+                onClick={() => setAccionGlobal("agregar-inventario")}
+                disabled={productos.length === 0}
+                className="whitespace-nowrap"
+              >
+                Agregar Inventario
+              </Button>
+              <Button
+                variant="outline"
+                icon={<SlidersHorizontal size={16} />}
+                onClick={() => setAccionGlobal("ajustar-stock")}
+                disabled={!hayStockDisponible}
+                className="whitespace-nowrap"
+              >
+                Ajustar stock
+              </Button>
+              <Button
+                variant="danger"
+                icon={<Minus size={16} />}
+                onClick={() => setAccionGlobal("registrar-perdida")}
+                disabled={!hayStockDisponible}
+                className="whitespace-nowrap"
+              >
+                Registrar merma
+              </Button>
+            </>
+          )}
           </div>
         </div>
       </div>
@@ -707,16 +832,30 @@ export function InventoryPage() {
         productos.length === 0 ? (
           <EmptyState
             icon={<Boxes className="h-12 w-12 stroke-[1.5]" />}
-            title="Todavía no hay productos"
-            description="Creá tu primer producto para empezar a controlar el inventario."
+            title={
+              verInactivos
+                ? "No hay productos desactivados"
+                : "Todavía no hay productos"
+            }
+            description={
+              verInactivos
+                ? "Todos los productos del inventario están activos."
+                : "Creá tu primer producto para empezar a controlar el inventario."
+            }
             action={
-              <Button
-                variant="primary"
-                onClick={() => setIsCreateProductOpen(true)}
-              >
-                <PackagePlus className="h-4 w-4" />
-                Nuevo producto
-              </Button>
+              verInactivos ? (
+                <Button variant="outline" onClick={() => setVerInactivos(false)}>
+                  Ver productos activos
+                </Button>
+              ) : (
+                <Button
+                  variant="primary"
+                  onClick={() => setIsCreateProductOpen(true)}
+                >
+                  <PackagePlus className="h-4 w-4" />
+                  Nuevo producto
+                </Button>
+              )
             }
           />
         ) : (
@@ -756,6 +895,9 @@ export function InventoryPage() {
                 codigoInterno={producto.codigoInterno}
                 codigosBarras={producto.codigosBarras}
                 highlightQuery={busqueda}
+                inactivo={verInactivos}
+                onToggleActivo={raw ? handleToggleActivo : undefined}
+                togglingActivo={togglingActivoId === producto.id}
                 onOpenQuickActions={
                   raw ? (p) => abrirAccionesRapidas(p, "menu") : undefined
                 }
