@@ -67,6 +67,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
     update: (id: number, data: Record<string, unknown>) =>
       ipcRenderer.invoke("productos:update", id, data),
     delete: (id: number) => ipcRenderer.invoke("productos:delete", id),
+    toggle: (id: number, activo: boolean) =>
+      ipcRenderer.invoke("productos:toggle", id, activo),
+    setImage: (productoId: number, data: ArrayBuffer, extension: string) =>
+      ipcRenderer.invoke("productos:set-image", productoId, data, extension),
+    removeImage: (productoId: number) =>
+      ipcRenderer.invoke("productos:remove-image", productoId),
     getAlerts: () => ipcRenderer.invoke("productos:get-alerts"),
   },
   lotes: {

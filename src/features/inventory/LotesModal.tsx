@@ -12,6 +12,8 @@ import {
 import { toast } from "sonner";
 import { cn } from "../../lib/cn";
 import { evaluateExpiry } from "../../lib/dateUtils";
+import { buildAssetUrl } from "../../lib/assets";
+import { getProductPlaceholder } from "../../lib/productPlaceholder";
 import { lotesService } from "../../services/lotes.service";
 import { Button } from "../../components/ui/Button";
 import { ConfirmModal } from "../../components/ui/ConfirmModal";
@@ -337,20 +339,30 @@ export function LotesModal({
         defaultTabId="lotes"
         subheader={
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex min-w-0 flex-col gap-0.5">
-              <span className="truncate font-display text-base font-bold text-slate-900 dark:text-slate-100">
-                {product.nombre}
-                {product.variante && (
-                  <span className="ml-2 text-sm font-medium text-slate-400 dark:text-slate-500">
-                    · {product.variante}
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="grid h-12 w-12 shrink-0 select-none place-items-center overflow-hidden rounded-xl bg-slate-200/60 dark:bg-slate-800/60">
+                <img
+                  src={buildAssetUrl(product.imgPath) ?? getProductPlaceholder(product.id)}
+                  alt={product.imgPath ? product.nombre : `${product.nombre} sin foto`}
+                  loading="lazy"
+                  className="h-full w-full object-cover"
+                />
+              </div>
+              <div className="flex min-w-0 flex-col gap-0.5">
+                <span className="truncate font-display text-base font-bold text-slate-900 dark:text-slate-100">
+                  {product.nombre}
+                  {product.variante && (
+                    <span className="ml-2 text-sm font-medium text-slate-400 dark:text-slate-500">
+                      · {product.variante}
+                    </span>
+                  )}
+                </span>
+                {(marcaNombre || categoriaNombre) && (
+                  <span className="truncate text-xs font-medium text-slate-400 dark:text-slate-500">
+                    {[marcaNombre, categoriaNombre].filter(Boolean).join(" · ")}
                   </span>
                 )}
-              </span>
-              {(marcaNombre || categoriaNombre) && (
-                <span className="truncate text-xs font-medium text-slate-400 dark:text-slate-500">
-                  {[marcaNombre, categoriaNombre].filter(Boolean).join(" · ")}
-                </span>
-              )}
+              </div>
             </div>
             <Button
               variant="primary"

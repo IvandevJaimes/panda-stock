@@ -11,6 +11,7 @@ import {
   like,
   lt,
   lte,
+  ne,
   or,
   sql,
 } from 'drizzle-orm'
@@ -216,17 +217,65 @@ export function getMarcas(): Marca[] {
 }
 
 export function createMarca(nombre: string): Marca {
-  return getDb()
+  const db = getDb()
+  const nombreLimpio = nombre.trim()
+  if (!nombreLimpio) throw new Error('El nombre de la marca es obligatorio')
+
+  const existente = db
+    .select()
+    .from(marcas)
+    .where(sql`lower(${marcas.nombre}) = lower(${nombreLimpio})`)
+    .get()
+
+  if (existente) {
+    if (existente.activo) return existente
+    // El nombre corresponde a una marca archivada: se reactiva en vez de violar la UNIQUE.
+    db.update(marcas)
+      .set({ nombre: nombreLimpio, activo: true })
+      .where(eq(marcas.id, existente.id))
+      .run()
+    return { ...existente, nombre: nombreLimpio, activo: true }
+  }
+
+  return db
     .insert(marcas)
-    .values({ nombre, activo: true })
+    .values({ nombre: nombreLimpio, activo: true })
     .returning()
     .get()
 }
 
 export function updateMarca(id: number, nombre: string): void {
-  getDb()
-    .update(marcas)
-    .set({ nombre })
+  const db = getDb()
+  const nombreLimpio = nombre.trim()
+  if (!nombreLimpio) throw new Error('El nombre de la marca es obligatorio')
+
+  const duplicado = db
+    .select()
+    .from(marcas)
+    .where(
+      and(
+        ne(marcas.id, id),
+        sql`lower(${marcas.nombre}) = lower(${nombreLimpio})`,
+      ),
+    )
+    .get()
+
+  if (duplicado) {
+    if (duplicado.activo) throw new Error('El nombre de la marca ya existe')
+    // El nombre está ocupado por una marca archivada: se reactiva y se archiva la actual.
+    db.update(marcas)
+      .set({ activo: true })
+      .where(eq(marcas.id, duplicado.id))
+      .run()
+    db.update(marcas)
+      .set({ activo: false })
+      .where(eq(marcas.id, id))
+      .run()
+    return
+  }
+
+  db.update(marcas)
+    .set({ nombre: nombreLimpio })
     .where(eq(marcas.id, id))
     .run()
 }
@@ -448,6 +497,15 @@ export function updateProducto(id: number, data: Record<string, unknown>): Produ
   const fila = db.update(productos).set(set).where(eq(productos.id, id)).returning().get()
   if (!fila) throw new Error('Producto no encontrado')
   return fila
+}
+
+export function toggleProducto(id: number, activo: boolean): Producto {
+  return getDb()
+    .update(productos)
+    .set({ activo, actualizadoEn: new Date().toISOString() })
+    .where(eq(productos.id, id))
+    .returning()
+    .get()
 }
 
 export function deleteProducto(id: number): void {

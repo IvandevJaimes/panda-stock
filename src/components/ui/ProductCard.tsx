@@ -21,7 +21,10 @@ import {
 import { TruncatedText } from "./TruncatedText";
 import { HighlightMatch } from "./HighlightMatch";
 import { Button } from "./Button";
+import { Switch } from "./Switch";
 import { cn } from "../../lib/cn";
+import { buildAssetUrl } from "../../lib/assets";
+import { getProductPlaceholder } from "../../lib/productPlaceholder";
 import { evaluateExpiry } from "../../lib/dateUtils";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 
@@ -45,6 +48,12 @@ export interface ProductCardProps {
   codigoInterno?: string;
   codigosBarras?: string;
   highlightQuery?: string;
+  /** Producto dado de baja (soft delete): se atenúa visualmente y oculta badge de stock. */
+  inactivo?: boolean;
+  /** Switch rápido de reactivación (soft delete) cuando inactivo. */
+  onToggleActivo?: (producto: Producto, activo: boolean) => void;
+  /** Mientras se está cambiando el estado activo/inactivo en la API. */
+  togglingActivo?: boolean;
   /** Producto crudo (DB) que se entrega a los handlers de acciones del menú. */
   producto?: Producto;
   onOpenQuickActions?: (producto: Producto) => void;
@@ -84,6 +93,9 @@ export function ProductCard({
   codigoInterno,
   codigosBarras,
   highlightQuery,
+  inactivo = false,
+  onToggleActivo,
+  togglingActivo = false,
   producto,
   onOpenQuickActions,
   onOpenLotes,
@@ -150,12 +162,31 @@ export function ProductCard({
       onClick={onOpenDetail}
       aria-label={name}
       className={cn(
-        "w-full h-14 sm:h-16 px-3 sm:px-4 rounded-2xl cursor-pointer border transition-colors duration-150 select-none shadow-xs overflow-hidden animate-entry-up",
-        "grid grid-cols-[minmax(0,1fr)_auto] min-w-0 items-center gap-3 sm:gap-4",
+        "w-full h-14 sm:h-16 rounded-2xl cursor-pointer border transition-colors duration-150 select-none shadow-xs overflow-hidden animate-entry-up",
+        "grid grid-cols-[auto_minmax(0,1fr)_auto] min-w-0 items-stretch gap-3 sm:gap-4",
         statusStyles[resolvedStatus] || statusStyles.normal,
+        inactivo &&
+          "opacity-60 saturate-50 border-dashed border-slate-300 bg-slate-50/60 hover:border-slate-400 dark:border-slate-700 dark:bg-slate-900/40 dark:hover:border-slate-600",
         className,
       )}
     >
+{/* 0. Imagen pegada al borde izquierdo y a los extremos verticales */}
+      <div className="flex h-full border-r border-0.5 border-slate-200 dark:border-slate-800/80 w-13 shrink-0 items-center justify-center overflow-hidden bg-slate-200/60 sm:w-15 dark:bg-slate-800/60">
+        {(() => {
+          const imgUrl = producto?.imgPath
+            ? buildAssetUrl(producto.imgPath)
+            : null;
+return (
+            <img
+              src={imgUrl ?? getProductPlaceholder(producto?.id)}
+              alt={imgUrl ? name : `${name} sin foto`}
+              loading="lazy"
+              className="h-full w-full object-cover"
+            />
+          );
+        })()}
+      </div>
+
       {/* 1. Izquierda: Información del producto (nombre, variante, precio, marca · categoría) */}
       <div className="flex min-w-0 flex-col justify-center">
         <div className="flex min-w-0 items-center gap-1.5">
@@ -253,7 +284,7 @@ export function ProductCard({
       </div>
 
       {/* 2. Derecha: métricas y acciones agrupadas */}
-      <div className="flex min-w-0 items-center justify-end gap-4 sm:gap-6 md:gap-8">
+      <div className="flex min-w-0 items-center justify-end gap-4 pr-3 sm:gap-6 sm:pr-4 md:gap-8">
         {/* Bloque de stock: número destacado + mínimo */}
         <div className="flex shrink-0 flex-col items-end justify-center gap-0.5">
           <span
@@ -293,8 +324,31 @@ export function ProductCard({
           </span>
         </div>
 
+        {inactivo && (
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border border-slate-300 bg-slate-200 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-slate-600 sm:text-[11px] dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
+              Inactivo
+            </span>
+            <Tooltip content="Reactivar producto" placement="top">
+              <span
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => e.stopPropagation()}
+              >
+                <Switch
+                  checked={false}
+                  disabled={togglingActivo}
+                  onCheckedChange={() => {
+                    if (producto) onToggleActivo?.(producto, true);
+                  }}
+                  aria-label={`Reactivar ${name}`}
+                />
+              </span>
+            </Tooltip>
+          </div>
+        )}
+
         {/* Bloque de vencimiento: fecha + badge (solo cuando hay contenido visible) */}
-        {(expiresAt || resolvedStatus !== "normal") && (
+        {!inactivo && (expiresAt || resolvedStatus !== "normal") && (
           <div className="flex shrink-0 items-center justify-end gap-2">
             {/* Fecha suelta: siempre visible en normal; se oculta en pantallas chicas si hay badge; se omite si está vencido (el badge ya lo comunica) */}
             {expiresAt && expiry && resolvedStatus !== "expired" && (
@@ -350,7 +404,7 @@ export function ProductCard({
                 </span>
               </Tooltip>
             )}
-            {onConfirmarPerdida && resolvedStatus === "expired" && (
+            {!inactivo && onConfirmarPerdida && resolvedStatus === "expired" && (
               <Tooltip content="Confirmar pérdida" placement="top" disabled={esEscritorio}>
                 <Button
                   variant="ghost"
@@ -367,7 +421,7 @@ export function ProductCard({
                 </Button>
               </Tooltip>
             )}
-            {onAgregarInventario && resolvedStatus === "out_of_stock" && (
+            {!inactivo && onAgregarInventario && resolvedStatus === "out_of_stock" && (
               <Tooltip content="Agregar inventario" placement="top" disabled={esEscritorio}>
                 <Button
                   variant="ghost"

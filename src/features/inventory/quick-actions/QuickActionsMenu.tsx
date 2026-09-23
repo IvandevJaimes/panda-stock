@@ -14,8 +14,10 @@ import {
 import { cn } from "../../../lib/cn";
 import { evaluateExpiry } from "../../../lib/dateUtils";
 import type { Producto } from "../../../../electron/db/types";
+import type { ReactElement } from "react";
 import { formatearCodigo, formatearPrecio } from "./formatters";
 import { Tooltip } from "../../../components/ui/Tooltip";
+import { ProductImageBox } from "../../../components/ui/ProductImageBox";
 import { BotonGestionarLotes } from "./BotonGestionarLotes";
 import type { QuickActionView } from "./types";
 
@@ -77,6 +79,8 @@ interface QuickActionsMenuProps {
   onNavigate: (vista: QuickActionView) => void;
   onConfirmarPerdida?: () => void;
   onOpenLotes: () => void;
+  /** Se invoca tras cambiar o eliminar la imagen del producto. */
+  onImagenChanged?: () => void;
 }
 
 export function QuickActionsMenu({
@@ -92,6 +96,7 @@ export function QuickActionsMenu({
   onNavigate,
   onConfirmarPerdida,
   onOpenLotes,
+  onImagenChanged,
 }: QuickActionsMenuProps) {
   const loteIndisponible = lotesCargando || !tieneLoteActivo;
 
@@ -124,53 +129,82 @@ export function QuickActionsMenu({
 
   return (
     <>
-      <div className="mb-4">
-        <h3 className="flex flex-wrap items-center gap-2 text-base font-bold text-slate-900 dark:text-white">
-          <span>{producto.nombre}</span>
-          {producto.variante && (
-            <span className="ml-1 font-normal text-slate-400 dark:text-slate-500">
-              · {producto.variante}
-            </span>
-          )}
-          {badgeElement &&
-            (esVencimientoBadge && expiry ? (
-              <Tooltip
-                content={`${expiry.formattedDate} • ${expiry.relativeText}`}
-                placement="top"
-              >
-                {badgeElement}
-              </Tooltip>
-            ) : (
-              badgeElement
-            ))}
-        </h3>
-        <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
-          {marcaNombre && (
-            <>
-              <span className="text-xs font-semibold uppercase tracking-wide text-emerald-600 dark:text-emerald-400">
-                {marcaNombre}
+      <div className="mb-4 flex items-center gap-4">
+        <ProductImageBox
+          productoId={producto.id}
+          nombre={producto.nombre}
+          imgPath={producto.imgPath}
+          onChanged={onImagenChanged ? () => onImagenChanged() : undefined}
+          className="h-20 w-20 shrink-0 sm:h-24 sm:w-24"
+        />
+        <div className="min-w-0 flex-1">
+          <h3 className="flex flex-wrap items-center gap-2 text-base font-bold text-slate-900 dark:text-white">
+            <span>{producto.nombre}</span>
+            {producto.variante && (
+              <span className="ml-1 font-normal text-slate-400 dark:text-slate-500">
+                · {producto.variante}
               </span>
-              <span className="text-slate-300 dark:text-slate-600" aria-hidden>
-                ·
-              </span>
-            </>
-          )}
-          {categoriaNombre && (
-            <>
-              <span className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                {categoriaNombre}
-              </span>
-              <span className="text-slate-300 dark:text-slate-600" aria-hidden>
-                ·
-              </span>
-            </>
-          )}
-          <span className="font-mono text-xs text-slate-400 dark:text-slate-500">
-            {formatearCodigo(producto.codigoInterno || producto.codigosBarras)}
-          </span>
+            )}
+            {badgeElement &&
+              (esVencimientoBadge && expiry ? (
+                <Tooltip
+                  content={`${expiry.formattedDate} • ${expiry.relativeText}`}
+                  placement="top"
+                >
+                  {badgeElement}
+                </Tooltip>
+              ) : (
+                badgeElement
+              ))}
+          </h3>
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+            {[
+              marcaNombre ? (
+                <span
+                  key="marca"
+                  className="text-xs font-semibold uppercase tracking-wide text-emerald-600 dark:text-emerald-400"
+                >
+                  {marcaNombre}
+                </span>
+              ) : null,
+              categoriaNombre ? (
+                <span
+                  key="categoria"
+                  className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500"
+                >
+                  {categoriaNombre}
+                </span>
+              ) : null,
+              producto.codigoInterno || producto.codigosBarras ? (
+                <span
+                  key="codigo"
+                  className="font-mono text-xs text-slate-400 dark:text-slate-500"
+                >
+                  {formatearCodigo(
+                    producto.codigoInterno || producto.codigosBarras,
+                  )}
+                </span>
+              ) : null,
+            ]
+              .filter((chip): chip is ReactElement => chip !== null)
+              .map((chip, index) => (
+                <span key={chip.key} className="flex items-center gap-2">
+                  {index > 0 && (
+                    <span
+                      className="text-slate-300 dark:text-slate-600"
+                      aria-hidden
+                    >
+                      ·
+                    </span>
+                  )}
+                  {chip}
+                </span>
+              ))}
+          </div>
         </div>
+      </div>
 
-        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-slate-100 pt-2 dark:border-slate-800">
+      <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-slate-100 pt-2 dark:border-slate-800">
           <span className="inline-flex items-center gap-1 text-xs font-medium leading-none text-slate-400 dark:text-slate-500">
             Precio
             <Tooltip content={margenTooltip} placement="top">
@@ -227,7 +261,6 @@ export function QuickActionsMenu({
             )}
           </span>
         </div>
-      </div>
 
       <div className="grid grid-cols-3 gap-2.5">
         <button

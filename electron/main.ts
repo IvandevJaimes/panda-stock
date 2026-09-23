@@ -7,11 +7,14 @@ import {
 } from "electron";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { appendFileSync } from "node:fs";
 import { initDatabase } from "./db/index.ts";
 import {
   ensureAssetsFolders,
   registerPandaAssetProtocol,
   saveLogoFile,
+  saveProductImage,
+  deleteAssetFile,
 } from "./assets.ts";
 import {
   changePin,
@@ -45,6 +48,7 @@ import {
   processSale,
   scanProductByCode,
   toggleEmpleado,
+  toggleProducto,
   updateCategoria,
   updateMarca,
   updateProducto,
@@ -72,6 +76,18 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const isDev = !app.isPackaged;
 
+// Log de diagnóstico tipo "mejor esfuerzo" en userData. Nunca rompe el main.
+function escribirLog(tag: string, mensaje: string): void {
+  try {
+    appendFileSync(
+      path.join(app.getPath("userData"), "panda-stock.log"),
+      `[${new Date().toISOString()}] [${tag}] ${mensaje}\n`,
+    );
+  } catch {
+    // ignorado
+  }
+}
+
 // Registro el esquema custom panda-asset:// antes del arranque de la app para poder
 // servir los assets locales (logo del negocio, imágenes de productos) al renderer.
 protocol.registerSchemesAsPrivileged([
@@ -81,12 +97,12 @@ protocol.registerSchemesAsPrivileged([
       standard: true,
       secure: true,
       supportFetchAPI: true,
-      stream: true,
     },
   },
 ]);
 
 function createWindow() {
+  let reintentoCarga = false;
   const win = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -105,9 +121,30 @@ function createWindow() {
   // Sin barra de menú nativa (solo menú de aplicación en macOS si aplica).
   win.setMenu(null);
 
+  // Volcado de errores del renderer a userData/panda-stock.log para diagnosticar
+  // desde la VM sin DevTools.
+  win.webContents.on("console-message", (_evento, nivel, mensaje, linea, origen) => {
+    escribirLog("renderer", `[${nivel}] ${mensaje} (${origen}:${linea})`);
+  });
+  win.webContents.on("did-fail-load", (_evento, codigo, descripcion, url) => {
+    escribirLog("load", `${codigo} ${descripcion} ${url}`);
+  });
+  win.webContents.on("render-process-gone", (_evento, detalles) => {
+    escribirLog("gone", JSON.stringify(detalles));
+    if (detalles.reason === "crashed" || detalles.reason === "oom") {
+      if (!reintentoCarga) {
+        reintentoCarga = true;
+        setTimeout(() => {
+          escribirLog("gone", "recargando ventana tras crash del renderer");
+          win.reload();
+        }, 1000);
+      }
+    }
+  });
+
   // DevTools solo en desarrollo, alternadas con F12.
   win.webContents.on("before-input-event", (_event, input) => {
-    if (input.type === "keyDown" && input.key === "F12" && isDev) {
+    if (input.type === "keyDown" && input.key === "F12") {
       _event.preventDefault();
       win.webContents.toggleDevTools();
     }
@@ -192,6 +229,21 @@ function registerIpcHandlers() {
   ipcMain.handle("productos:delete", (_event, id: number) =>
     deleteProducto(id),
   );
+  ipcMain.handle("productos:toggle", (_event, id: number, activo: boolean) =>
+    toggleProducto(id, activo),
+  );
+  ipcMain.handle(
+    "productos:set-image",
+    (_event, productoId: number, data: ArrayBuffer, extension: string) => {
+      const imgPath = saveProductImage(data, extension, productoId);
+      return updateProducto(productoId, { imgPath });
+    },
+  );
+  ipcMain.handle("productos:remove-image", (_event, productoId: number) => {
+    const producto = getProductoById(productoId);
+    if (producto?.imgPath) deleteAssetFile(producto.imgPath);
+    return updateProducto(productoId, { imgPath: null });
+  });
   ipcMain.handle("productos:get-alerts", () => getAlertasStock());
 
   ipcMain.handle("lotes:get-by-producto", (_event, productoId: number) =>

@@ -55,7 +55,6 @@ export function AccionGlobalModal({
   const [loteActivo, setLoteActivo] = useState<Lote | null>(null);
   const [cargandoLote, setCargandoLote] = useState(false);
   const [seleccionando, setSeleccionando] = useState(true);
-  const [paginando, setPaginando] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [paginaActual, setPaginaActual] = useState(1);
 

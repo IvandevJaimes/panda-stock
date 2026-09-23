@@ -14,7 +14,6 @@ import {
   Info,
   Layers,
   Loader2,
-  Package,
   PackageX,
   Pencil,
   Plus,
@@ -30,11 +29,13 @@ import {
 import { TabsModal, type TabsModalTab } from "../../components/ui/TabsModal";
 import { Button } from "../../components/ui/Button";
 import { EmptyStateCompact } from "../../components/ui/EmptyStateCompact";
+import { ProductImageBox } from "../../components/ui/ProductImageBox";
 import { cn } from "../../lib/cn";
 import { evaluateExpiry } from "../../lib/dateUtils";
 import { lotesService } from "../../services/lotes.service";
 import { movimientosService } from "../../services/movimientos.service";
 import { ConfirmarPerdidaModal } from "./ConfirmarPerdidaModal";
+import { ToggleActivoProducto } from "./ToggleActivoProducto";
 import {
   DETALLE_DIAS_VENCER,
   esLoteVencido,
@@ -357,10 +358,14 @@ export function ProductDetailModal({
       content: (
         <div className="flex flex-col divide-y divide-slate-200 dark:divide-slate-800">
           {/* Cabecera del producto */}
-          <div className="flex items-center gap-3 pb-4">
-            <div className="grid h-11 w-11 shrink-0 select-none place-items-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-              <Package className="h-5 w-5" strokeWidth={2} aria-hidden />
-            </div>
+          <div className="flex items-center gap-4 pb-4">
+            <ProductImageBox
+              productoId={product.id}
+              nombre={product.nombre}
+              imgPath={product.imgPath}
+              onChanged={onMutated}
+              className="h-24 w-24 sm:h-28 sm:w-28"
+            />
             <div className="min-w-0">
               <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 md:text-lg">
                 {product.nombre}
@@ -429,9 +434,6 @@ export function ProductDetailModal({
                   stock={product.stockActual}
                   stockMinimo={product.stockMinimo}
                 />
-              </Dato>
-              <Dato etiqueta="Valor de inventario" className="tabular-nums">
-                {formatearPrecio(product.stockActual * (product.costo ?? 0))}
               </Dato>
             </dl>
           </section>
@@ -778,6 +780,13 @@ Lote activo
         title="Detalle del producto"
         tabs={pestanas}
         maxWidth="max-w-2xl"
+        headerExtra={
+          <ToggleActivoProducto
+            producto={product}
+            onChanged={onMutated}
+            onDesactivado={onClose}
+          />
+        }
         subheaderClassName={
           loteActivo
             ? tintSubheader(loteActivo.fechaVence, productoStockBajo)

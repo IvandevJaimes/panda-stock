@@ -9,6 +9,8 @@ export type PillProps = {
   onSelect: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
+  /** Si es false, no se muestra el botón de eliminar. */
+  canDelete?: boolean;
   className?: string;
   /** Cantidad de productos asociados. Si se define, se muestra un badge numérico. */
   count?: number;
@@ -21,6 +23,7 @@ export function Pill({
   onSelect,
   onEdit,
   onDelete,
+  canDelete = true,
   className,
   count,
 }: PillProps) {
@@ -86,22 +89,24 @@ export function Pill({
               <Pencil className="h-3.5 w-3.5" />
             </button>
           </Tooltip>
-          <Tooltip content="Eliminar" placement="top">
-            <button
-              type="button"
-              aria-label={`Eliminar ${label}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete?.();
-              }}
-              className={cn(
-                "p-1 rounded-full transition-colors cursor-pointer hover:text-red-600 dark:hover:text-red-400",
-                active ? "text-slate-200" : "text-slate-400",
-              )}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
-          </Tooltip>
+          {canDelete && (
+            <Tooltip content="Eliminar" placement="top">
+              <button
+                type="button"
+                aria-label={`Eliminar ${label}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete?.();
+                }}
+                className={cn(
+                  "p-1 rounded-full transition-colors cursor-pointer hover:text-red-600 dark:hover:text-red-400",
+                  active ? "text-slate-200" : "text-slate-400",
+                )}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </Tooltip>
+          )}
         </div>
       )}
     </div>

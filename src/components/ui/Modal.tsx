@@ -16,6 +16,8 @@ export interface ModalProps {
   height?: string;
   /** Barra inferior fija. El contenido scrollea entre cabecera y footer. */
   footer?: ReactNode;
+  /** Contenido extra a la derecha del título (antes del botón de cerrar). */
+  headerExtra?: ReactNode;
   /** Si es false: sin botón X, sin cierre por Escape ni por click en el overlay. Requiere onClose {} no-op. */
   closeable?: boolean;
 }
@@ -39,6 +41,7 @@ export function Modal({
   maxWidth = "md",
   height,
   footer,
+  headerExtra,
   closeable = true,
 }: ModalProps) {
   useEffect(() => {
@@ -117,22 +120,25 @@ export function Modal({
               </div>
             </div>
           )}
-          {closeable && (
-            <button
-              onClick={onClose}
-              className="ml-auto -mr-2 cursor-pointer rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
-              aria-label="Cerrar modal"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          )}
+          <div className="ml-auto flex items-center gap-3">
+            {headerExtra}
+            {closeable && (
+              <button
+                onClick={onClose}
+                className="-mr-2 cursor-pointer rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+                aria-label="Cerrar modal"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Contenido scrolleable */}
         <div
           className={cn(
             "custom-scrollbar overflow-y-auto p-6",
-            footer && "min-h-0 flex-1",
+            (footer || height) && "min-h-0 flex-1",
           )}
         >
           {children}
