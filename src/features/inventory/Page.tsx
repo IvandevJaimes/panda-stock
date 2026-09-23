@@ -566,6 +566,7 @@ export function InventoryPage() {
                 label={categoria.nombre}
                 count={categoryCounts[categoria.nombre] || 0}
                 active={selectedCategory === String(categoria.id)}
+                canDelete={(categoryCounts[categoria.nombre] || 0) === 0}
                 onSelect={() => {
                   setSelectedCategory((prev) =>
                     prev === String(categoria.id)
@@ -575,16 +576,7 @@ export function InventoryPage() {
                   setPaginaActual(1);
                 }}
                 onEdit={() => setEditingCategory(categoria)}
-                onDelete={() => {
-                  const count = categoryCounts[categoria.nombre] || 0;
-                  if (count > 0) {
-                    toast.error(
-                      `No podés eliminar "${categoria.nombre}" porque tiene ${count} ${count === 1 ? "producto asociado" : "productos asociados"}. Reasignalos o eliminalos primero.`,
-                    );
-                    return;
-                  }
-                  setDeletingCategory(categoria);
-                }}
+                onDelete={() => setDeletingCategory(categoria)}
               />
             ))}
             <div
