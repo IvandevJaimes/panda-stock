@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   Archive,
@@ -34,6 +34,8 @@ import type { AccionGlobal } from "./quick-actions/AccionGlobalModal";
 import type { QuickActionView } from "./quick-actions/types";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { useCategories } from "../../hooks/useCategories";
+import { useHotkey } from "../../hooks/useHotkey";
+import { MOD_IS_META } from "../../lib/hotkeys";
 import { Input } from "../../components/ui/Input";
 import { KpiCard } from "../../components/ui/KpiCard";
 import { Pagination } from "../../components/ui/Pagination";
@@ -188,6 +190,12 @@ function derivarStatus(p: ProductoInventario): ProductStatus {
 
 const PAGE_SIZE = 50;
 
+/** Modificador de atajos según plataforma: "Ctrl" o "Cmd". */
+const MOD_TEXTO = MOD_IS_META ? "Cmd" : "Ctrl";
+/** Formato W3C para aria-keyshortcuts (ej: "Control+KeyN"). */
+const modAtajo = (tecla: string, shift = false) =>
+  `${MOD_IS_META ? "Meta" : "Control"}${shift ? "+Shift" : ""}+Key${tecla}`;
+
 export function InventoryPage() {
   const [busqueda, setBusqueda] = useState("");
   const [activeKpiFilter, setActiveKpiFilter] = useState<KpiFilter>("all");
@@ -222,6 +230,11 @@ export function InventoryPage() {
   const [deletingProduct, setDeletingProduct] = useState<Producto | null>(null);
   const { categories, addCategory, updateCategory, removeCategory } =
     useCategories();
+
+  const buscadorRef = useRef<HTMLInputElement>(null);
+  const grillaRef = useRef<HTMLDivElement>(null);
+  /** Índice de la card seleccionada para navegar con ↑/↓ (null = sin foco de teclado). */
+  const [cardFoco, setCardFoco] = useState<number | null>(null);
 
   const [productosCrudos, setProductosCrudos] = useState<
     ProductoConLoteActivo[]
@@ -321,7 +334,10 @@ export function InventoryPage() {
   const handleKpiClick = (filter: KpiFilter) => {
     setActiveKpiFilter((prev) => {
       const nuevo = prev === filter ? "all" : filter;
-      if (nuevo !== prev) setPaginaActual(1);
+      if (nuevo !== prev) {
+        setPaginaActual(1);
+        setCardFoco(null);
+      }
       return nuevo;
     });
   };
@@ -340,6 +356,7 @@ export function InventoryPage() {
     setSelectedCategory("all");
     setOrden("creado_desc");
     setPaginaActual(1);
+    setCardFoco(null);
   };
 
   const handleOpenLotes = (producto: Producto) => {
@@ -471,6 +488,122 @@ export function InventoryPage() {
   // con stock, esas acciones globales no tienen sentido y se bloquean.
   const hayStockDisponible = productosActivos.some((p) => p.stock > 0);
 
+  // ── Atajos de teclado (deshabilitados mientras hay un modal abierto) ──
+  const hayModalAbierto =
+    isCreateProductOpen ||
+    marcasAbiertas ||
+    isCreateCategoryOpen ||
+    selectedProductForDetail !== null ||
+    productForQuickActions !== null ||
+    lotesProducto !== null ||
+    deletingProduct !== null ||
+    deletingCategory !== null ||
+    editingCategory !== null ||
+    perdidaSeleccion !== null ||
+    accionGlobal !== null;
+
+  /** Índice de cardFoco solo si sigue siendo válido para la página actual. */
+  const cardFocoValida =
+    cardFoco !== null && cardFoco >= 0 && cardFoco < filasPagina.length
+      ? cardFoco
+      : null;
+
+  const enfocarBuscador = () => {
+    buscadorRef.current?.focus();
+    buscadorRef.current?.select();
+  };
+
+  /** true si el evento proviene de un control interactivo (button, link, input…). */
+  const esTargetInteractivo = (target: EventTarget | null) => {
+    if (!(target instanceof HTMLElement)) return false;
+    return (
+      target.closest(
+        'button, a, select, textarea, input, [role="button"], [role="menuitem"], [role="option"], [role="listbox"], [aria-expanded="true"], [contenteditable]',
+      ) !== null
+    );
+  };
+
+  const navegarCard = (delta: number) => {
+    if (filasPagina.length === 0) return;
+    const base = cardFocoValida ?? (delta > 0 ? -1 : 0);
+    const nuevo = Math.min(Math.max(base + delta, 0), filasPagina.length - 1);
+    setCardFoco(nuevo);
+    grillaRef.current
+      ?.querySelector(`[data-card-idx="${nuevo}"]`)
+      ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  };
+
+  const abrirCardFoco = () => {
+    if (cardFocoValida === null) return;
+    const fila = filasPagina[cardFocoValida];
+    const raw = productosCrudos.find((p) => p.id === fila.id);
+    if (raw) abrirAccionesRapidas(raw, "menu");
+  };
+
+  // F2 o "/" → foco al buscador (también mientras se escribe en otro input).
+  useHotkey("f2", enfocarBuscador, {
+    enabled: !hayModalAbierto,
+    ignoreInputs: false,
+  });
+  useHotkey("/", enfocarBuscador, { enabled: !hayModalAbierto });
+  // Ctrl+N → nuevo producto.
+  useHotkey(
+    "mod+n",
+    () => {
+      setIsCreateProductOpen(true);
+    },
+    { enabled: !hayModalAbierto, ignoreInputs: false },
+  );
+  // Ctrl+D → limpiar filtros activos.
+  useHotkey(
+    "mod+d",
+    () => {
+      if (hayFiltroActivo) limpiarFiltros();
+    },
+    { enabled: !hayModalAbierto, ignoreInputs: false },
+  );
+  // Ctrl+M → marcas.
+  useHotkey(
+    "mod+m",
+    () => {
+      setMarcasAbiertas(true);
+    },
+    { enabled: !hayModalAbierto, ignoreInputs: false },
+  );
+  // Ctrl+Shift+N → nueva categoría (solo en la vista de activos, donde vive el botón).
+  useHotkey(
+    "mod+shift+n",
+    () => {
+      setIsCreateCategoryOpen(true);
+    },
+    { enabled: !hayModalAbierto && !verInactivos, ignoreInputs: false },
+  );
+  // ↑ / ↓ → navegar entre cards; Enter → abrir quick actions de la card foco.
+  useHotkey(
+    "arrowdown",
+    (event) => {
+      if (esTargetInteractivo(event.target)) return;
+      navegarCard(1);
+    },
+    { enabled: !hayModalAbierto },
+  );
+  useHotkey(
+    "arrowup",
+    (event) => {
+      if (esTargetInteractivo(event.target)) return;
+      navegarCard(-1);
+    },
+    { enabled: !hayModalAbierto },
+  );
+  useHotkey(
+    "enter",
+    (event) => {
+      if (esTargetInteractivo(event.target)) return;
+      abrirCardFoco();
+    },
+    { enabled: !hayModalAbierto },
+  );
+
   return (
     <div className="flex flex-col gap-3 pt-4 md:pt-6">
       {/* ── Encabezado ── */}
@@ -516,26 +649,34 @@ export function InventoryPage() {
           </Tooltip>
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            
-            onClick={() => setMarcasAbiertas(true)}
-            className="whitespace-nowrap rounded-2xl px-2 py-2 text-xs sm:text-sm "
-          >
-            Marcas
-            <span className=" select-none rounded-full  border border-slate-200 bg-slate-100 px-2  py-0.5 text-[10px] sm:text-xs font-semibold text-slate-600 dark:border-slate-700/80 dark:bg-slate-800 dark:text-slate-300">
-              {marcas.filter((m) => m.activo).length}
-            </span>
-          </Button>
+          <Tooltip content={`Abrir marcas · ${MOD_TEXTO}+M`} placement="bottom">
+            <Button
+              variant="outline"
+              onClick={() => setMarcasAbiertas(true)}
+              aria-keyshortcuts={modAtajo("M")}
+              className="whitespace-nowrap rounded-2xl px-2 py-2 text-xs sm:text-sm "
+            >
+              Marcas
+              <span className=" select-none rounded-full  border border-slate-200 bg-slate-100 px-2  py-0.5 text-[10px] sm:text-xs font-semibold text-slate-600 dark:border-slate-700/80 dark:bg-slate-800 dark:text-slate-300">
+                {marcas.filter((m) => m.activo).length}
+              </span>
+            </Button>
+          </Tooltip>
           {/* Botón Grande Esquinado */}
-          <Button
-            variant="primary"
-            onClick={() => setIsCreateProductOpen(true)}
-            className="h-10 shrink-0 gap-2 rounded-2xl px-4 text-sm font-bold shadow-xs sm:h-12 sm:px-6 sm:text-base"
+          <Tooltip
+            content={`Nuevo producto · ${MOD_TEXTO}+N`}
+            placement="bottom"
           >
-            <PackagePlus className="h-5 w-5" />
-            <span>Nuevo producto</span>
-          </Button>
+            <Button
+              variant="primary"
+              onClick={() => setIsCreateProductOpen(true)}
+              aria-keyshortcuts={modAtajo("N")}
+              className="h-10 shrink-0 gap-2 rounded-2xl px-4 text-sm font-bold shadow-xs sm:h-12 sm:px-6 sm:text-base"
+            >
+              <PackagePlus className="h-5 w-5" />
+              <span>Nuevo producto</span>
+            </Button>
+          </Tooltip>
         </div>
 
       </div>
@@ -601,11 +742,15 @@ export function InventoryPage() {
           <div className="flex w-full items-center select-none">
             {/* 1. Anclaje fijo: botón Nueva + separador + fondo opaco + máscara degradada */}
             <div className="relative z-10 flex shrink-0 items-center bg-[#f4f6f8]  pb-2 dark:bg-[#0b0f17]">
-              <Tooltip content="Crear una nueva categoría" placement="top">
+              <Tooltip
+                content={`Crear una nueva categoría · ${MOD_TEXTO}+Shift+N`}
+                placement="top"
+              >
                 <button
                   type="button"
                   onClick={() => setIsCreateCategoryOpen(true)}
                   aria-label="Nueva categoría"
+                  aria-keyshortcuts={modAtajo("N", true)}
                   className={cn(
                     "h-8 px-3 rounded-full text-xs font-semibold shrink-0 select-none",
                     "flex items-center gap-1.5 transition-all duration-150 shadow-xs cursor-pointer",
@@ -635,6 +780,7 @@ export function InventoryPage() {
                 onSelect={() => {
                   setSelectedCategory("all");
                   setPaginaActual(1);
+                  setCardFoco(null);
                 }}
               />
               {categories.map((categoria) => (
@@ -651,6 +797,7 @@ export function InventoryPage() {
                         : String(categoria.id),
                     );
                     setPaginaActual(1);
+                    setCardFoco(null);
                   }}
                   onEdit={() => setEditingCategory(categoria)}
                   onDelete={() => setDeletingCategory(categoria)}
@@ -669,16 +816,19 @@ export function InventoryPage() {
           {/* GRUPO BÚSQUEDA: siempre juntos, ancho completo en todos los breakpoints */}
           <div className="flex min-w-0 flex-1 shrink-0 items-center gap-1.5 lg:flex-1">
             <Input
+              ref={buscadorRef}
               value={busqueda}
               onChange={(e) => {
                 setBusqueda(e.target.value);
                 setPaginaActual(1);
+                setCardFoco(null);
               }}
               placeholder="Buscar por producto, marca, variante o código..."
               leftIcon={<Search size={16} />}
               className="w-full"
               wrapperClassName="flex-1 min-w-[240px]"
               aria-label="Buscar producto"
+              aria-keyshortcuts="F2"
               rightAction={
                 busqueda.length > 0 ? (
                   <button
@@ -702,6 +852,7 @@ export function InventoryPage() {
                 onChange={(value) => {
                   setOrden(value as OrdenInventario);
                   setPaginaActual(1);
+                  setCardFoco(null);
                 }}
                 className="w-44 shrink-0 sm:w-48"
               />
@@ -722,6 +873,7 @@ export function InventoryPage() {
                   setSelectedCategory("all");
                   setOrden("creado_desc");
                   setPaginaActual(1);
+                  setCardFoco(null);
                 }}
                 aria-pressed={verInactivos}
                 aria-label={
@@ -749,7 +901,9 @@ export function InventoryPage() {
             </Tooltip>
             <Tooltip
               content={
-                hayFiltroActivo ? "Limpiar todos los filtros" : undefined
+                hayFiltroActivo
+                  ? `Limpiar todos los filtros · ${MOD_TEXTO}+D`
+                  : undefined
               }
               placement="top"
             >
@@ -758,6 +912,7 @@ export function InventoryPage() {
                 onClick={limpiarFiltros}
                 disabled={!hayFiltroActivo}
                 aria-label="Limpiar todos los filtros"
+                aria-keyshortcuts={modAtajo("D")}
                 className={cn(
                   "shrink-0 select-none rounded-xl p-2 transition-colors duration-150",
                   hayFiltroActivo
@@ -865,23 +1020,35 @@ export function InventoryPage() {
             description="No hay productos que coincidan con tu búsqueda o filtros actuales. Probá con otra búsqueda o limpiá los filtros."
             action={
               hayFiltroActivo ? (
-                <Button variant="outline" onClick={limpiarFiltros}>
-                  Limpiar filtros
-                </Button>
+                <Tooltip content={`Limpiar todos los filtros · ${MOD_TEXTO}+D`}>
+                  <Button variant="outline" onClick={limpiarFiltros}>
+                    Limpiar filtros
+                  </Button>
+                </Tooltip>
               ) : undefined
             }
           />
         )
       ) : (
-        <div className="mt-2 px-0.5 flex w-full min-w-0 flex-col gap-2.5">
+        <div
+          ref={grillaRef}
+          className="mt-2 px-0.5 flex w-full min-w-0 flex-col gap-2.5"
+        >
           {filasPagina.map((producto, index) => {
             const raw = productosCrudos.find((p) => p.id === producto.id);
             return (
-              <ProductCard
+              <div
                 key={producto.id}
-                style={{
-                  animationDelay: index < 8 ? `${index * 20}ms` : "0ms",
-                }}
+                data-card-idx={index}
+                className="w-full scroll-mt-36"
+              >
+                <ProductCard
+                  className={cn(
+                    cardFocoValida === index && "ring-2 ring-emerald-500/70",
+                  )}
+                  style={{
+                    animationDelay: index < 8 ? `${index * 20}ms` : "0ms",
+                  }}
                 producto={raw}
                 category={producto.category}
                 name={producto.name}
@@ -937,7 +1104,8 @@ export function InventoryPage() {
                     ? () => abrirAccionesRapidas(raw, "agregar-inventario")
                     : undefined
                 }
-              />
+                />
+              </div>
             );
           })}
 
@@ -953,7 +1121,10 @@ export function InventoryPage() {
             <Pagination
               currentPage={paginaSegura}
               totalPages={totalPaginas}
-              onPageChange={setPaginaActual}
+              onPageChange={(p) => {
+                setPaginaActual(p);
+                setCardFoco(null);
+              }}
             />
           </div>
         </div>
