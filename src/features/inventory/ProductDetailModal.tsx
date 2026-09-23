@@ -434,9 +434,6 @@ export function ProductDetailModal({
                   stockMinimo={product.stockMinimo}
                 />
               </Dato>
-              <Dato etiqueta="Valor de inventario" className="tabular-nums">
-                {formatearPrecio(product.stockActual * (product.costo ?? 0))}
-              </Dato>
             </dl>
           </section>
 

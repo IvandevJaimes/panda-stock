@@ -449,6 +449,9 @@ export function InventoryPage() {
           className="whitespace-nowrap rounded-2xl"
         >
           Marcas
+          <span className="ml-1 select-none rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600 dark:border-slate-700/80 dark:bg-slate-800 dark:text-slate-300">
+            {marcas.filter((m) => m.activo).length}
+          </span>
         </Button>
         {/* Botón Grande Esquinado */}
         <Button

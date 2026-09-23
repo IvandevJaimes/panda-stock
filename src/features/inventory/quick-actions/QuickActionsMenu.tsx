@@ -157,29 +157,48 @@ export function QuickActionsMenu({
               ))}
           </h3>
           <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
-            {marcaNombre && (
-              <>
-                <span className="text-xs font-semibold uppercase tracking-wide text-emerald-600 dark:text-emerald-400">
+            {[
+              marcaNombre && (
+                <span
+                  key="marca"
+                  className="text-xs font-semibold uppercase tracking-wide text-emerald-600 dark:text-emerald-400"
+                >
                   {marcaNombre}
                 </span>
-                <span className="text-slate-300 dark:text-slate-600" aria-hidden>
-                  ·
-                </span>
-              </>
-            )}
-            {categoriaNombre && (
-              <>
-                <span className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+              ),
+              categoriaNombre && (
+                <span
+                  key="categoria"
+                  className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500"
+                >
                   {categoriaNombre}
                 </span>
-                <span className="text-slate-300 dark:text-slate-600" aria-hidden>
-                  ·
+              ),
+              (producto.codigoInterno || producto.codigosBarras) && (
+                <span
+                  key="codigo"
+                  className="font-mono text-xs text-slate-400 dark:text-slate-500"
+                >
+                  {formatearCodigo(
+                    producto.codigoInterno || producto.codigosBarras,
+                  )}
                 </span>
-              </>
-            )}
-            <span className="font-mono text-xs text-slate-400 dark:text-slate-500">
-              {formatearCodigo(producto.codigoInterno || producto.codigosBarras)}
-            </span>
+              ),
+            ]
+              .filter(Boolean)
+              .map((chip, index) => (
+                <span key={chip.key} className="flex items-center gap-2">
+                  {index > 0 && (
+                    <span
+                      className="text-slate-300 dark:text-slate-600"
+                      aria-hidden
+                    >
+                      ·
+                    </span>
+                  )}
+                  {chip}
+                </span>
+              ))}
           </div>
         </div>
       </div>
