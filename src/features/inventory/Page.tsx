@@ -658,7 +658,7 @@ export function InventoryPage() {
           </div>
           <div className="flex flex-nowrap items-center gap-2.5 overflow-x-auto pb-1 lg:pb-0">
             <div
-              className="h-6 w-px shrink-0 self-center bg-slate-200 sm:h-7 dark:bg-slate-700/60"
+              className="h-6 w-px hidden lg:block shrink-0 self-center bg-slate-200 sm:h-7 dark:bg-slate-700/60"
               aria-hidden="true"
             />
 
