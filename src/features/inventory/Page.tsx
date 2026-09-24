@@ -521,12 +521,19 @@ export function InventoryPage() {
 
   // ── Scanner de código de barras (deshabilitado mientras hay un modal abierto) ──
   // Al escanear primero se verifica que exista un producto con ese código (mismo
-  // criterio 1:1 que el POS). Si no existe, NO se escribe nada en el buscador y
-  // se avisa con toast; si existe, el barcode reemplaza el contenido del buscador.
+  // criterio 1:1 que el POS). Si no existe, o está desactivado, NO se escribe nada
+  // en el buscador y se avisa con toast; si existe, el barcode reemplaza el
+  // contenido del buscador.
   const buscarPorEscaneo = async (barcode: string) => {
     const producto = await productosService.scan(barcode);
     if (!producto) {
       toast.error(`No existe ningún producto con el código "${barcode}"`);
+      return;
+    }
+    if (!producto.activo) {
+      toast.error(
+        `El producto "${producto.nombre}" está desactivado: no aparece en la búsqueda`,
+      );
       return;
     }
     setBusqueda(barcode);
