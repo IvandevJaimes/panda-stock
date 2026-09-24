@@ -71,6 +71,7 @@ type OrdenInventario =
   | "nombre_desc"
   | "stock_asc"
   | "stock_desc"
+  | "margen_asc"
   | "sin_marca"
   | "sin_minimo";
 
@@ -81,9 +82,15 @@ const OPCIONES_ORDEN: { value: OrdenInventario; label: string }[] = [
   { value: "nombre_desc", label: "Alfabético Z→A" },
   { value: "stock_asc", label: "Menor stock" },
   { value: "stock_desc", label: "Mayor stock" },
+  { value: "margen_asc", label: "Menor margen" },
   { value: "sin_marca", label: "Sin marca" },
   { value: "sin_minimo", label: "Sin mínimo" },
 ];
+
+/** Margen porcentual sobre el costo: null si no hay costo cargado (no computable). */
+function margenPorcentaje(p: ProductoConLoteActivo): number | null {
+  return p.costo > 0 ? ((p.precioVenta - p.costo) / p.costo) * 100 : null;
+}
 
 function ordenarProductos(
   productos: ProductoConLoteActivo[],
@@ -114,6 +121,15 @@ function ordenarProductos(
       return [...productos].sort(
         (a, b) => b.stockActual - a.stockActual || comparadorNombre(a, b),
       );
+    case "margen_asc":
+      return [...productos].sort((a, b) => {
+        const mA = margenPorcentaje(a);
+        const mB = margenPorcentaje(b);
+        if (mA === null && mB === null) return comparadorNombre(a, b);
+        if (mA === null) return 1;
+        if (mB === null) return -1;
+        return mA - mB || comparadorNombre(a, b);
+      });
     case "sin_marca":
     case "sin_minimo":
       return [...productos];
