@@ -26,6 +26,7 @@ import type {
 } from "../../../../electron/db/types";
 import { HeaderMini } from "./HeaderMini";
 import { ACCION_LABEL, FORM_ID } from "./types";
+import { useBarcodeScanner } from "../../../hooks/useBarcodeScanner";
 
 interface EditarProductoFormProps {
   producto: Producto;
@@ -68,6 +69,7 @@ export function EditarProductoForm({
   const {
     register,
     handleSubmit,
+    getValues,
     setValue,
     setError,
     control,
@@ -86,6 +88,21 @@ export function EditarProductoForm({
   });
 
   const valorMarca = useWatch({ control, name: "marca" }) ?? "";
+
+  // Scanner: al escanear un código, se escribe en "Códigos de barra" sin importar
+  // qué campo tenga el foco. Si ya hay códigos, se agrega separado por coma.
+  useBarcodeScanner("edit-product-form", (barcode) => {
+    const actual = getValues("codigosBarras") ?? "";
+    const codigos = actual
+      .split(",")
+      .map((c) => c.trim())
+      .filter(Boolean);
+
+    if (!codigos.includes(barcode)) {
+      codigos.push(barcode);
+    }
+    setValue("codigosBarras", codigos.join(", "), { shouldValidate: true });
+  });
 
   // Carga las marcas al montar y resuelve el nombre de la marca actual del
   // producto (el backend las devuelve ordenadas por id descendente).

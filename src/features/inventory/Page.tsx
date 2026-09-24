@@ -35,6 +35,7 @@ import type { QuickActionView } from "./quick-actions/types";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { useCategories } from "../../hooks/useCategories";
 import { useHotkey } from "../../hooks/useHotkey";
+import { useBarcodeScanner } from "../../hooks/useBarcodeScanner";
 import { MOD_IS_META } from "../../lib/hotkeys";
 import { Input } from "../../components/ui/Input";
 import { KpiCard } from "../../components/ui/KpiCard";
@@ -517,6 +518,19 @@ export function InventoryPage() {
     editingCategory !== null ||
     perdidaSeleccion !== null ||
     accionGlobal !== null;
+
+  // ── Scanner de código de barras (deshabilitado mientras hay un modal abierto) ──
+  // Al escanear, coloca el barcode en el buscador para filtrar la grilla.
+  useBarcodeScanner(
+    "inventory",
+    (barcode) => {
+      setBusqueda(barcode);
+      setPaginaActual(1);
+      setCardFoco(null);
+      buscadorRef.current?.focus();
+    },
+    !hayModalAbierto,
+  );
 
   /** Índice de cardFoco solo si sigue siendo válido para la página actual. */
   const cardFocoValida =

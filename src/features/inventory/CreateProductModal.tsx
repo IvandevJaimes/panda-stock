@@ -28,6 +28,7 @@ import type {
   UnidadMedida,
 } from "../../../electron/db/types";
 import { Tooltip } from "../../components/ui/Tooltip";
+import { useBarcodeScanner } from "../../hooks/useBarcodeScanner";
 
 export interface CreateProductModalProps {
   isOpen: boolean;
@@ -84,6 +85,7 @@ export function CreateProductModal({
     handleSubmit,
     reset,
     setValue,
+    getValues,
     setError,
     control,
     formState: { errors, isSubmitting },
@@ -92,6 +94,25 @@ export function CreateProductModal({
   });
 
   const [creandoCategoria, setCreandoCategoria] = React.useState(false);
+
+  // Scanner: al escanear un código, se escribe en "Códigos de barra" sin importar
+  // qué campo tenga el foco. Si ya hay códigos, se agrega separado por coma.
+  useBarcodeScanner(
+    "product-form",
+    (barcode) => {
+      const actual = getValues("codigosBarras") ?? "";
+      const codigos = actual
+        .split(",")
+        .map((c) => c.trim())
+        .filter(Boolean);
+
+      if (!codigos.includes(barcode)) {
+        codigos.push(barcode);
+      }
+      setValue("codigosBarras", codigos.join(", "), { shouldValidate: true });
+    },
+    isOpen,
+  );
 
   React.useEffect(() => {
     if (isOpen) reset(VALORES_INICIALES);

@@ -8,6 +8,7 @@ import { productosService } from "../../../services/productos.service";
 import type { Producto } from "../../../../electron/db/types";
 import { HeaderMini } from "./HeaderMini";
 import { ACCION_LABEL, FORM_ID } from "./types";
+import { useBarcodeScanner } from "../../../hooks/useBarcodeScanner";
 
 interface EditarCodigoValues {
   codigoInterno: string;
@@ -33,6 +34,7 @@ export function EditarCodigoForm({
     register,
     handleSubmit,
     setValue,
+    getValues,
     control,
     formState: { errors, isSubmitting },
   } = useForm<EditarCodigoValues>({
@@ -40,6 +42,21 @@ export function EditarCodigoForm({
       codigoInterno: producto.codigoInterno ?? "",
       codigosBarras: producto.codigosBarras ?? "",
     },
+  });
+
+  // Scanner: al escanear un código, se escribe en "Códigos de barra" sin depender
+  // del campo que tenga foco. Agrega el código separado por coma si no existe.
+  useBarcodeScanner("edit-code-form", (barcode) => {
+    const actual = getValues("codigosBarras") ?? "";
+    const codigos = actual
+      .split(",")
+      .map((c) => c.trim())
+      .filter(Boolean);
+
+    if (!codigos.includes(barcode)) {
+      codigos.push(barcode);
+    }
+    setValue("codigosBarras", codigos.join(", "), { shouldValidate: true });
   });
 
   const codigoInterno =
