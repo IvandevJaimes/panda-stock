@@ -38,16 +38,35 @@ export function HeaderMini({ producto, titulo, onBack }: HeaderMiniProps) {
                 </span>
               )}
             </h4>
-            <div className="truncate text-xs text-slate-500">
+            <div className="text-xs text-slate-500">
               Stock actual:{" "}
               <span className="font-semibold text-slate-700 dark:text-slate-300">
                 {producto.stockActual} und
-              </span>{" "}
-              | Código:{" "}
-              <span className="font-mono">
-                {formatearCodigo(producto.codigoInterno || producto.codigosBarras)}
               </span>
             </div>
+            {(producto.codigoInterno || producto.codigosBarras) && (
+              <div className="mt-0.5 truncate text-xs text-slate-500">
+                {producto.codigoInterno && (
+                  <>
+                    <span>Código interno: </span>
+                    <span className="font-mono">{producto.codigoInterno}</span>
+                  </>
+                )}
+                {producto.codigoInterno && producto.codigosBarras && (
+                  <span className="mx-1.5 text-slate-300 dark:text-slate-600">
+                    •
+                  </span>
+                )}
+                {producto.codigosBarras && (
+                  <>
+                    <span>Barras: </span>
+                    <span className="font-mono">
+                      {formatearCodigo(producto.codigosBarras)}
+                    </span>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>

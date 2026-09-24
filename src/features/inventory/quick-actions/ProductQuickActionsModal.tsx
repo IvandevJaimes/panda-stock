@@ -213,7 +213,6 @@ export function ProductQuickActionsModal({
         {vistaActual === "editar-codigo" && (
           <EditarCodigoForm
             producto={product}
-            codigoInicial={product.codigosBarras || product.codigoInterno || ""}
             onCancel={() => setVistaActual("menu")}
             onSuccess={handleActionComplete}
             onSubmittingChange={setSubmitting}

@@ -10,19 +10,25 @@ import { HeaderMini } from "./HeaderMini";
 import { ACCION_LABEL, FORM_ID } from "./types";
 
 interface EditarCodigoValues {
-  nuevoCodigo: string;
+  codigoInterno: string;
+  codigosBarras: string;
 }
 
 interface EditarCodigoFormProps {
   producto: Producto;
-  codigoInicial: string;
   onCancel: () => void;
   onSuccess: () => void;
   onSubmittingChange: (submitting: boolean) => void;
   onCanSaveChange?: (canSave: boolean) => void;
 }
 
-export function EditarCodigoForm({ producto, codigoInicial, onCancel, onSuccess, onSubmittingChange, onCanSaveChange }: EditarCodigoFormProps) {
+export function EditarCodigoForm({
+  producto,
+  onCancel,
+  onSuccess,
+  onSubmittingChange,
+  onCanSaveChange,
+}: EditarCodigoFormProps) {
   const {
     register,
     handleSubmit,
@@ -30,30 +36,40 @@ export function EditarCodigoForm({ producto, codigoInicial, onCancel, onSuccess,
     control,
     formState: { errors, isSubmitting },
   } = useForm<EditarCodigoValues>({
-    defaultValues: { nuevoCodigo: codigoInicial },
+    defaultValues: {
+      codigoInterno: producto.codigoInterno ?? "",
+      codigosBarras: producto.codigosBarras ?? "",
+    },
   });
 
-  const nuevoCodigo = useWatch({ control, name: "nuevoCodigo" }) ?? "";
+  const codigoInterno =
+    useWatch({ control, name: "codigoInterno" }) ?? "";
+  const codigosBarras =
+    useWatch({ control, name: "codigosBarras" }) ?? "";
+
+  const huboCambios =
+    codigoInterno.trim().toUpperCase() !==
+      (producto.codigoInterno ?? "").trim().toUpperCase() ||
+    codigosBarras.trim() !==
+      (producto.codigosBarras ?? "").trim();
 
   useEffect(() => {
-    onCanSaveChange?.(
-      nuevoCodigo.trim().toUpperCase() !== codigoInicial.trim().toUpperCase(),
-    );
-  }, [nuevoCodigo, codigoInicial, onCanSaveChange]);
+    onCanSaveChange?.(huboCambios);
+  }, [huboCambios, onCanSaveChange]);
 
   const generarCodigoSugerido = () => {
     const codigoSugerido = String(Math.floor(1000 + Math.random() * 9000));
-    setValue("nuevoCodigo", codigoSugerido, { shouldValidate: true });
+    setValue("codigoInterno", codigoSugerido, { shouldValidate: true });
     toast.info(`Código sugerido: ${codigoSugerido}`);
   };
 
   const onSubmit = async (data: EditarCodigoValues) => {
     onSubmittingChange(true);
     try {
-      await productosService.updateCodigo(
-        producto.id,
-        data.nuevoCodigo.trim().toUpperCase(),
-      );
+      await productosService.update(producto.id, {
+        codigoInterno: data.codigoInterno.trim().toUpperCase(),
+        codigosBarras: data.codigosBarras,
+      });
       toast.success("Código actualizado correctamente");
       onSuccess();
     } catch (error: unknown) {
@@ -76,39 +92,54 @@ export function EditarCodigoForm({ producto, codigoInicial, onCancel, onSuccess,
         onBack={onCancel}
       />
       <div className="space-y-4">
-        <div className="flex flex-col gap-1.5">
-          <Input
-            label="Código (Interno o de Barras)"
-            type="text"
-            autoFocus
-            disabled={isSubmitting}
-            error={errors.nuevoCodigo?.message}
-            value={nuevoCodigo}
-            className="font-mono uppercase"
-            labelAction={
-              <Tooltip content="Generar código sugerido">
-                <button
-                  type="button"
-                  disabled={isSubmitting}
-                  onClick={generarCodigoSugerido}
-                  className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 cursor-pointer disabled:opacity-50"
-                >
-                  <Sparkles className="h-3 w-3" />
-                  <span>Autogenerar</span>
-                </button>
-              </Tooltip>
-            }
-            onClear={() =>
-              setValue("nuevoCodigo", "", { shouldValidate: true })
-            }
-            {...register("nuevoCodigo", {
-              maxLength: {
-                value: 30,
-                message: "Máximo 30 caracteres",
-              },
-            })}
-          />
-        </div>
+        <Input
+          label="Código interno"
+          type="text"
+          autoFocus
+          disabled={isSubmitting}
+          error={errors.codigoInterno?.message}
+          value={codigoInterno}
+          className="font-mono uppercase"
+          labelAction={
+            <Tooltip content="Generar código sugerido">
+              <button
+                type="button"
+                disabled={isSubmitting}
+                onClick={generarCodigoSugerido}
+                className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 cursor-pointer disabled:opacity-50"
+              >
+                <Sparkles className="h-3 w-3" />
+                <span>Autogenerar</span>
+              </button>
+            </Tooltip>
+          }
+          onClear={() =>
+            setValue("codigoInterno", "", { shouldValidate: true })
+          }
+          {...register("codigoInterno", {
+            maxLength: {
+              value: 20,
+              message: "Máximo 20 caracteres",
+            },
+          })}
+        />
+        <Input
+          label="Códigos de barra"
+          type="text"
+          disabled={isSubmitting}
+          placeholder="Ej. 779001, 779002"
+          error={errors.codigosBarras?.message}
+          value={codigosBarras}
+          onClear={() =>
+            setValue("codigosBarras", "", { shouldValidate: true })
+          }
+          {...register("codigosBarras", {
+            maxLength: {
+              value: 100,
+              message: "Máximo 100 caracteres",
+            },
+          })}
+        />
       </div>
     </form>
   );

@@ -142,15 +142,6 @@ export const productosService = {
     return this.update(id, { precioVenta: nuevoPrecio })
   },
 
-  async updateCodigo(id: number, nuevoCodigo: string): Promise<Producto> {
-    const esBarra = /^[0-9, ]+$/.test(nuevoCodigo) && nuevoCodigo.length >= 8
-    if (esBarra) {
-      return this.update(id, { codigosBarras: nuevoCodigo })
-    } else {
-      return this.update(id, { codigoInterno: nuevoCodigo })
-    }
-  },
-
   async updateVariante(id: number, nuevaVariante: string | null): Promise<Producto> {
     return this.update(id, { variante: nuevaVariante })
   },

@@ -40,7 +40,8 @@ interface EditarProductoFormProps {
 interface FormValues {
   nombre: string;
   variante: string;
-  codigo: string;
+  codigoInterno: string;
+  codigosBarras: string;
   categoriaId: number;
   marca: string;
   precioVenta: string;
@@ -75,7 +76,8 @@ export function EditarProductoForm({
     defaultValues: {
       nombre: producto.nombre,
       variante: producto.variante ?? "",
-      codigo: producto.codigoInterno ?? "",
+      codigoInterno: producto.codigoInterno ?? "",
+      codigosBarras: producto.codigosBarras ?? "",
       categoriaId: producto.categoriaId ?? 0,
       marca: "",
       precioVenta: String(producto.precioVenta),
@@ -134,14 +136,15 @@ export function EditarProductoForm({
 
   const generarCodigoSugerido = () => {
     const codigoSugerido = String(Math.floor(1000 + Math.random() * 9000));
-    setValue("codigo", codigoSugerido, {
+    setValue("codigoInterno", codigoSugerido, {
       shouldDirty: true,
       shouldValidate: true,
     });
     toast.info(`Código sugerido: ${codigoSugerido}`);
   };
 
-  const hayCodigo = Boolean(val.codigo?.trim());
+  const hayCodigoInterno = Boolean(val.codigoInterno?.trim());
+  const hayCodigosBarras = Boolean(val.codigosBarras?.trim());
 
   const hayCambios = useMemo(() => {
     const nombre = val.nombre?.trim() ?? "";
@@ -152,19 +155,8 @@ export function EditarProductoForm({
     const precioVenta = Number(val.precioVenta) || 0;
     const stockMinimo =
       Math.max(0, Math.round(Number(val.stockMinimo) || 0));
-    const codigoLimpio = val.codigo?.trim() ?? "";
-
-    let codigoInterno: string | null = null;
-    let codigosBarras: string | null = null;
-    if (codigoLimpio) {
-      const esBarra =
-        /^[0-9, ]+$/.test(codigoLimpio) && codigoLimpio.length >= 8;
-      if (esBarra) {
-        codigosBarras = codigoLimpio;
-      } else {
-        codigoInterno = codigoLimpio;
-      }
-    }
+    const codigoInterno = val.codigoInterno?.trim() || null;
+    const codigosBarras = val.codigosBarras?.trim() || null;
 
     return (
       nombre !== (producto.nombre ?? "") ||
@@ -173,10 +165,8 @@ export function EditarProductoForm({
       marca !== (marcaNombreActual || null) ||
       precioVenta !== producto.precioVenta ||
       stockMinimo !== producto.stockMinimo ||
-      (codigoInterno ?? producto.codigoInterno) !==
-        producto.codigoInterno ||
-      (codigosBarras ?? producto.codigosBarras) !==
-        producto.codigosBarras
+     ((codigoInterno ?? null) !== (producto.codigoInterno ?? null)) ||
+      ((codigosBarras ?? null) !== (producto.codigosBarras ?? null))
     );
   }, [val, producto, marcaNombreActual]);
 
@@ -200,18 +190,9 @@ export function EditarProductoForm({
         marca: data.marca.trim() || null,
         precioVenta: Number(data.precioVenta),
         stockMinimo: Math.max(0, Math.round(Number(data.stockMinimo) || 0)),
+        codigoInterno: data.codigoInterno.trim(),
+        codigosBarras: data.codigosBarras,
       };
-
-      const codigoLimpio = data.codigo.trim();
-      if (codigoLimpio) {
-        const esBarra =
-          /^[0-9, ]+$/.test(codigoLimpio) && codigoLimpio.length >= 8;
-        if (esBarra) {
-          payload.codigosBarras = codigoLimpio;
-        } else {
-          payload.codigoInterno = codigoLimpio;
-        }
-      }
 
       await productosService.update(producto.id, payload);
 
@@ -227,7 +208,7 @@ export function EditarProductoForm({
         mensaje.toLowerCase().includes("unique") &&
         mensaje.toLowerCase().includes("codigo_interno")
       ) {
-        setError("codigo", {
+        setError("codigoInterno", {
           type: "manual",
           message: "Este código ya está en uso",
         });
@@ -422,64 +403,112 @@ export function EditarProductoForm({
           </div>
         </div>
 
-        {/* Fila 3: Código */}
-        <div className="flex flex-col gap-1.5">
-          <div className="flex items-center justify-between ml-1">
-            <label
-              htmlFor="edit-codigo"
-              className="text-xs font-semibold text-slate-700 dark:text-slate-300"
-            >
-              Código (interno o de barra)
-            </label>
-            <Tooltip content="Generar código sugerido">
-              <button
-                type="button"
-                onClick={generarCodigoSugerido}
+        {/* Fila 3 (dos columnas): Código interno y Códigos de barra */}
+        <div className="grid grid-cols-2 gap-3.5">
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between ml-1">
+              <label
+                htmlFor="edit-codigoInterno"
+                className="text-xs font-semibold text-slate-700 dark:text-slate-300"
+              >
+                Código interno
+              </label>
+              <Tooltip content="Generar código sugerido">
+                <button
+                  type="button"
+                  onClick={generarCodigoSugerido}
+                  disabled={isSubmitting}
+                  className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 cursor-pointer disabled:opacity-50"
+                >
+                  <Sparkles className="h-3 w-3" />
+                  <span>Autogenerar</span>
+                </button>
+              </Tooltip>
+            </div>
+            <div className="relative w-full">
+              <input
+                id="edit-codigoInterno"
+                type="text"
                 disabled={isSubmitting}
-                className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 cursor-pointer disabled:opacity-50"
-              >
-                <Sparkles className="h-3 w-3" />
-                <span>Autogenerar</span>
-              </button>
-            </Tooltip>
-          </div>
-          <div className="relative w-full">
-            <input
-              id="edit-codigo"
-              type="text"
-              disabled={isSubmitting}
-              placeholder="Ej. 111 o 7790012345678"
-              {...register("codigo", {
-                maxLength: {
-                  value: 30,
-                  message: "Máximo 30 caracteres",
-                },
-              })}
-              className={cn(
-                "h-10 w-full rounded-xl border bg-white px-3 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 dark:bg-[#0B1120] dark:text-slate-100 dark:placeholder:text-slate-600",
-                hayCodigo && "pr-9",
-                errors.codigo
-                  ? "border-red-500 focus:border-red-500 focus:ring-4 focus:ring-red-500/10"
-                  : "border-slate-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700/80",
+                placeholder="Ej. 111"
+                {...register("codigoInterno", {
+                  maxLength: {
+                    value: 20,
+                    message: "Máximo 20 caracteres",
+                  },
+                })}
+                className={cn(
+                  "h-10 w-full rounded-xl border bg-white px-3 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 dark:bg-[#0B1120] dark:text-slate-100 dark:placeholder:text-slate-600",
+                  hayCodigoInterno && "pr-9",
+                  errors.codigoInterno
+                    ? "border-red-500 focus:border-red-500 focus:ring-4 focus:ring-red-500/10"
+                    : "border-slate-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700/80",
+                )}
+              />
+              {hayCodigoInterno && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setValue("codigoInterno", "", {
+                      shouldDirty: true,
+                      shouldValidate: true,
+                    })
+                  }
+                  aria-label="Limpiar campo"
+                  className="absolute right-2 top-1/2 grid h-6 w-6 -translate-y-1/2 cursor-pointer place-items-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+                >
+                  <X size={14} aria-hidden="true" />
+                </button>
               )}
-            />
-            {hayCodigo && (
-              <button
-                type="button"
-                onClick={() =>
-                  setValue("codigo", "", {
-                    shouldDirty: true,
-                    shouldValidate: true,
-                  })
-                }
-                aria-label="Limpiar campo"
-                className="absolute right-2 top-1/2 grid h-6 w-6 -translate-y-1/2 cursor-pointer place-items-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
-              >
-                <X size={14} aria-hidden="true" />
-              </button>
-            )}
+            </div>
+            <FieldError error={errors.codigoInterno?.message} />
           </div>
-          <FieldError error={errors.codigo?.message} />
+
+          <div className="flex flex-col gap-1.5">
+            <label
+              htmlFor="edit-codigosBarras"
+              className="ml-1 text-xs font-semibold text-slate-700 dark:text-slate-300"
+            >
+              Códigos de barra
+            </label>
+            <div className="relative w-full">
+              <input
+                id="edit-codigosBarras"
+                type="text"
+                disabled={isSubmitting}
+                placeholder="Ej. 779001, 779002"
+                {...register("codigosBarras", {
+                  maxLength: {
+                    value: 100,
+                    message: "Máximo 100 caracteres",
+                  },
+                })}
+                className={cn(
+                  "h-10 w-full rounded-xl border bg-white px-3 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 dark:bg-[#0B1120] dark:text-slate-100 dark:placeholder:text-slate-600",
+                  hayCodigosBarras && "pr-9",
+                  errors.codigosBarras
+                    ? "border-red-500 focus:border-red-500 focus:ring-4 focus:ring-red-500/10"
+                    : "border-slate-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700/80",
+                )}
+              />
+              {hayCodigosBarras && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setValue("codigosBarras", "", {
+                      shouldDirty: true,
+                      shouldValidate: true,
+                    })
+                  }
+                  aria-label="Limpiar campo"
+                  className="absolute right-2 top-1/2 grid h-6 w-6 -translate-y-1/2 cursor-pointer place-items-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+                >
+                  <X size={14} aria-hidden="true" />
+                </button>
+              )}
+            </div>
+            <FieldError error={errors.codigosBarras?.message} />
+          </div>
         </div>
 
         {/* Fila 5: Precio de Venta y Stock Mínimo */}
