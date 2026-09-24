@@ -10,6 +10,7 @@ import {
   TrendingDown,
   TrendingUp,
 } from "lucide-react";
+import { useMemo } from "react";
 import type { Producto } from "../../../electron/db/types";
 import { Tooltip } from "./Tooltip";
 import {
@@ -130,12 +131,32 @@ export function ProductCard({
   const subtitulo = brand ? `${brand} · ${category}` : category;
 
   const terminoConsulta = highlightQuery?.trim() ?? "";
-  const codigoResaltado =
-    terminoConsulta.length >= 2
-      ? [codigoInterno, codigosBarras].find((codigo) =>
-          codigo?.toLowerCase().includes(terminoConsulta.toLowerCase()),
-        )
-      : undefined;
+
+  // Código interno: se resalta por coincidencia de SUBSTRING desde 2 caracteres
+  // (búsqueda rápida por prefijo del código de mostrador).
+  const coincideCodigoInterno =
+    terminoConsulta.length >= 2 &&
+    Boolean(
+      codigoInterno?.toLowerCase().includes(terminoConsulta.toLowerCase()),
+    );
+
+  // Código de barra: el resaltado exige coincidencia EXACTA del token completo
+  // (ej. "779001"), no un prefijo de 2 dígitos. Además se muestra SOLO ese token,
+  // no el resto de códigos acumulados en el CSV.
+  const codigoBarraResaltado = useMemo(() => {
+    if (!terminoConsulta || !codigosBarras) return undefined;
+    return codigosBarras
+      .split(",")
+      .map((codigo) => codigo.trim())
+      .filter(Boolean)
+      .find(
+        (codigo) => codigo.toLowerCase() === terminoConsulta.toLowerCase(),
+      );
+  }, [codigosBarras, terminoConsulta]);
+
+  const codigoResaltado = coincideCodigoInterno
+    ? codigoInterno
+    : codigoBarraResaltado;
 
   // Margen derivado del costo: verde si hay ganancia, rojo si no.
   const costo = producto?.costo ?? null;
