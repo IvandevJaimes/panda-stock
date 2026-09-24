@@ -520,14 +520,25 @@ export function InventoryPage() {
     accionGlobal !== null;
 
   // ── Scanner de código de barras (deshabilitado mientras hay un modal abierto) ──
-  // Al escanear, coloca el barcode en el buscador para filtrar la grilla.
+  // Al escanear primero se verifica que exista un producto con ese código (mismo
+  // criterio 1:1 que el POS). Si no existe, NO se escribe nada en el buscador y
+  // se avisa con toast; si existe, el barcode reemplaza el contenido del buscador.
+  const buscarPorEscaneo = async (barcode: string) => {
+    const producto = await productosService.scan(barcode);
+    if (!producto) {
+      toast.error(`No existe ningún producto con el código "${barcode}"`);
+      return;
+    }
+    setBusqueda(barcode);
+    setPaginaActual(1);
+    setCardFoco(null);
+    buscadorRef.current?.focus();
+  };
+
   useBarcodeScanner(
     "inventory",
     (barcode) => {
-      setBusqueda(barcode);
-      setPaginaActual(1);
-      setCardFoco(null);
-      buscadorRef.current?.focus();
+      void buscarPorEscaneo(barcode);
     },
     !hayModalAbierto,
   );

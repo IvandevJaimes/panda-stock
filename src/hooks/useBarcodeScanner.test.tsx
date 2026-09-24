@@ -1,4 +1,4 @@
-import { StrictMode, type ReactNode } from 'react'
+import { StrictMode, useRef, useState, type ReactNode } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -6,6 +6,7 @@ import { useForm } from 'react-hook-form'
 import { useBarcodeScanner, useScannerInit } from './useBarcodeScanner'
 
 const BARCODE = '7791234567890'
+const BARCODE_2 = '7799876543210'
 
 type User = ReturnType<typeof userEvent.setup>
 
@@ -39,6 +40,28 @@ function ProductFormHost({ onScan }: { onScan?: (code: string) => void }) {
 function SalesHost({ onScan }: { onScan: (code: string) => void }) {
   useBarcodeScanner('sales', onScan)
   return <input aria-label="buscador" data-testid="target" />
+}
+
+// Contexto inventory: replica el handler del buscador de la grilla (Page.tsx):
+// cada escaneo REEMPLAZA el valor del input por completo.
+function InventorySearchHost({ onScan }: { onScan?: (code: string) => void }) {
+  const [busqueda, setBusqueda] = useState('')
+  const ref = useRef<HTMLInputElement>(null)
+  useBarcodeScanner('inventory', (barcode) => {
+    setBusqueda(barcode)
+    ref.current?.focus()
+    onScan?.(barcode)
+  })
+  return (
+    <>
+      <input
+        aria-label="Buscar producto"
+        ref={ref}
+        value={busqueda}
+        onChange={(e) => setBusqueda(e.target.value)}
+      />
+    </>
+  )
 }
 
 /**
@@ -302,5 +325,30 @@ describe('useBarcodeScanner — integración (bug del input con foco)', () => {
     await waitFor(() => expect(salesFound).toHaveBeenCalledTimes(1))
     expect(salesFound).toHaveBeenCalledWith(BARCODE)
     expect(productNotFound).not.toHaveBeenCalled()
+  })
+
+  it('Test 9 (buscador): un segundo escaneo REEMPLAZA el código anterior del input', async () => {
+    const user = userEvent.setup()
+    const onScan = vi.fn()
+    render(
+      <ScannerHost>
+        <InventorySearchHost onScan={onScan} />
+      </ScannerHost>,
+    )
+
+    const buscador = screen.getByLabelText('Buscar producto') as HTMLInputElement
+
+    // Primer escaneo: el código queda en el buscador.
+    await user.click(buscador)
+    await scanCode(user, BARCODE)
+    await waitFor(() => expect(buscador.value).toBe(BARCODE))
+
+    // Segundo escaneo: debe quedar SOLO el código nuevo (ni acumulado ni vacío).
+    await scanCode(user, BARCODE_2)
+    await waitFor(() => expect(buscador.value).toBe(BARCODE_2))
+    expect(buscador.value).not.toContain(BARCODE)
+    expect(onScan).toHaveBeenCalledTimes(2)
+    expect(onScan).toHaveBeenNthCalledWith(1, BARCODE)
+    expect(onScan).toHaveBeenNthCalledWith(2, BARCODE_2)
   })
 })
