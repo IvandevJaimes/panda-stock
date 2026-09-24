@@ -106,22 +106,19 @@ function blockEvent(event: KeyboardEvent): void {
 }
 
 /**
- * Entrega los caracteres retenidos como si hubieran sido pulsados normalmente.
- * Prioriza Element.insertText (Chromium/Electron: dispara beforeinput+input,
- * sincroniza con React). Si no está disponible (jsdom/tests), inserta en el
- * cursor y dispara un input event real.
+ * Entrega texto al input en el cursor (o al final) y dispara un evento input
+ * real para que React actualice el estado controlado.
+ *
+ * Se usa deliberadamente el mismo camino en TODOS los entornos (Chromium real,
+ * jsdom y Electron): SET del valor + dispatch de Event('input'). La alternativa
+ * nativa element.insertText() existe solo en Chromium y no está garantizado que
+ * dispare onChange de React 19 en inputs controlados, así que se descarta para
+ * que la app real se comporte EXACTAMENTE como lo cubren los tests.
  */
 function deliverHeldText(
   element: HTMLInputElement | HTMLTextAreaElement,
   text: string,
 ): void {
-  const maybeInsertText = element as HTMLInputElement & {
-    insertText?: (chars: string) => void
-  }
-  if (typeof maybeInsertText.insertText === 'function') {
-    maybeInsertText.insertText(text)
-    return
-  }
   const start = element.selectionStart ?? element.value.length
   const end = element.selectionEnd ?? element.value.length
   element.value =
