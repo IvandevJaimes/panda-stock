@@ -8,24 +8,38 @@ import { useScannerStore } from '../stores/scanner.store'
 // Este servicio intercepta esas teclas en window con capture=true — ANTES de que
 // lleguen al input con foco, a React y al formulario.
 //
-// Estrategia: BUFFER ESPECULATIVO con ENTREGA EN VIVO y REVERSIÓN.
-//   • Todo carácter imprimible que llega se BLOQUEA (fase capture) para que el
-//     lector nunca "tipee" el código en bruto, pero además se ENTREGA al input
-//     con foco como si fuera tecleo normal: el input y el estado React se
-//     actualizan AL INSTANTE (filtrado en vivo, sin retardo).
-//   • La secuencia se CONFIRMA como escaneo cuando llega el Enter y cumple los
-//     criterios (longitud mínima, Enter dentro de la ventana y presupuesto de
-//     velocidad). El Enter se consume por completo (no submit, no click), el
-//     input se REVIERTE al valor que tenía antes de la ráfaga (se descartan los
-//     caracteres entregados de forma especulativa) y se emite el código al
-//     handler, que es quien dispone el valor final.
-//   • Si NO llega a confirmarse (silencio mayor a timeBeforeScanTest, Enter que
-//     no cumple criterios, o una tecla no imprimible) era tecleo humano: los
-//     caracteres ya se entregaron en vivo, no hay nada más que hacer.
-//   • La reversión al confirmar mantiene intacta la tolerancia al arranque lento
-//     de la lectora (gap inicial 30-90ms): el buffer completo sigue retenido en
-//     paralelo a la visualización en vivo, así que nunca se pierde el primer
-//     dígito del código.
+// Estrategia: DOBLE MODO según contexto.
+//
+//   MODO ESTRICTO (contexto 'inventory' — buscador de la grilla):
+//   • El scanner trabaja EN SEGUNDO PLANO: captura completa en fase capture,
+//     cada carácter del lector se BLOQUEA y NUNCA llega al input. Al Enter con
+//     criterios se emite el código al handler y el buscador queda intacto.
+//   • El tecleo humano se retiene en el buffer y se ENTREGA de golpe apenas se
+//     detecta silencio: la primera tecla espera 100ms (tolera el arranque lento
+//     de la lectora, 30-90ms) y las siguientes 45ms (la lectora va a ≤40ms/char,
+//     un humano a 60ms+). Latencia imperceptible, filtrado en vivo a escala
+//     humana sin que el código escaneado toque jamás el input.
+//   • El handler del contexto es quien muestra el resultado en la grilla
+//     (búsqueda en background), sin escribir nada en el buscador.
+//
+//   MODO BLOQUEO (formularios y ventas: product-form, edit-code-form,
+//   edit-product-form, sales):
+//   • Todo carácter imprimible se BLOQUEA y se acumula en un buffer pendiente,
+//     PERO se ENTREGA en vivo al input (vía set-value + dispatch de input),
+//     para que el estado React se actualice al instante.
+//   • Si la ráfaga se CONFIRMA como escaneo (Enter + criterios), el input se
+//     REVIERTE al valor previo y se emite el código al handler. Así el código
+//     jamás queda pegado a un campo de formulario.
+//   • Si NO se confirma (silencio, Enter inválido o tecla no imprimible), era
+//     tecleo humano: los caracteres ya se entregaron en vivo, no hay más que
+//     hacer.
+//
+//   Criterios de escaneo (ambos modos): longitud mínima, Enter dentro de la
+//   ventana y presupuesto de velocidad (tecleo humano sostenido ≥60ms/tecla
+//   jamás lo cumple). El arranque lento de la lectora (gap inicial 30-90ms) se
+//   tolera: en modo bloqueo el buffer completo queda retenido en paralelo a la
+//   entrega en vivo; en modo estricto la primera tecla se retiene 100ms antes
+//   de liberarse como humano.
 // ---------------------------------------------------------------------------
 
 // ── Configuración ───────────────────────────────────────────────────────────
@@ -51,6 +65,13 @@ const DEFAULT_CONFIG: BarcodeScannerConfig = {
   suffixKey: 'Enter',
 }
 
+// Ventanas de retención del MODO ESTRICTO (inventario). La primera tecla
+// espera más porque la lectora arranca con un gap inicial de 30-90ms; las
+// siguientes usan una ventana corta: la lectora emite a ≤40ms/char pero un
+// humano rara vez baja de 60ms.
+const STRICT_FIRST_CHAR_MS = 100
+const STRICT_NEXT_CHAR_MS = 45
+
 let config: BarcodeScannerConfig = { ...DEFAULT_CONFIG }
 
 // ── Estado interno del singleton ────────────────────────────────────────────
@@ -60,10 +81,14 @@ interface PendingBurst {
   chars: string
   startTime: number
   lastCharTime: number
-  /** Input/textarea donde se entregan (vivo) y revierten los caracteres. */
+  /** Modo estricto (buscador de inventario): el scanner NUNCA escribe en el
+   *  input; el buffer se entrega de golpe como tecleo humano tras el silencio. */
+  strict: boolean
+  /** Input/textarea donde se entregan (vivo) y revierten los caracteres en
+   *  modo bloqueo, o donde se libera el buffer acumulado en modo estricto. */
   element: HTMLInputElement | HTMLTextAreaElement | null
   /** Valor del elemento AL EMPEZAR la ráfaga: base para la reversión si se
-   *  confirma escaneo. */
+   *  confirma escaneo (modo bloqueo). */
   valueAtStart: string
   /** Timer de silencio: al vencer, la ráfaga se descarta como tecleo humano. */
   idleTimer: ReturnType<typeof setTimeout> | null
@@ -138,9 +163,16 @@ function clearIdleTimer(pending: PendingBurst): void {
   }
 }
 
-/** Entrega el buffer pendiente y lo descarta. Con entrega en vivo los
- *  caracteres YA están en el input; aquí solo se limpia el estado. */
+/**
+ * Descarta la ráfaga como tecleo humano.
+ * • Modo bloqueo: los caracteres YA se entregaron en vivo, solo limpiar.
+ * • Modo estricto: nunca se entregó nada; hay que LIBERAR el buffer acumulado
+ *   al input (edición normal) para que el tecleo humano se vea.
+ */
 function flushAsHuman(pending: PendingBurst): void {
+  if (pending.strict && pending.element && pending.element.isConnected) {
+    deliverHeldText(pending.element, pending.chars)
+  }
   clearIdleTimer(pending)
   burst = null
 }
@@ -162,22 +194,30 @@ function revertBurst(pending: PendingBurst): void {
   element.dispatchEvent(new Event('input', { bubbles: true }))
 }
 
-/** Crea una ráfaga con el primer carácter, lo entrega en vivo y agenda la
- *  espera de confirmación por silencio. */
+/** Crea una ráfaga.
+ *  • Modo estricto: NO entrega nada aún (el scanner no escribe); el buffer se
+ *    liberará como tecleo humano recién al vencer el silencio (ventana amplia
+ *    para la primera tecla, por arranque lento de la lectora).
+ *  • Modo bloqueo: entrega el primer carácter en vivo y agenda la espera de
+ *    confirmación por silencio. */
 function startBurst(event: KeyboardEvent, now: number): void {
+  const strict = useScannerStore.getState().context === 'inventory'
+  // En modo estricto el elemento se captura igualmente: hay que liberarle el
+  // buffer al descartar el tecleo humano.
   const element = focusedEditable()
   const next: PendingBurst = {
     chars: event.key,
     startTime: now,
     lastCharTime: now,
+    strict,
     element,
     valueAtStart: element?.value ?? '',
     idleTimer: null,
   }
-  if (element) deliverHeldText(element, event.key)
+  if (!strict && element) deliverHeldText(element, event.key)
   next.idleTimer = setTimeout(() => {
     if (burst === next) flushAsHuman(next)
-  }, config.timeBeforeScanTest)
+  }, strict ? STRICT_FIRST_CHAR_MS : config.timeBeforeScanTest)
   burst = next
 }
 
@@ -186,12 +226,12 @@ function appendCharToBurst(event: KeyboardEvent, now: number): void {
   clearIdleTimer(burst)
   burst.chars += event.key
   burst.lastCharTime = now
-  if (burst.element && burst.element.isConnected) {
+  if (!burst.strict && burst.element && burst.element.isConnected) {
     deliverHeldText(burst.element, event.key)
   }
   burst.idleTimer = setTimeout(() => {
     if (burst) flushAsHuman(burst)
-  }, config.timeBeforeScanTest)
+  }, burst.strict ? STRICT_NEXT_CHAR_MS : config.timeBeforeScanTest)
 }
 
 function emitBarcode(barcode: string): void {
@@ -211,8 +251,10 @@ function finalizeScan(event: KeyboardEvent): void {
   clearIdleTimer(pending)
   burst = null
 
-  // Revierte los caracteres entregados de forma especulativa al input.
-  revertBurst(pending)
+  // Modo bloqueo: revierte los caracteres entregados de forma especulativa al
+  // input. Modo estricto: nunca se entregó nada, el input queda intacto y el
+  // handler muestra el producto en la grilla (búsqueda en background).
+  if (!pending.strict) revertBurst(pending)
 
   // Ahoga un posible Enter duplicado del scanner (algunos modelos lo re-emiten).
   suppressNextEnterUntil = Date.now() + 300
@@ -234,8 +276,10 @@ function handleKeyDown(event: KeyboardEvent): void {
   // ── Enter ──
   if (event.key === config.suffixKey) {
     if (burst) {
-      const dentroDeVentana =
-        now - burst.lastCharTime <= config.timeBeforeScanTest
+      const ventana = burst.strict
+        ? STRICT_NEXT_CHAR_MS
+        : config.timeBeforeScanTest
+      const dentroDeVentana = now - burst.lastCharTime <= ventana
       const presupuestoOk =
         now - burst.startTime <= burst.chars.length * config.avgTimeByChar
       if (burst.chars.length >= config.minLength && dentroDeVentana && presupuestoOk) {
@@ -265,18 +309,22 @@ function handleKeyDown(event: KeyboardEvent): void {
   // ── Carácter imprimible ──
 
   if (burst) {
-    // La ráfaga sigue viva: BLOQUEAR antes de que llegue a React/input.
+    // La ráfaga sigue viva: SIEMPRE se bloquea (en estricto el scanner no debe
+    // escribir en el input; en bloqueo antes de que llegue a React/input).
     blockEvent(event)
     debug('keydown', event.key, 'phase capture, blocked: true')
     appendCharToBurst(event, now)
     return
   }
 
-  // Primer carácter de un posible escaneo (o de tecleo humano): se bloquea y
-  // retiene a la espera de seguimiento o de confirmar que es humano.
+  // Primer carácter de un posible escaneo (o de tecleo humano).
   startBurst(event, now)
   blockEvent(event)
-  debug('keydown', event.key, 'phase capture, scannerCandidate: true, blocked: true')
+  debug(
+    'keydown',
+    event.key,
+    'phase capture, scannerCandidate: true, blocked: true',
+  )
 }
 
 // ── API pública del singleton ─────────────────────────────────────────────

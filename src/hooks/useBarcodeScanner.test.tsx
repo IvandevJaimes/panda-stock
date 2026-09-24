@@ -42,15 +42,15 @@ function SalesHost({ onScan }: { onScan: (code: string) => void }) {
   return <input aria-label="buscador" data-testid="target" />
 }
 
-// Contexto inventory: replica el handler del buscador de la grilla (Page.tsx):
-// cada escaneo REEMPLAZA el valor del input por completo.
+// Contexto inventory: réplica de Page.tsx — búsqueda EN SEGUNDO PLANO. El
+// handler del escaneo NO escribe en el buscador (el servicio lo retiene);
+// Page decide cómo mostrar el producto en la grilla.
 function InventorySearchHost({ onScan }: { onScan?: (code: string) => void }) {
-  const [busqueda, setBusqueda] = useState('')
+  const [busqueda, setBusqueda] = useState("")
   const ref = useRef<HTMLInputElement>(null)
-  useBarcodeScanner('inventory', (barcode) => {
-    setBusqueda(barcode)
-    ref.current?.focus()
+  useBarcodeScanner("inventory", (barcode) => {
     onScan?.(barcode)
+    ref.current?.focus()
   })
   return (
     <>
@@ -327,7 +327,7 @@ describe('useBarcodeScanner — integración (bug del input con foco)', () => {
     expect(productNotFound).not.toHaveBeenCalled()
   })
 
-  it('Test 9 (buscador): un segundo escaneo REEMPLAZA el código anterior del input', async () => {
+  it('Test 9 (buscador): el escaneo NUNCA escribe el código en el input (búsqueda en segundo plano)', async () => {
     const user = userEvent.setup()
     const onScan = vi.fn()
     render(
@@ -337,22 +337,21 @@ describe('useBarcodeScanner — integración (bug del input con foco)', () => {
     )
 
     const buscador = screen.getByLabelText('Buscar producto') as HTMLInputElement
-
-    // Primer escaneo: el código queda en el buscador.
     await user.click(buscador)
-    await scanCode(user, BARCODE)
-    await waitFor(() => expect(buscador.value).toBe(BARCODE))
 
-    // Segundo escaneo: debe quedar SOLO el código nuevo (ni acumulado ni vacío).
+    await scanCode(user, BARCODE)
+    await waitFor(() => expect(onScan).toHaveBeenCalledTimes(1))
+    expect(onScan).toHaveBeenCalledWith(BARCODE)
+    expect(buscador.value).toBe("")
+
+    // Segundo escaneo: el input sigue intacto (nunca se escribió nada).
     await scanCode(user, BARCODE_2)
-    await waitFor(() => expect(buscador.value).toBe(BARCODE_2))
-    expect(buscador.value).not.toContain(BARCODE)
-    expect(onScan).toHaveBeenCalledTimes(2)
-    expect(onScan).toHaveBeenNthCalledWith(1, BARCODE)
+    await waitFor(() => expect(onScan).toHaveBeenCalledTimes(2))
     expect(onScan).toHaveBeenNthCalledWith(2, BARCODE_2)
+    expect(buscador.value).toBe("")
   })
 
-  it('Test 10 (regresión arreglada): teclear una PALABRA actualiza la búsqueda EN VIVO sin esperar el silencio', async () => {
+  it('Test 10 (filtrar tecleando): una PALABRA se libera al input y la búsqueda sigue en vivo', async () => {
     const user = userEvent.setup()
     const onScan = vi.fn()
     render(
@@ -364,10 +363,53 @@ describe('useBarcodeScanner — integración (bug del input con foco)', () => {
 
     await user.click(buscador)
 
-    // Tecleo humano rápido: cada carácter se entrega AL INSTANTE (entrega
-    // especulativa), así el filtrado de la grilla ocurre en vivo.
+    // Tecleo humano: en modo estricto el buffer se retiene en bloqueo y se
+    // LIBERA apenas hay silencio (micro-retén), así el filtro sigue en vivo.
     await user.keyboard('coca')
-    await waitFor(() => expect(buscador.value).toBe('coca'))
+    await waitFor(() => expect(buscador.value).toBe("coca"))
+    expect(onScan).not.toHaveBeenCalled()
+  })
+
+  it('Test 11 (modo estricto): escaneo con texto previo en el buscador NO lo pisa', async () => {
+    const user = userEvent.setup()
+    const onScan = vi.fn()
+    render(
+      <ScannerHost>
+        <InventorySearchHost onScan={onScan} />
+      </ScannerHost>,
+    )
+    const buscador = screen.getByLabelText('Buscar producto') as HTMLInputElement
+
+    // El cajero estaba buscando "coca" a mano…
+    await user.click(buscador)
+    await user.keyboard('coca')
+    await waitFor(() => expect(buscador.value).toBe("coca"))
+
+    // …y escanea un producto: el código NO se escribe; el handler decide.
+    await scanCode(user, BARCODE)
+    await waitFor(() => expect(onScan).toHaveBeenCalledTimes(1))
+    expect(onScan).toHaveBeenCalledWith(BARCODE)
+    expect(buscador.value).toBe("coca")
+    expect(buscador.value).not.toContain(BARCODE)
+  })
+
+  it('Test 12 (modo estricto): Backspace humano borra el buscador sin detección fantasma', async () => {
+    const user = userEvent.setup()
+    const onScan = vi.fn()
+    render(
+      <ScannerHost>
+        <InventorySearchHost onScan={onScan} />
+      </ScannerHost>,
+    )
+    const buscador = screen.getByLabelText('Buscar producto') as HTMLInputElement
+
+    await user.click(buscador)
+    await user.keyboard('coca')
+    await waitFor(() => expect(buscador.value).toBe("coca"))
+
+    // Borrar a mano: Backspace es no-imprimible → libera el buffer y fluye.
+    await user.keyboard('{Backspace}')
+    await waitFor(() => expect(buscador.value).toBe("coc"))
     expect(onScan).not.toHaveBeenCalled()
   })
 })
