@@ -351,4 +351,23 @@ describe('useBarcodeScanner — integración (bug del input con foco)', () => {
     expect(onScan).toHaveBeenNthCalledWith(1, BARCODE)
     expect(onScan).toHaveBeenNthCalledWith(2, BARCODE_2)
   })
+
+  it('Test 10 (regresión arreglada): teclear una PALABRA actualiza la búsqueda EN VIVO sin esperar el silencio', async () => {
+    const user = userEvent.setup()
+    const onScan = vi.fn()
+    render(
+      <ScannerHost>
+        <InventorySearchHost onScan={onScan} />
+      </ScannerHost>,
+    )
+    const buscador = screen.getByLabelText('Buscar producto') as HTMLInputElement
+
+    await user.click(buscador)
+
+    // Tecleo humano rápido: cada carácter se entrega AL INSTANTE (entrega
+    // especulativa), así el filtrado de la grilla ocurre en vivo.
+    await user.keyboard('coca')
+    await waitFor(() => expect(buscador.value).toBe('coca'))
+    expect(onScan).not.toHaveBeenCalled()
+  })
 })

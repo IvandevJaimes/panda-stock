@@ -8,21 +8,24 @@ import { useScannerStore } from '../stores/scanner.store'
 // Este servicio intercepta esas teclas en window con capture=true — ANTES de que
 // lleguen al input con foco, a React y al formulario.
 //
-// Estrategia: BUFFER ESPECULATIVO (acumulador con confirmación por silencio).
-//   • Todo carácter imprimible que llega se BLOQUEA y se acumula en un buffer
-//     pendiente. Ningún carácter toca jamás el input mientras el buffer esté vivo.
+// Estrategia: BUFFER ESPECULATIVO con ENTREGA EN VIVO y REVERSIÓN.
+//   • Todo carácter imprimible que llega se BLOQUEA (fase capture) para que el
+//     lector nunca "tipee" el código en bruto, pero además se ENTREGA al input
+//     con foco como si fuera tecleo normal: el input y el estado React se
+//     actualizan AL INSTANTE (filtrado en vivo, sin retardo).
 //   • La secuencia se CONFIRMA como escaneo cuando llega el Enter y cumple los
 //     criterios (longitud mínima, Enter dentro de la ventana y presupuesto de
-//     velocidad). El Enter se consume por completo (no submit, no click) y se
-//     emite el código. NADA de lo retenido se entregó al input.
+//     velocidad). El Enter se consume por completo (no submit, no click), el
+//     input se REVIERTE al valor que tenía antes de la ráfaga (se descartan los
+//     caracteres entregados de forma especulativa) y se emite el código al
+//     handler, que es quien dispone el valor final.
 //   • Si NO llega a confirmarse (silencio mayor a timeBeforeScanTest, Enter que
-//     no cumple criterios, o una tecla no imprimible) era tecleo humano: el
-//     buffer se ENTREGA al input como pulsación normal (vía Element.insertText
-//     cuando está disponible, con fallback compatible).
-//   • Este diseño tolera un arranque lento de la lectora (gap inicial 30-90ms)
-//     SIN soltar caracteres: el char retenido se entrega solo ante silencio real,
-//     nunca por un único gap entre teclas. El tecleo humano normal aporta los
-//     caracteres con ≤120ms de retardo (imperceptible) y sin perder ninguno.
+//     no cumple criterios, o una tecla no imprimible) era tecleo humano: los
+//     caracteres ya se entregaron en vivo, no hay nada más que hacer.
+//   • La reversión al confirmar mantiene intacta la tolerancia al arranque lento
+//     de la lectora (gap inicial 30-90ms): el buffer completo sigue retenido en
+//     paralelo a la visualización en vivo, así que nunca se pierde el primer
+//     dígito del código.
 // ---------------------------------------------------------------------------
 
 // ── Configuración ───────────────────────────────────────────────────────────
@@ -57,9 +60,12 @@ interface PendingBurst {
   chars: string
   startTime: number
   lastCharTime: number
-  /** Input/textarea donde entregar los caracteres si resultan tecleo humano. */
+  /** Input/textarea donde se entregan (vivo) y revierten los caracteres. */
   element: HTMLInputElement | HTMLTextAreaElement | null
-  /** Timer de silencio: al vencer, la ráfaga se entrega como tecleo humano. */
+  /** Valor del elemento AL EMPEZAR la ráfaga: base para la reversión si se
+   *  confirma escaneo. */
+  valueAtStart: string
+  /** Timer de silencio: al vencer, la ráfaga se descarta como tecleo humano. */
   idleTimer: ReturnType<typeof setTimeout> | null
 }
 
@@ -135,25 +141,43 @@ function clearIdleTimer(pending: PendingBurst): void {
   }
 }
 
-/** Entrega el buffer al input como tecleo humano y descarta la ráfaga. */
+/** Entrega el buffer pendiente y lo descarta. Con entrega en vivo los
+ *  caracteres YA están en el input; aquí solo se limpia el estado. */
 function flushAsHuman(pending: PendingBurst): void {
   clearIdleTimer(pending)
   burst = null
-  const { chars, element } = pending
-  if (element && element.isConnected && chars.length > 0) {
-    deliverHeldText(element, chars)
-  }
 }
 
-/** Crea una ráfaga con el primer carácter y agenda la entrega por silencio. */
+/**
+ * Revierte el input al valor anterior a la ráfaga (descarta los caracteres
+ * entregados de forma especulativa) y notifica a React mediante un evento input
+ * real, de modo que el estado controlado vuelva a su valor previo.
+ */
+function revertBurst(pending: PendingBurst): void {
+  const { element, valueAtStart } = pending
+  if (!element || !element.isConnected) return
+  element.value = valueAtStart
+  try {
+    element.setSelectionRange(valueAtStart.length, valueAtStart.length)
+  } catch {
+    // Algunos inputs (ej. type=number) rechazan setSelectionRange.
+  }
+  element.dispatchEvent(new Event('input', { bubbles: true }))
+}
+
+/** Crea una ráfaga con el primer carácter, lo entrega en vivo y agenda la
+ *  espera de confirmación por silencio. */
 function startBurst(event: KeyboardEvent, now: number): void {
+  const element = focusedEditable()
   const next: PendingBurst = {
     chars: event.key,
     startTime: now,
     lastCharTime: now,
-    element: focusedEditable(),
+    element,
+    valueAtStart: element?.value ?? '',
     idleTimer: null,
   }
+  if (element) deliverHeldText(element, event.key)
   next.idleTimer = setTimeout(() => {
     if (burst === next) flushAsHuman(next)
   }, config.timeBeforeScanTest)
@@ -165,6 +189,9 @@ function appendCharToBurst(event: KeyboardEvent, now: number): void {
   clearIdleTimer(burst)
   burst.chars += event.key
   burst.lastCharTime = now
+  if (burst.element && burst.element.isConnected) {
+    deliverHeldText(burst.element, event.key)
+  }
   burst.idleTimer = setTimeout(() => {
     if (burst) flushAsHuman(burst)
   }, config.timeBeforeScanTest)
@@ -176,15 +203,19 @@ function emitBarcode(barcode: string): void {
 }
 
 function finalizeScan(event: KeyboardEvent): void {
-  if (!burst) return
-  const barcode = burst.chars
+  const pending = burst
+  if (!pending) return
+  const barcode = pending.chars
 
   // Consume el Enter del scanner: NO submit, NO click, NO cambio de foco.
   blockEvent(event)
   debug('barcode detected:', barcode)
 
-  clearIdleTimer(burst)
+  clearIdleTimer(pending)
   burst = null
+
+  // Revierte los caracteres entregados de forma especulativa al input.
+  revertBurst(pending)
 
   // Ahoga un posible Enter duplicado del scanner (algunos modelos lo re-emiten).
   suppressNextEnterUntil = Date.now() + 300
