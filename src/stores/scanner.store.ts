@@ -14,6 +14,7 @@ export type BarcodeScannerContext =
   | 'edit-product-form'
   | 'sales'
   | 'inventory'
+  | 'inventory-action'
   | null
 
 /**

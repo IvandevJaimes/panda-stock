@@ -44,7 +44,8 @@ function SalesHost({ onScan }: { onScan: (code: string) => void }) {
 
 // Contexto inventory: réplica de Page.tsx — búsqueda EN SEGUNDO PLANO. El
 // handler del escaneo NO escribe en el buscador (el servicio lo retiene);
-// Page decide cómo mostrar el producto en la grilla.
+// Page decide cómo mostrar el producto en la grilla. El <output> expone el
+// estado React (busqueda): es lo que la grilla usa para filtrar.
 function InventorySearchHost({ onScan }: { onScan?: (code: string) => void }) {
   const [busqueda, setBusqueda] = useState("")
   const ref = useRef<HTMLInputElement>(null)
@@ -60,6 +61,7 @@ function InventorySearchHost({ onScan }: { onScan?: (code: string) => void }) {
         value={busqueda}
         onChange={(e) => setBusqueda(e.target.value)}
       />
+      <output aria-label="estado de búsqueda">{busqueda}</output>
     </>
   )
 }
@@ -411,5 +413,32 @@ describe('useBarcodeScanner — integración (bug del input con foco)', () => {
     await user.keyboard('{Backspace}')
     await waitFor(() => expect(buscador.value).toBe("coc"))
     expect(onScan).not.toHaveBeenCalled()
+  })
+
+  it('Test 13 (regresión): tecleo humano actualiza el ESTADO React, no solo el DOM del input', async () => {
+    const user = userEvent.setup()
+    render(
+      <ScannerHost>
+        <InventorySearchHost />
+      </ScannerHost>,
+    )
+    const buscador = screen.getByLabelText('Buscar producto') as HTMLInputElement
+    // El output refleja `busqueda`, el estado que la grilla usa para filtrar.
+    const estado = () =>
+      screen.getByLabelText('estado de búsqueda').textContent ?? ""
+
+    await user.click(buscador)
+
+    // Tecleo humano pausado (150ms > ventana de retención de 100ms del primer
+    // carácter): después de cada tecla, input y estado deben estar sincronizados
+    // → la grilla filtra EN VIVO, sin desfase de un carácter.
+    for (const ch of "rimeL".split("")) {
+      await user.keyboard(ch)
+      await new Promise((resolve) => setTimeout(resolve, 150))
+      expect(estado()).toBe(buscador.value)
+    }
+
+    expect(estado()).toBe("rimeL")
+    expect(buscador.value).toBe("rimeL")
   })
 })

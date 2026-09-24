@@ -346,6 +346,7 @@ export function LotesModal({
                   alt={product.imgPath ? product.nombre : `${product.nombre} sin foto`}
                   loading="lazy"
                   className="h-full w-full object-cover"
+                  draggable={false}
                 />
               </div>
               <div className="flex min-w-0 flex-col gap-0.5">

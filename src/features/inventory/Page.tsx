@@ -12,7 +12,6 @@ import {
   Minus,
   Search,
   SlidersHorizontal,
-  ScanLine,
   X,
   XCircle,
 } from "lucide-react";
@@ -28,6 +27,7 @@ import { ProductDetailModal } from "./ProductDetailModal";
 import { LotesModal } from "./LotesModal";
 import { ConfirmarPerdidaModal } from "./ConfirmarPerdidaModal";
 import { MarcasModal } from "./MarcasModal";
+import { ScanBadge } from "./ScanBadge";
 import { esLoteVencido } from "./loteHelpers";
 import { ProductQuickActionsModal } from "./quick-actions";
 import { AccionGlobalModal } from "./quick-actions/AccionGlobalModal";
@@ -336,6 +336,13 @@ export function InventoryPage() {
     );
   }, [productosCrudos, orden, categories, marcas]);
 
+  const productosBase = useMemo(() => {
+    return ordenarProductos(
+      productosCrudos.filter((p) => p.activo),
+      "creado_desc",
+    ).map((p) => mapearProducto(p, categories, marcas));
+  }, [productosCrudos, categories, marcas]);
+
   const productos = useMemo(() => {
     const visibles = productosCrudos.filter((p) =>
       verInactivos ? !p.activo : p.activo,
@@ -359,10 +366,12 @@ export function InventoryPage() {
       }
       return nuevo;
     });
+    setBarcodeEscaneado(null);
   };
 
   const hayFiltroActivo =
     verInactivos ||
+    barcodeEscaneado !== null ||
     busqueda.trim() !== "" ||
     activeKpiFilter !== "all" ||
     selectedCategory !== "all" ||
@@ -371,6 +380,7 @@ export function InventoryPage() {
   const limpiarFiltros = () => {
     setVerInactivos(false);
     setBusqueda("");
+    setBarcodeEscaneado(null);
     setActiveKpiFilter("all");
     setSelectedCategory("all");
     setOrden("creado_desc");
@@ -442,19 +452,25 @@ export function InventoryPage() {
   const totalActivos = productosCrudos.filter((p) => p.activo).length;
   const totalInactivos = productosCrudos.filter((p) => !p.activo).length;
 
-  const filasFiltradas = useMemo(() => {
+  const { filasFiltradas, escaneoVigente } = useMemo(() => {
     // El escaneo filtra "en segundo plano": la grilla muestra solo el producto
     // escaneado SIN escribir el código en el input. Cuando el cajero vuelve a
     // teclear, el filtro textual retoma el control (onChange limpia el estado).
-    const termino = barcodeEscaneado ?? busqueda;
-    const texto = normalizar(termino.trim());
-    const coincideTexto = (p: ProductoInventario) =>
-      !texto ||
-      normalizar(p.name).includes(texto) ||
-      normalizar(p.brand).includes(texto) ||
-      normalizar(p.variant ?? "").includes(texto) ||
-      normalizar(p.codigoInterno).includes(texto) ||
-      normalizar(p.codigosBarras).includes(texto);
+    // El escaneo es DERIVADO (no se limpia con setState): solo está vigente
+    // mientras su código coincida con algún producto. Si el código se borra o
+    // se renombra, el badge desaparece y la grilla vuelve sola al filtro
+    // textual (filtros "limpios" sin efecto ni escritura de refs).
+    const coincideTexto = (p: ProductoInventario, termino: string) => {
+      const texto = normalizar(termino.trim());
+      return (
+        !texto ||
+        normalizar(p.name).includes(texto) ||
+        normalizar(p.brand).includes(texto) ||
+        normalizar(p.variant ?? "").includes(texto) ||
+        normalizar(p.codigoInterno).includes(texto) ||
+        normalizar(p.codigosBarras).includes(texto)
+      );
+    };
 
     const coincideCategoria = (p: ProductoInventario) => {
       if (selectedCategory === "all") return true;
@@ -477,10 +493,29 @@ export function InventoryPage() {
       }
     };
 
-    return productos.filter(
-      (p) => coincideTexto(p) && coincideCategoria(p) && coincideKpi(p),
-    );
-  }, [barcodeEscaneado, busqueda, selectedCategory, activeKpiFilter, categories, productos]);
+    const pasaFiltros = (p: ProductoInventario, termino: string) =>
+      coincideTexto(p, termino) && coincideCategoria(p) && coincideKpi(p);
+
+    const filasConEscaneo = barcodeEscaneado
+      ? productos.filter((p) => pasaFiltros(p, barcodeEscaneado))
+      : null;
+    const coincideEscaneo =
+      filasConEscaneo !== null && filasConEscaneo.length > 0;
+
+    let filasFiltradas: ProductoInventario[];
+    if (barcodeEscaneado === null) {
+      filasFiltradas = productos.filter((p) => pasaFiltros(p, busqueda));
+    } else if (coincideEscaneo) {
+      filasFiltradas = filasConEscaneo!;
+    } else {
+      filasFiltradas = productosBase;
+    }
+
+    return {
+      filasFiltradas,
+      escaneoVigente: coincideEscaneo,
+    };
+  }, [barcodeEscaneado, busqueda, selectedCategory, activeKpiFilter, categories, productos, productosBase]);
 
   const totalPaginas = Math.max(
     1,
@@ -528,8 +563,8 @@ export function InventoryPage() {
   // ── Scanner de código de barras (deshabilitado mientras hay un modal abierto) ──
   // Búsqueda EN SEGUNDO PLANO: el scanner jamás escribe en el buscador (el
   // servicio lo retiene en bloqueo). Si el producto existe y está activo, el
-  // código filtra la grilla para mostrar SOLO esa card, resaltada; si no existe,
-  // o está desactivado, se avisa con toast y el input queda intacto.
+  // código filtra la grilla para mostrar SOLO esa card, SIN resaltar con ring;
+  // si no existe, o está desactivado, se avisa con toast y el input queda intacto.
   const buscarPorEscaneo = async (barcode: string) => {
     const producto = await productosService.scan(barcode);
     if (!producto) {
@@ -546,8 +581,11 @@ export function InventoryPage() {
     }
     setBusqueda("");
     setBarcodeEscaneado(barcode);
+    setActiveKpiFilter("all");
+    setSelectedCategory("all");
+    setOrden("creado_desc");
+    setVerInactivos(false);
     setPaginaActual(1);
-    setCardFoco(0);
     buscadorRef.current?.focus();
   };
 
@@ -721,6 +759,7 @@ export function InventoryPage() {
                 setActiveKpiFilter("all");
                 setSelectedCategory("all");
                 setOrden("creado_desc");
+                setBarcodeEscaneado(null);
                 setPaginaActual(1);
                 setCardFoco(null);
               }}
@@ -883,6 +922,7 @@ export function InventoryPage() {
                 count={totalProducts}
                 onSelect={() => {
                   setSelectedCategory("all");
+                  setBarcodeEscaneado(null);
                   setPaginaActual(1);
                   setCardFoco(null);
                 }}
@@ -900,6 +940,7 @@ export function InventoryPage() {
                         ? "all"
                         : String(categoria.id),
                     );
+                    setBarcodeEscaneado(null);
                     setPaginaActual(1);
                     setCardFoco(null);
                   }}
@@ -950,31 +991,13 @@ export function InventoryPage() {
                 ) : undefined
               }
             />
-            {barcodeEscaneado && (
-              <span className="flex shrink-0 items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300">
-                <ScanLine size={13} />
-                Escaneado: {barcodeEscaneado}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setBarcodeEscaneado(null);
-                    setPaginaActual(1);
-                    setCardFoco(null);
-                    buscadorRef.current?.focus();
-                  }}
-                  aria-label="Salir del filtro escaneado"
-                  className="grid h-4 w-4 cursor-pointer place-items-center rounded-full text-emerald-600 transition-colors hover:bg-emerald-500/20 hover:text-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-400/20 dark:hover:text-emerald-200"
-                >
-                  <X size={12} />
-                </button>
-              </span>
-            )}
             {!verInactivos && (
               <CustomSelect
                 options={OPCIONES_ORDEN}
                 value={orden}
                 onChange={(value) => {
                   setOrden(value as OrdenInventario);
+                  setBarcodeEscaneado(null);
                   setPaginaActual(1);
                   setCardFoco(null);
                 }}
@@ -1218,6 +1241,19 @@ export function InventoryPage() {
         </div>
       )}
 
+      {barcodeEscaneado && escaneoVigente && (
+        <ScanBadge
+          key={barcodeEscaneado}
+          barcode={barcodeEscaneado}
+          onClose={() => {
+            setBarcodeEscaneado(null);
+            setPaginaActual(1);
+            setCardFoco(null);
+            buscadorRef.current?.focus();
+          }}
+        />
+      )}
+
       <CreateCategoryModal
         isOpen={isCreateCategoryOpen}
         onClose={() => setIsCreateCategoryOpen(false)}
@@ -1445,11 +1481,13 @@ export function InventoryPage() {
       />
 
       <AccionGlobalModal
+        key={accionGlobal ?? "cerrado"}
         isOpen={accionGlobal !== null}
         accion={accionGlobal}
         productos={productosCrudos}
         marcas={marcas}
         categorias={categories}
+        barcodeEscaneadoInicial={barcodeEscaneado}
         onClose={() => setAccionGlobal(null)}
         onSuccess={() => void refreshProductos()}
       />

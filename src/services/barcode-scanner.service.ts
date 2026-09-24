@@ -10,7 +10,8 @@ import { useScannerStore } from '../stores/scanner.store'
 //
 // Estrategia: DOBLE MODO según contexto.
 //
-//   MODO ESTRICTO (contexto 'inventory' — buscador de la grilla):
+//   MODO ESTRICTO (contextos 'inventory' e 'inventory-action' — buscadores de
+//   la grilla y del modal de acciones globales):
 //   • El scanner trabaja EN SEGUNDO PLANO: captura completa en fase capture,
 //     cada carácter del lector se BLOQUEA y NUNCA llega al input. Al Enter con
 //     criterios se emite el código al handler y el buscador queda intacto.
@@ -131,14 +132,40 @@ function blockEvent(event: KeyboardEvent): void {
 }
 
 /**
+ * Escribe el valor usando el SETTER NATIVO del prototipo, NO el asignador
+ * `element.value = x`.
+ *
+ * Por qué: React 19 reemplaza el descriptor `value` de la instancia con un
+ * wrapper que registra el cambio en su value-tracker interno. Asignar
+ * `element.value` pasa por ese wrapper, así que cuando después disparamos el
+ * Event('input'), React ya "vio" el cambio como programático y NO ejecuta
+ * onChange → el estado controlado del input se queda congelado en el valor
+ * anterior (exactamente el desfase de búsqueda reportado). El setter del
+ * prototipo lo omite: React detecta la diferencia en el evento y onChange
+ * dispara con normalidad.
+ */
+function writeNativeValue(
+  element: HTMLInputElement | HTMLTextAreaElement,
+  value: string,
+): void {
+  const proto =
+    element instanceof HTMLTextAreaElement
+      ? window.HTMLTextAreaElement.prototype
+      : window.HTMLInputElement.prototype
+  const descriptor = Object.getOwnPropertyDescriptor(proto, 'value')
+  if (descriptor?.set) {
+    descriptor.set.call(element, value)
+  } else {
+    element.value = value
+  }
+}
+
+/**
  * Entrega texto al input en el cursor (o al final) y dispara un evento input
  * real para que React actualice el estado controlado.
  *
  * Se usa deliberadamente el mismo camino en TODOS los entornos (Chromium real,
- * jsdom y Electron): SET del valor + dispatch de Event('input'). La alternativa
- * nativa element.insertText() existe solo en Chromium y no está garantizado que
- * dispare onChange de React 19 en inputs controlados, así que se descarta para
- * que la app real se comporte EXACTAMENTE como lo cubren los tests.
+ * jsdom y Electron): SET del valor vía setter NATIVO + dispatch de Event('input').
  */
 function deliverHeldText(
   element: HTMLInputElement | HTMLTextAreaElement,
@@ -146,8 +173,10 @@ function deliverHeldText(
 ): void {
   const start = element.selectionStart ?? element.value.length
   const end = element.selectionEnd ?? element.value.length
-  element.value =
-    element.value.slice(0, start) + text + element.value.slice(end)
+  writeNativeValue(
+    element,
+    element.value.slice(0, start) + text + element.value.slice(end),
+  )
   try {
     element.setSelectionRange(start + text.length, start + text.length)
   } catch {
@@ -185,7 +214,7 @@ function flushAsHuman(pending: PendingBurst): void {
 function revertBurst(pending: PendingBurst): void {
   const { element, valueAtStart } = pending
   if (!element || !element.isConnected) return
-  element.value = valueAtStart
+  writeNativeValue(element, valueAtStart)
   try {
     element.setSelectionRange(valueAtStart.length, valueAtStart.length)
   } catch {
@@ -201,7 +230,9 @@ function revertBurst(pending: PendingBurst): void {
  *  • Modo bloqueo: entrega el primer carácter en vivo y agenda la espera de
  *    confirmación por silencio. */
 function startBurst(event: KeyboardEvent, now: number): void {
-  const strict = useScannerStore.getState().context === 'inventory'
+  const strict =
+    useScannerStore.getState().context === 'inventory' ||
+    useScannerStore.getState().context === 'inventory-action'
   // En modo estricto el elemento se captura igualmente: hay que liberarle el
   // buffer al descartar el tecleo humano.
   const element = focusedEditable()

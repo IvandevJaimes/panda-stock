@@ -149,9 +149,7 @@ export function ProductCard({
       .split(",")
       .map((codigo) => codigo.trim())
       .filter(Boolean)
-      .find(
-        (codigo) => codigo.toLowerCase() === terminoConsulta.toLowerCase(),
-      );
+      .find((codigo) => codigo.toLowerCase() === terminoConsulta.toLowerCase());
   }, [codigosBarras, terminoConsulta]);
 
   const codigoResaltado = coincideCodigoInterno
@@ -191,18 +189,19 @@ export function ProductCard({
         className,
       )}
     >
-{/* 0. Imagen pegada al borde izquierdo y a los extremos verticales */}
+      {/* 0. Imagen pegada al borde izquierdo y a los extremos verticales */}
       <div className="flex h-full border-r border-0.5 border-slate-200 dark:border-slate-800/80 w-13 shrink-0 items-center justify-center overflow-hidden bg-slate-200/60 sm:w-15 dark:bg-slate-800/60">
         {(() => {
           const imgUrl = producto?.imgPath
             ? buildAssetUrl(producto.imgPath)
             : null;
-return (
+          return (
             <img
               src={imgUrl ?? getProductPlaceholder(producto?.id)}
               alt={imgUrl ? name : `${name} sin foto`}
               loading="lazy"
               className="h-full w-full object-cover"
+              draggable={false}
             />
           );
         })()}
@@ -251,35 +250,35 @@ return (
             disabled={margenDelta === null}
           >
             <span className="inline-flex shrink-0 items-center gap-1">
-                {margenDelta !== null &&
-                  (esGanancia ? (
-                    <TrendingUp
-                      className="h-3 w-3 text-emerald-600 dark:text-emerald-400"
-                      aria-hidden
-                    />
-                  ) : (
-                    <TrendingDown
-                      className="h-3 w-3 text-red-600 dark:text-red-400"
-                      aria-hidden
-                    />
-                  ))}
-                <button
-                  type="button"
-                  aria-label={`Editar precio de ${name}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (producto) onEditPrice?.(producto);
-                  }}
-                  className={cn(
-                    "cursor-pointer select-none rounded px-0.5 font-display text-[11px] font-semibold transition-colors hover:underline sm:text-xs",
-                    esGanancia || margenDelta === null
-                      ? "text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300"
-                      : "text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300",
-                  )}
-                >
-                  ${price.toFixed(2)}
-                </button>
-              </span>
+              {margenDelta !== null &&
+                (esGanancia ? (
+                  <TrendingUp
+                    className="h-3 w-3 text-emerald-600 dark:text-emerald-400"
+                    aria-hidden
+                  />
+                ) : (
+                  <TrendingDown
+                    className="h-3 w-3 text-red-600 dark:text-red-400"
+                    aria-hidden
+                  />
+                ))}
+              <button
+                type="button"
+                aria-label={`Editar precio de ${name}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (producto) onEditPrice?.(producto);
+                }}
+                className={cn(
+                  "cursor-pointer select-none rounded px-0.5 font-display text-[11px] font-semibold transition-colors hover:underline sm:text-xs",
+                  esGanancia || margenDelta === null
+                    ? "text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300"
+                    : "text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300",
+                )}
+              >
+                ${price.toFixed(2)}
+              </button>
+            </span>
           </Tooltip>
         </div>
         <div className="mt-0.5 min-w-0">
@@ -425,40 +424,63 @@ return (
                 </span>
               </Tooltip>
             )}
-            {!inactivo && onConfirmarPerdida && resolvedStatus === "expired" && (
-              <Tooltip content="Confirmar pérdida" placement="top" disabled={esEscritorio}>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  icon={<PackageX className="h-5 w-5 md:h-3.5 md:w-3.5" aria-hidden />}
-                  aria-label="Confirmar pérdida"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onConfirmarPerdida();
-                  }}
-                  className="h-8 shrink-0 gap-0 rounded-xl bg-red-600 px-1.5 py-0 text-white shadow-xs hover:bg-red-700 focus-visible:ring-red-500/30 dark:text-white dark:hover:bg-red-500 md:gap-2 md:px-3 md:text-xs md:dark:hover:bg-red-500"
+            {!inactivo &&
+              onConfirmarPerdida &&
+              resolvedStatus === "expired" && (
+                <Tooltip
+                  content="Confirmar pérdida"
+                  placement="top"
+                  disabled={esEscritorio}
                 >
-                  <span className="hidden md:inline-flex md:items-center md:leading-none">Confirmar pérdida</span>
-                </Button>
-              </Tooltip>
-            )}
-            {!inactivo && onAgregarInventario && resolvedStatus === "out_of_stock" && (
-              <Tooltip content="Agregar inventario" placement="top" disabled={esEscritorio}>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  icon={<Plus className="h-5 w-5 md:h-3.5 md:w-3.5" aria-hidden />}
-                  aria-label="Agregar inventario"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onAgregarInventario();
-                  }}
-                  className="h-8 shrink-0 gap-0 rounded-xl bg-emerald-600 px-1.5 py-0 text-white shadow-xs hover:bg-emerald-500 focus-visible:ring-emerald-500/30 dark:text-white dark:hover:bg-emerald-500 md:gap-2 md:px-3 md:text-xs md:dark:hover:bg-emerald-500"
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={
+                      <PackageX
+                        className="h-5 w-5 md:h-3.5 md:w-3.5"
+                        aria-hidden
+                      />
+                    }
+                    aria-label="Confirmar pérdida"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onConfirmarPerdida();
+                    }}
+                    className="h-8 shrink-0 gap-0 rounded-xl bg-red-600 px-1.5 py-0 text-white shadow-xs hover:bg-red-700 focus-visible:ring-red-500/30 dark:text-white dark:hover:bg-red-500 md:gap-2 md:px-3 md:text-xs md:dark:hover:bg-red-500"
+                  >
+                    <span className="hidden md:inline-flex md:items-center md:leading-none">
+                      Confirmar pérdida
+                    </span>
+                  </Button>
+                </Tooltip>
+              )}
+            {!inactivo &&
+              onAgregarInventario &&
+              resolvedStatus === "out_of_stock" && (
+                <Tooltip
+                  content="Agregar inventario"
+                  placement="top"
+                  disabled={esEscritorio}
                 >
-                  <span className="hidden md:inline-flex md:items-center md:leading-none">Agregar inventario</span>
-                </Button>
-              </Tooltip>
-            )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={
+                      <Plus className="h-5 w-5 md:h-3.5 md:w-3.5" aria-hidden />
+                    }
+                    aria-label="Agregar inventario"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onAgregarInventario();
+                    }}
+                    className="h-8 shrink-0 gap-0 rounded-xl bg-emerald-600 px-1.5 py-0 text-white shadow-xs hover:bg-emerald-500 focus-visible:ring-emerald-500/30 dark:text-white dark:hover:bg-emerald-500 md:gap-2 md:px-3 md:text-xs md:dark:hover:bg-emerald-500"
+                  >
+                    <span className="hidden md:inline-flex md:items-center md:leading-none">
+                      Agregar inventario
+                    </span>
+                  </Button>
+                </Tooltip>
+              )}
           </div>
         )}
 
@@ -518,8 +540,7 @@ return (
             <div className="flex md:hidden items-center">
               <DropdownMenu placement="bottom-end">
                 <Tooltip content="Ver acciones">
-                <DropdownMenuTrigger asChild>
-                  
+                  <DropdownMenuTrigger asChild>
                     <button
                       type="button"
                       onClick={(e) => e.stopPropagation()}
@@ -528,9 +549,8 @@ return (
                     >
                       <MoreVertical className="h-4 w-4" />
                     </button>
-                 
-                </DropdownMenuTrigger>
-                 </Tooltip>
+                  </DropdownMenuTrigger>
+                </Tooltip>
                 <DropdownMenuContent className="w-48">
                   {onOpenLotes && (
                     <DropdownMenuItem
