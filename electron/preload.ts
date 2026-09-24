@@ -59,6 +59,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   },
   productos: {
     scan: (codigo: string) => ipcRenderer.invoke("productos:scan", codigo),
+    verificarCodigos: (codigos: string[], excluirProductoId?: number | null) =>
+      ipcRenderer.invoke("productos:verificar-codigos", codigos, excluirProductoId),
     getAll: (filtros?: FiltrosProducto) =>
       ipcRenderer.invoke("productos:get-all", filtros),
     getById: (id: number) => ipcRenderer.invoke("productos:get-by-id", id),

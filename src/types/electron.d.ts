@@ -5,6 +5,7 @@ import type {
   CajaSummary,
   Categoria,
   CierreCajaInput,
+  ConflictoCodigo,
   CrearMovimientoInput,
   Empleado,
   FiltrosMovimientos,
@@ -62,6 +63,7 @@ declare global {
       }
       productos: {
         scan: (codigo: string) => Promise<Producto | null>
+        verificarCodigos: (codigos: string[], excluirProductoId?: number | null) => Promise<ConflictoCodigo[]>
         getAll: (filtros?: FiltrosProducto) => Promise<ProductoConLoteActivo[]>
         getById: (id: number) => Promise<Producto | null>
         create: (data: Record<string, unknown>) => Promise<Producto>

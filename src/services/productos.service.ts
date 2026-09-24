@@ -1,4 +1,5 @@
 import type {
+  ConflictoCodigo,
   FiltrosProducto,
   Producto,
   ProductoConLoteActivo,
@@ -6,6 +7,7 @@ import type {
 import { toErrorMessage } from './errors'
 import { bumpAssetVersion } from '../lib/assets'
 import { MIME_A_EXTENSION, MAX_LOGO_SIZE } from '../features/onboarding/business.schema'
+import { separarCodigos } from '../lib/codigosBarras'
 
 function limpiarBarras(codigosBarra: string | null | undefined): string | null {
   if (!codigosBarra?.trim()) return null
@@ -23,6 +25,23 @@ export const productosService = {
 
     try {
       return await window.electronAPI.productos.scan(codigoLimpio)
+    } catch (error) {
+      throw new Error(toErrorMessage(error), { cause: error })
+    }
+  },
+
+  async verificarCodigosEnUso(
+    codigos: string[],
+    excluirProductoId?: number | null,
+  ): Promise<ConflictoCodigo[]> {
+    const unicos = separarCodigos(codigos.join(','))
+    if (unicos.length === 0) return []
+
+    try {
+      return await window.electronAPI.productos.verificarCodigos(
+        unicos,
+        excluirProductoId,
+      )
     } catch (error) {
       throw new Error(toErrorMessage(error), { cause: error })
     }

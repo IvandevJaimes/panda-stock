@@ -71,6 +71,14 @@ export type FiltrosProducto = {
   bajoStock?: boolean
 }
 
+/** Código (interno o de barras) ya asociado a otro producto activo. */
+export type ConflictoCodigo = {
+  /** Código en conflicto, ya recortado y normalizado. */
+  codigo: string
+  /** Nombre del producto activo que lo tiene asociado. */
+  producto: string
+}
+
 /** Producto enriquecido con el vencimiento del lote activo (FIFO) para el listado. */
 export type ProductoConLoteActivo = Producto & {
   /** Vencimiento del lote activo: primer lote con stock ordenado por fecha de ingreso. */

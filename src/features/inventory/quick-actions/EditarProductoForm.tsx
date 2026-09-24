@@ -27,6 +27,7 @@ import type {
 import { HeaderMini } from "./HeaderMini";
 import { ACCION_LABEL, FORM_ID } from "./types";
 import { useBarcodeScanner } from "../../../hooks/useBarcodeScanner";
+import { useCodigosBarrasUnicos } from "../../../hooks/useCodigosBarrasUnicos";
 
 interface EditarProductoFormProps {
   producto: Producto;
@@ -72,6 +73,7 @@ export function EditarProductoForm({
     getValues,
     setValue,
     setError,
+    clearErrors,
     control,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
@@ -88,6 +90,15 @@ export function EditarProductoForm({
   });
 
   const valorMarca = useWatch({ control, name: "marca" }) ?? "";
+
+  // Verificación en caliente: el producto en edición queda exento de su propio
+  // código; cualquier otro código ya asociado a otro producto activo marca error.
+  useCodigosBarrasUnicos(
+    control,
+    (mensaje) => setError("codigosBarras", { type: "manual", message: mensaje }),
+    () => clearErrors("codigosBarras"),
+    { excluirProductoId: producto?.id ?? null },
+  );
 
   // Scanner: al escanear un código, se escribe en "Códigos de barra" sin importar
   // qué campo tenga el foco. Si ya hay códigos, se agrega separado por coma.
@@ -221,7 +232,10 @@ export function EditarProductoForm({
           ? error.message
           : "Error al actualizar el producto";
 
-      if (
+      if (mensaje.toLowerCase().includes("de barras")) {
+        setError("codigosBarras", { type: "manual", message: mensaje });
+        toast.error(mensaje);
+      } else if (
         mensaje.toLowerCase().includes("unique") &&
         mensaje.toLowerCase().includes("codigo_interno")
       ) {

@@ -56,6 +56,7 @@ import {
   deleteLote,
   updateNegocio,
   verifyPin,
+  verificarCodigosEnUso,
 } from "./db/repository.ts";
 import type {
   AjusteStockInput,
@@ -215,6 +216,11 @@ function registerIpcHandlers() {
 
   ipcMain.handle("productos:scan", (_event, codigo: string) =>
     scanProductByCode(codigo),
+  );
+  ipcMain.handle(
+    "productos:verificar-codigos",
+    (_event, codigos: string[], excluirProductoId?: number | null) =>
+      verificarCodigosEnUso(codigos, excluirProductoId),
   );
   ipcMain.handle("productos:get-all", (_event, filtros?: FiltrosProducto) =>
     getProductos(filtros),

@@ -37,6 +37,7 @@ import type {
   CajaSummary,
   Categoria,
   CierreCajaInput,
+  ConflictoCodigo,
   Empleado,
   FiltrosMovimientos,
   FiltrosProducto,
@@ -305,6 +306,65 @@ export function scanProductByCode(codigo: string): Producto | null {
   return fila ?? null
 }
 
+/** Separa una lista CSV de códigos de barra en tokens únicos y recortados. */
+function separarCodigosCsv(csv: string | null | undefined): string[] {
+  if (!csv?.trim()) return []
+  return Array.from(
+    new Set(
+      csv
+        .split(',')
+        .map((codigo) => codigo.trim())
+        .filter(Boolean),
+    ),
+  )
+}
+
+/** Productos ACTIVOS que usan un código en coincidencia exacta (interno o de barras). */
+function listarProductosActivosConCodigo(codigo: string): Producto[] {
+  return getDb()
+    .select()
+    .from(productos)
+    .where(
+      and(
+        eq(productos.activo, true),
+        or(
+          eq(productos.codigoInterno, codigo),
+          sql`instr(',' || ${productos.codigosBarras} || ',', ',' || ${codigo} || ',') > 0`,
+        ),
+      ),
+    )
+    .all()
+}
+
+/**
+ * Devuelve qué códigos de una lista ya están asociados a otro producto ACTIVO.
+ * Los productos inactivos (borrados lógicos) liberan sus códigos: pueden reutilizarse.
+ */
+export function verificarCodigosEnUso(
+  codigos: string[],
+  excluirProductoId?: number | null,
+): ConflictoCodigo[] {
+  const conflictos: ConflictoCodigo[] = []
+  for (const codigo of separarCodigosCsv(codigos.join(','))) {
+    const duenio = listarProductosActivosConCodigo(codigo).find(
+      (producto) => producto.id !== excluirProductoId,
+    )
+    if (duenio) conflictos.push({ codigo, producto: duenio.nombre })
+  }
+  return conflictos
+}
+
+/** Guardia autoritativa: lanza error si algún código ya pertenece a otro producto ACTIVO. */
+function bloquearCodigosEnUso(codigos: string[], excluirProductoId?: number | null): void {
+  const conflictos = verificarCodigosEnUso(codigos, excluirProductoId)
+  if (conflictos.length > 0) {
+    const primero = conflictos[0]
+    throw new Error(
+      `El código de barras "${primero.codigo}" ya está asociado al producto "${primero.producto}"`,
+    )
+  }
+}
+
 export function getProductos(filtros?: FiltrosProducto): ProductoConLoteActivo[] {
   const db = getDb()
   const condiciones: ReturnType<typeof and>[] = []
@@ -424,6 +484,9 @@ export function createProducto(data: Record<string, unknown>): Producto {
   const valores = mapNuevoProducto(data)
   const ahora = new Date().toISOString()
 
+  // Guardia de unicidad: un código de barras no puede pertenecer a otro producto ACTIVO.
+  bloquearCodigosEnUso(separarCodigosCsv(valores.codigosBarras))
+
   return db.transaction((tx) => {
     // Marca libre por nombre: busca existente o crea una nueva
     valores.marcaId = resolverMarcaId(tx, data.marca as string | null | undefined)
@@ -477,7 +540,12 @@ export function updateProducto(id: number, data: Record<string, unknown>): Produ
   if (data.codigoInterno !== undefined) {
     set.codigoInterno = (data.codigoInterno as string | null)?.trim() || null
   }
-  if (data.codigosBarras !== undefined) set.codigosBarras = (data.codigosBarras as string | null)?.trim() || null
+  if (data.codigosBarras !== undefined) {
+    const nuevos = (data.codigosBarras as string | null | undefined)?.trim() || null
+    // Guardia de unicidad: rechaza códigos de otro producto ACTIVO (surge al editar duplicados).
+    bloquearCodigosEnUso(separarCodigosCsv(nuevos), id)
+    set.codigosBarras = nuevos
+  }
   if (data.variante !== undefined) set.variante = (data.variante as string | null)?.trim() || null
   if (data.categoriaId !== undefined) set.categoriaId = data.categoriaId
   if (data.marca !== undefined) {

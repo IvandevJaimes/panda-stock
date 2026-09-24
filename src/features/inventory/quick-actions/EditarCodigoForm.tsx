@@ -9,6 +9,7 @@ import type { Producto } from "../../../../electron/db/types";
 import { HeaderMini } from "./HeaderMini";
 import { ACCION_LABEL, FORM_ID } from "./types";
 import { useBarcodeScanner } from "../../../hooks/useBarcodeScanner";
+import { useCodigosBarrasUnicos } from "../../../hooks/useCodigosBarrasUnicos";
 
 interface EditarCodigoValues {
   codigoInterno: string;
@@ -35,6 +36,8 @@ export function EditarCodigoForm({
     handleSubmit,
     setValue,
     getValues,
+    setError,
+    clearErrors,
     control,
     formState: { errors, isSubmitting },
   } = useForm<EditarCodigoValues>({
@@ -43,6 +46,15 @@ export function EditarCodigoForm({
       codigosBarras: producto.codigosBarras ?? "",
     },
   });
+
+  // Verificación en caliente: el producto en edición queda exento de su propio
+  // código; cualquier otro código ya asociado a otro producto activo marca error.
+  useCodigosBarrasUnicos(
+    control,
+    (mensaje) => setError("codigosBarras", { type: "manual", message: mensaje }),
+    () => clearErrors("codigosBarras"),
+    { excluirProductoId: producto?.id ?? null },
+  );
 
   // Scanner: al escanear un código, se escribe en "Códigos de barra" sin depender
   // del campo que tenga foco. Agrega el código separado por coma si no existe.
@@ -91,6 +103,9 @@ export function EditarCodigoForm({
       onSuccess();
     } catch (error: unknown) {
       const mensaje = error instanceof Error ? error.message : String(error);
+      if (mensaje.toLowerCase().includes("de barras")) {
+        setError("codigosBarras", { type: "manual", message: mensaje });
+      }
       toast.error(mensaje || "Error al actualizar código");
     } finally {
       onSubmittingChange(false);

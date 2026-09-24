@@ -29,6 +29,7 @@ import type {
 } from "../../../electron/db/types";
 import { Tooltip } from "../../components/ui/Tooltip";
 import { useBarcodeScanner } from "../../hooks/useBarcodeScanner";
+import { useCodigosBarrasUnicos } from "../../hooks/useCodigosBarrasUnicos";
 
 export interface CreateProductModalProps {
   isOpen: boolean;
@@ -87,6 +88,7 @@ export function CreateProductModal({
     setValue,
     getValues,
     setError,
+    clearErrors,
     control,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
@@ -94,6 +96,14 @@ export function CreateProductModal({
   });
 
   const [creandoCategoria, setCreandoCategoria] = React.useState(false);
+
+  // Verificación en caliente: marca un error apenas el código de barra ya está
+  // asociado a otro producto activo (se limpia al corregir el campo).
+  useCodigosBarrasUnicos(
+    control,
+    (mensaje) => setError("codigosBarras", { type: "manual", message: mensaje }),
+    () => clearErrors("codigosBarras"),
+  );
 
   // Scanner: al escanear un código, se escribe en "Códigos de barra" sin importar
   // qué campo tenga el foco. Si ya hay códigos, se agrega separado por coma.
@@ -238,7 +248,13 @@ export function CreateProductModal({
     const mensaje =
       error instanceof Error ? error.message : "Error al crear el producto";
 
-    if (
+    if (mensaje.toLowerCase().includes("de barras")) {
+      setError("codigosBarras", {
+        type: "manual",
+        message: mensaje,
+      });
+      toast.error(mensaje);
+    } else if (
       mensaje.toLowerCase().includes("unique") &&
       mensaje.toLowerCase().includes("codigo_interno")
     ) {
