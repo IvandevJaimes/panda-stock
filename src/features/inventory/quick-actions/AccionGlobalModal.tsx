@@ -261,17 +261,25 @@ export function AccionGlobalModal({
               {SUBMIT_LABEL[accion]}
             </Button>
           </div>
-        ) : seleccionando && totalPaginas > 1 ? (
+        ) : seleccionando ? (
+          // El paginador es FIJO en el footer: siempre visible mientras se
+          // selecciona. Si no hay suficientes cards para paginar queda
+          // bloqueado (inerte) en vez de desaparecer, para que el cajero no
+          // tenga que decidir si falta algo o simplemente no aplica.
           <div className="flex w-full items-center justify-between gap-3  pt-3 ">
             <span className="text-xs font-medium text-slate-400 dark:text-slate-500">
-              {(paginaSegura - 1) * PAGE_SIZE + 1}–
-              {Math.min(paginaSegura * PAGE_SIZE, productosFiltrados.length)}{" "}
-              de {productosFiltrados.length} productos
+              {productosFiltrados.length === 0
+                ? "Sin productos para mostrar"
+                : `${(paginaSegura - 1) * PAGE_SIZE + 1}–${Math.min(
+                    paginaSegura * PAGE_SIZE,
+                    productosFiltrados.length,
+                  )} de ${productosFiltrados.length} productos`}
             </span>
             <Pagination
               currentPage={paginaSegura}
               totalPages={totalPaginas}
               onPageChange={setPaginaActual}
+              alwaysVisible
             />
           </div>
         ) : undefined
