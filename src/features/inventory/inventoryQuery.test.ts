@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  coincideBusqueda,
   filtrarProductos,
   mapearProducto,
+  normalizar,
   ordenarProductos,
   type OrdenInventario,
   type ProductoInventario,
@@ -176,6 +178,37 @@ describe("filtrarProductos", () => {
       kpi: "expiring_soon",
     });
     expect(porVencer.map((p) => p.id)).toEqual([]);
+  });
+
+  it("coincideBusqueda marca solo las filas que deben repintarse al tipear", () => {
+    const termino = normalizar("TORTA");
+    const hits = catalogo
+      .filter((p) => coincideBusqueda(p, termino))
+      .map((p) => p.id);
+    expect(hits).toEqual([]);
+
+    const termino2 = normalizar("cafe");
+    const hits2 = catalogo
+      .filter((p) => coincideBusqueda(p, termino2))
+      .map((p) => p.id);
+    expect(hits2).toEqual([1]);
+  });
+
+  it("coincideBusqueda es la misma fuente de verdad que filtrarProductos", () => {
+    for (const termino of ["CAFÉ", "bagley", "2l", "779003", "zzzz"]) {
+      const norm = normalizar(termino);
+      const idsPorFiltro = new Set(
+        filtrarProductos(catalogo, {
+          termino,
+          categoriaId: "all",
+          kpi: "all",
+        }).map((p) => p.id),
+      );
+      const idsPorPredicado = new Set(
+        catalogo.filter((p) => coincideBusqueda(p, norm)).map((p) => p.id),
+      );
+      expect(idsPorPredicado).toEqual(idsPorFiltro);
+    }
   });
 
   it("no incluye la categoría si hay término que no matchea", () => {

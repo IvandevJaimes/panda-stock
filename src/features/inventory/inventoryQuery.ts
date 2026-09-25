@@ -172,6 +172,25 @@ export type FiltrosInventario = {
 };
 
 /**
+ * ¿El producto coincide con el término de búsqueda? El término debe llegar YA
+ * normalizado y en minúsculas para comparar contra los campos pre-normalizados.
+ * Fuente única de verdad: la usa filtrarProductos y la grilla al decidir qué
+ * filas deben re-renderizar para el resaltado en vivo.
+ */
+export function coincideBusqueda(
+  p: ProductoInventario,
+  terminoNormalizado: string,
+): boolean {
+  return (
+    p._nameN.includes(terminoNormalizado) ||
+    p._brandN.includes(terminoNormalizado) ||
+    p._variantN.includes(terminoNormalizado) ||
+    p._codigoInternoN.includes(terminoNormalizado) ||
+    p._codigosBarrasN.includes(terminoNormalizado)
+  );
+}
+
+/**
  * Filtro de búsqueda SIN normalizar por producto: el término se normaliza una
  * sola vez y se compara contra los campos pre-normalizados del mapeo. La
  * categoría se compara por id (sin `.find()` en el listado de categorías).
@@ -184,15 +203,7 @@ export function filtrarProductos(
   const catSel = filtros.categoriaId;
 
   return productos.filter((p) => {
-    if (termino) {
-      const coincide =
-        p._nameN.includes(termino) ||
-        p._brandN.includes(termino) ||
-        p._variantN.includes(termino) ||
-        p._codigoInternoN.includes(termino) ||
-        p._codigosBarrasN.includes(termino);
-      if (!coincide) return false;
-    }
+    if (termino && !coincideBusqueda(p, termino)) return false;
 
     if (catSel !== "all" && String(p.categoriaId) !== catSel) return false;
 

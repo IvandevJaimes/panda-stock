@@ -37,8 +37,10 @@ import { InactivosModal } from "./InactivosModal";
 import { ScanBadge } from "./ScanBadge";
 import { esLoteVencido } from "./loteHelpers";
 import {
+  coincideBusqueda,
   filtrarProductos,
   mapearProducto,
+  normalizar,
   ordenarProductos,
   type ProductoInventario,
 } from "./inventoryQuery";
@@ -522,6 +524,21 @@ export function InventoryPage() {
     (paginaSegura - 1) * PAGE_SIZE,
     paginaSegura * PAGE_SIZE,
   );
+
+  // Ids de las filas de LA PÁGINA que coinciden con el término diferido. Con
+  // esto la grilla pasa highlightQuery="" (constante) a las filas que NO
+  // coinciden: el memo de InventarioRow las bloquea y NO se re-renderizan
+  // mientras se tipea. Solo las coincidentes (cada vez menos) se repintan
+  // para actualizar el resaltado en vivo — O(n·k) sobre 50 filas como máximo.
+  const idsCoincidentes = useMemo(() => {
+    const terminoN = normalizar(busquedaDeferida.trim());
+    if (!terminoN) return null;
+    const ids = new Set<number>();
+    for (const fila of filasPagina) {
+      if (coincideBusqueda(fila, terminoN)) ids.add(fila.id);
+    }
+    return ids;
+  }, [filasPagina, busquedaDeferida]);
 
   const totalItems = filasFiltradas.length;
 
@@ -1060,7 +1077,9 @@ export function InventoryPage() {
               key={producto.id}
               raiz={crudosPorId.get(producto.id)}
               vista={producto}
-              highlightQuery={busquedaDeferida}
+              highlightQuery={
+                idsCoincidentes?.has(producto.id) ? busquedaDeferida : ""
+              }
               index={index}
               enfocada={cardFocoValida === index}
               toggling={togglingActivoId === producto.id}
