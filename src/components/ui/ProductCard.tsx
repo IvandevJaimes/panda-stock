@@ -64,6 +64,9 @@ export interface ProductCardProps {
   onEditPrice?: (producto: Producto) => void;
   onConfirmarPerdida?: (producto: Producto) => void;
   onAgregarInventario?: (producto: Producto) => void;
+  /** Click derecho sobre la card: el consumidor decide dónde abrir el menú
+   *  (recibe el evento con las coordenadas del cursor). */
+  onContextMenu?: (event: React.MouseEvent, producto: Producto) => void;
   className?: string;
   style?: React.CSSProperties;
 }
@@ -105,6 +108,7 @@ export function ProductCard({
   onEditPrice,
   onConfirmarPerdida,
   onAgregarInventario,
+  onContextMenu,
   className,
   style,
 }: ProductCardProps) {
@@ -179,6 +183,14 @@ export function ProductCard({
     <div
       style={style}
       onClick={() => producto && onOpenDetail?.(producto)}
+      onContextMenu={(event) => {
+        if (!producto || !onContextMenu) return;
+        // Cancela el menú nativo de Chromium/Electron: elContextMenu propio
+        // lo dibuja el consumidor en la posición del cursor.
+        event.preventDefault();
+        event.stopPropagation();
+        onContextMenu(event, producto);
+      }}
       aria-label={name}
       className={cn(
         "w-full h-14 sm:h-16 rounded-2xl cursor-pointer border transition-colors duration-150 select-none shadow-xs overflow-hidden animate-entry-up",

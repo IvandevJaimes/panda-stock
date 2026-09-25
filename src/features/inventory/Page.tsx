@@ -17,8 +17,11 @@ import {
   PackageX,
   Plus,
   Minus,
+  Power,
+  PowerOff,
   Search,
   SlidersHorizontal,
+  Trash2,
   X,
   XCircle,
 } from "lucide-react";
@@ -62,6 +65,7 @@ import {
   ProductCard,
   type ProductStatus,
 } from "../../components/ui/ProductCard";
+import { ContextMenu, ContextMenuItem } from "../../components/ui/ContextMenu";
 import { Tooltip } from "../../components/ui/Tooltip";
 import { productosService } from "../../services/productos.service";
 import { marcasService } from "../../services/marcas.service";
@@ -141,6 +145,7 @@ type InventarioRowProps = {
   onEditPrice: (producto: Producto) => void;
   onConfirmarPerdida: (producto: Producto) => void;
   onAgregarInventario: (producto: Producto) => void;
+  onContextMenu: (event: React.MouseEvent, producto: Producto) => void;
 };
 
 /** Fila memoizada de la grilla: re-renderiza solo si cambian SUS props.
@@ -162,6 +167,7 @@ const InventarioRow = memo(function InventarioRow({
   onEditPrice,
   onConfirmarPerdida,
   onAgregarInventario,
+  onContextMenu,
 }: InventarioRowProps) {
   return (
     <div
@@ -202,6 +208,7 @@ const InventarioRow = memo(function InventarioRow({
         onAgregarInventario={
           vista.stock <= 0 ? onAgregarInventario : undefined
         }
+        onContextMenu={onContextMenu}
       />
     </div>
   );
@@ -244,6 +251,13 @@ export function InventoryPage() {
     null,
   );
   const [deletingProduct, setDeletingProduct] = useState<Producto | null>(null);
+  /** Menú contextual (click derecho) sobre una card: producto + coordenadas
+   *  del cursor en el viewport. Un único panel para toda la grilla. */
+  const [menuContextual, setMenuContextual] = useState<{
+    producto: Producto;
+    x: number;
+    y: number;
+  } | null>(null);
   const { categories, addCategory, updateCategory, removeCategory } =
     useCategories();
 
@@ -424,6 +438,21 @@ export function InventoryPage() {
     setSelectedProductForDetail(producto);
   }, []);
 
+  const abrirMenuContextual = useCallback(
+    (event: React.MouseEvent, producto: Producto) => {
+      setMenuContextual({
+        producto,
+        x: event.clientX,
+        y: event.clientY,
+      });
+    },
+    [],
+  );
+
+  const cerrarMenuContextual = useCallback(() => {
+    setMenuContextual(null);
+  }, []);
+
   const handleToggleActivo = useCallback(
     async (producto: Producto, activo: boolean) => {
       setTogglingActivoId(producto.id);
@@ -556,6 +585,10 @@ export function InventoryPage() {
   // Ajuste de stock y merma requieren un lote activo (stock > 0): sin productos
   // con stock, esas acciones globales no tienen sentido y se bloquean.
   const hayStockDisponible = productos.some((p) => p.stock > 0);
+
+  // Producto del menú contextual, resuelto una vez para que los handlers de
+  // los items no dependan de un narrowing nullable dentro de los closures.
+  const productoMenuContextual = menuContextual?.producto ?? null;
 
   // ── Atajos de teclado (deshabilitados mientras hay un modal abierto) ──
   const hayModalAbierto =
@@ -1091,6 +1124,7 @@ export function InventoryPage() {
               onEditPrice={abrirEditarPrecio}
               onConfirmarPerdida={handleConfirmarPerdida}
               onAgregarInventario={abrirAgregarInventario}
+              onContextMenu={abrirMenuContextual}
             />
           ))}
 
@@ -1127,6 +1161,46 @@ export function InventoryPage() {
           }}
         />
       )}
+
+      {/* ── Menú contextual de card (click derecho), anclado al cursor ── */}
+      <ContextMenu
+        open={menuContextual !== null}
+        x={menuContextual?.x ?? 0}
+        y={menuContextual?.y ?? 0}
+        onClose={cerrarMenuContextual}
+      >
+        {productoMenuContextual &&
+          (productoMenuContextual.activo ? (
+            <ContextMenuItem
+              icon={<PowerOff className="h-3.5 w-3.5" />}
+              disabled={togglingActivoId === productoMenuContextual.id}
+              onClick={() => {
+                void handleToggleActivo(productoMenuContextual, false);
+              }}
+            >
+              Desactivar producto
+            </ContextMenuItem>
+          ) : (
+            <ContextMenuItem
+              icon={<Power className="h-3.5 w-3.5" />}
+              disabled={togglingActivoId === productoMenuContextual.id}
+              onClick={() => {
+                void handleToggleActivo(productoMenuContextual, true);
+              }}
+            >
+              Reactivar producto
+            </ContextMenuItem>
+          ))}
+        {productoMenuContextual && (
+          <ContextMenuItem
+            variant="danger"
+            icon={<Trash2 className="h-3.5 w-3.5" />}
+            onClick={() => eliminarProducto(productoMenuContextual)}
+          >
+            Eliminar producto
+          </ContextMenuItem>
+        )}
+      </ContextMenu>
 
       <CreateCategoryModal
         isOpen={isCreateCategoryOpen}
