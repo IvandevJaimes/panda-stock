@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   AlertTriangle,
   Archive,
@@ -16,7 +23,6 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "../../lib/cn";
-import { evaluateExpiry } from "../../lib/dateUtils";
 import { Button } from "../../components/ui/Button";
 import { ConfirmModal } from "../../components/ui/ConfirmModal";
 import { CreateCategoryModal } from "../../components/inventory/CreateCategoryModal";
@@ -29,6 +35,12 @@ import { MarcasModal } from "./MarcasModal";
 import { InactivosModal } from "./InactivosModal";
 import { ScanBadge } from "./ScanBadge";
 import { esLoteVencido } from "./loteHelpers";
+import {
+  filtrarProductos,
+  mapearProducto,
+  ordenarProductos,
+  type ProductoInventario,
+} from "./inventoryQuery";
 import { ProductQuickActionsModal } from "./quick-actions";
 import { AccionGlobalModal } from "./quick-actions/AccionGlobalModal";
 import type { AccionGlobal } from "./quick-actions/AccionGlobalModal";
@@ -89,115 +101,6 @@ const OPCIONES_ORDEN: { value: OrdenInventario; label: string }[] = [
   { value: "sin_minimo", label: "Sin mínimo" },
 ];
 
-/** Margen porcentual sobre el costo: null si no hay costo cargado (no computable). */
-function margenPorcentaje(p: ProductoConLoteActivo): number | null {
-  return p.costo > 0 ? ((p.precioVenta - p.costo) / p.costo) * 100 : null;
-}
-
-function ordenarProductos(
-  productos: ProductoConLoteActivo[],
-  orden: OrdenInventario,
-): ProductoConLoteActivo[] {
-  const comparadorNombre = (
-    a: ProductoConLoteActivo,
-    b: ProductoConLoteActivo,
-  ) => a.nombre.localeCompare(b.nombre, "es");
-  switch (orden) {
-    case "creado_desc":
-      return [...productos].sort((a, b) =>
-        b.creadoEn.localeCompare(a.creadoEn),
-      );
-    case "creado_asc":
-      return [...productos].sort((a, b) =>
-        a.creadoEn.localeCompare(b.creadoEn),
-      );
-    case "nombre_asc":
-      return [...productos].sort(comparadorNombre);
-    case "nombre_desc":
-      return [...productos].sort((a, b) => comparadorNombre(b, a));
-    case "stock_asc":
-      return [...productos].sort(
-        (a, b) => a.stockActual - b.stockActual || comparadorNombre(a, b),
-      );
-    case "stock_desc":
-      return [...productos].sort(
-        (a, b) => b.stockActual - a.stockActual || comparadorNombre(a, b),
-      );
-    case "margen_asc":
-      return [...productos].sort((a, b) => {
-        const mA = margenPorcentaje(a);
-        const mB = margenPorcentaje(b);
-        if (mA === null && mB === null) return comparadorNombre(a, b);
-        if (mA === null) return 1;
-        if (mB === null) return -1;
-        return mA - mB || comparadorNombre(a, b);
-      });
-    case "sin_marca":
-    case "sin_minimo":
-      return [...productos];
-  }
-}
-
-type ProductoInventario = {
-  id: number;
-  name: string;
-  variant: string | null;
-  brand: string;
-  category: string;
-  price: number;
-  cost: number;
-  stock: number;
-  minStock: number;
-  expiresAt: string | null;
-  codigoInterno: string;
-  codigosBarras: string;
-  status: "vencido" | "por-vencer" | "ok";
-};
-
-function derivarEstadoVencimiento(
-  vencimiento: string | null,
-): "vencido" | "por-vencer" | "ok" {
-  if (!vencimiento) return "ok";
-  const result = evaluateExpiry(vencimiento);
-  if (!result) return "ok";
-  if (result.status === "expired") return "vencido";
-  if (result.status === "expiring_soon") return "por-vencer";
-  return "ok";
-}
-
-function mapearProducto(
-  producto: ProductoConLoteActivo,
-  categorias: Categoria[],
-  marcas: Marca[],
-): ProductoInventario {
-  const categoria = categorias.find((c) => c.id === producto.categoriaId);
-  const marca = marcas.find((m) => m.id === producto.marcaId);
-  // El vencimiento de la card sigue la regla FIFO: primer lote activo con stock.
-  const vencimientoFifo = producto.loteActivoVencimiento;
-  return {
-    id: producto.id,
-    name: producto.nombre,
-    variant: producto.variante,
-    brand: marca?.nombre ?? "",
-    category: categoria?.nombre ?? "",
-    price: producto.precioVenta,
-    cost: producto.costo,
-    stock: producto.stockActual,
-    minStock: producto.stockMinimo,
-    expiresAt: vencimientoFifo,
-    codigoInterno: producto.codigoInterno ?? "",
-    codigosBarras: producto.codigosBarras ?? "",
-    status: derivarEstadoVencimiento(vencimientoFifo),
-  };
-}
-
-function normalizar(texto: string): string {
-  return texto
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
-}
-
 function derivarStatus(p: ProductoInventario): ProductStatus {
   if (p.status === "vencido") return "expired";
   if (p.status === "por-vencer") return "expiring_soon";
@@ -213,6 +116,93 @@ const MOD_TEXTO = MOD_IS_META ? "Cmd" : "Ctrl";
 /** Formato W3C para aria-keyshortcuts (ej: "Control+KeyN"). */
 const modAtajo = (tecla: string, shift = false) =>
   `${MOD_IS_META ? "Meta" : "Control"}${shift ? "+Shift" : ""}+Key${tecla}`;
+
+type InventarioRowProps = {
+  /** Producto crudo (DB) para los handlers de acciones del menú. */
+  raiz: ProductoConLoteActivo | undefined;
+  /** Vista mapeada (id + nombre + estatus + campos pre-normalizados). */
+  vista: ProductoInventario;
+  /** Término resaltado en vivo mientras el cajero escribe. */
+  highlightQuery: string;
+  /** Índice dentro de la página para anclar el foco de teclado. */
+  index: number;
+  /** true si esta fila es la que navega el teclado (↑/↓). */
+  enfocada: boolean;
+  /** true mientras se persiste el toggle activo/inactivo de la API. */
+  toggling: boolean;
+  onToggleActivo: (producto: Producto, activo: boolean) => void;
+  onOpenQuickActions: (producto: Producto) => void;
+  onOpenLotes: (producto: Producto) => void;
+  onDeleteProduct: (producto: Producto) => void;
+  onOpenDetail: (producto: Producto) => void;
+  onEditPrice: (producto: Producto) => void;
+  onConfirmarPerdida: (producto: Producto) => void;
+  onAgregarInventario: (producto: Producto) => void;
+};
+
+/** Fila memoizada de la grilla: re-renderiza solo si cambian SUS props.
+ *  Los handlers son estables (useCallback en la página), así un setEstado de
+ *  la página (toggle, abrir modal, cambio de orden…) no vuelve a pintar las
+ *  50 cards de la página actual. */
+const InventarioRow = memo(function InventarioRow({
+  raiz,
+  vista,
+  highlightQuery,
+  index,
+  enfocada,
+  toggling,
+  onToggleActivo,
+  onOpenQuickActions,
+  onOpenLotes,
+  onDeleteProduct,
+  onOpenDetail,
+  onEditPrice,
+  onConfirmarPerdida,
+  onAgregarInventario,
+}: InventarioRowProps) {
+  return (
+    <div
+      data-card-idx={index}
+      className="w-full scroll-mt-36"
+    >
+      <ProductCard
+        className={cn(enfocada && "ring-2 ring-emerald-500/70")}
+        style={{
+          animationDelay: index < 8 ? `${index * 20}ms` : "0ms",
+        }}
+        producto={raiz}
+        category={vista.category}
+        name={vista.name}
+        variant={vista.variant}
+        brand={vista.brand || undefined}
+        stock={vista.stock}
+        minStock={vista.minStock}
+        price={vista.price}
+        expiresAt={vista.expiresAt ?? undefined}
+        status={derivarStatus(vista)}
+        codigoInterno={vista.codigoInterno}
+        codigosBarras={vista.codigosBarras}
+        highlightQuery={highlightQuery}
+        inactivo={false}
+        onToggleActivo={onToggleActivo}
+        togglingActivo={toggling}
+        onOpenQuickActions={onOpenQuickActions}
+        onOpenLotes={onOpenLotes}
+        onDeleteProduct={onDeleteProduct}
+        onOpenDetail={onOpenDetail}
+        onEditPrice={onEditPrice}
+        onConfirmarPerdida={
+          vista.status === "vencido" && vista.stock > 0
+            ? onConfirmarPerdida
+            : undefined
+        }
+        onAgregarInventario={
+          vista.stock <= 0 ? onAgregarInventario : undefined
+        }
+      />
+    </div>
+  );
+});
 
 export function InventoryPage() {
   const [busqueda, setBusqueda] = useState("");
@@ -324,36 +314,40 @@ export function InventoryPage() {
     }
   }, [obtenerProductos, obtenerMarcas]);
 
-  const productosActivos = useMemo(() => {
-    const activos = productosCrudos.filter((p) => p.activo);
-    const filtrados = activos.filter(
-      (p) =>
-        (orden !== "sin_marca" || p.marcaId === null) &&
-        (orden !== "sin_minimo" || p.stockMinimo === 0),
-    );
-    return ordenarProductos(filtrados, orden).map((p) =>
-      mapearProducto(p, categories, marcas),
-    );
-  }, [productosCrudos, orden, categories, marcas]);
+  const categoriasPorId = useMemo(
+    () => new Map(categories.map((c) => [c.id, c])),
+    [categories],
+  );
+  const marcasPorId = useMemo(
+    () => new Map(marcas.map((m) => [m.id, m])),
+    [marcas],
+  );
+  const crudosPorId = useMemo(
+    () => new Map(productosCrudos.map((p) => [p.id, p])),
+    [productosCrudos],
+  );
+
+  // Un único pasaje de mapeo (nombre→id de marca/categoría con Map O(1) y
+  // campos normalizados precomputados). Antes se mapeaban 3 veces al mismo
+  // subconjunto en los memos productos/productosActivos/productosBase.
+  const activosMapeados = useMemo(() => {
+    return productosCrudos
+      .filter((p) => p.activo)
+      .map((p) => mapearProducto(p, categoriasPorId, marcasPorId));
+  }, [productosCrudos, categoriasPorId, marcasPorId]);
 
   const productosBase = useMemo(() => {
-    return ordenarProductos(
-      productosCrudos.filter((p) => p.activo),
-      "creado_desc",
-    ).map((p) => mapearProducto(p, categories, marcas));
-  }, [productosCrudos, categories, marcas]);
+    return ordenarProductos(activosMapeados, "creado_desc");
+  }, [activosMapeados]);
 
   const productos = useMemo(() => {
-    const visibles = productosCrudos.filter((p) => p.activo);
-    const filtrados = visibles.filter(
+    const filtrados = activosMapeados.filter(
       (p) =>
         (orden !== "sin_marca" || p.marcaId === null) &&
-        (orden !== "sin_minimo" || p.stockMinimo === 0),
+        (orden !== "sin_minimo" || p.minStock === 0),
     );
-    return ordenarProductos(filtrados, orden).map((p) =>
-      mapearProducto(p, categories, marcas),
-    );
-  }, [productosCrudos, orden, categories, marcas]);
+    return ordenarProductos(filtrados, orden);
+  }, [activosMapeados, orden]);
 
   const handleKpiClick = (filter: KpiFilter) => {
     setActiveKpiFilter((prev) => {
@@ -384,17 +378,44 @@ export function InventoryPage() {
     setCardFoco(null);
   };
 
-  const handleOpenLotes = (producto: Producto) => {
+  const handleOpenLotes = useCallback((producto: Producto) => {
     setSelectedProductForDetail(null);
     setAbrirInventarioAuto(false);
     setLotesProducto(producto);
-  };
+  }, []);
 
-  const abrirAccionesRapidas = (producto: Producto, vista: QuickActionView) => {
-    setVistaAccionInicial(vista);
-    setAperturaAcciones((n) => n + 1);
-    setProductForQuickActions(producto);
-  };
+  const abrirAccionesRapidas = useCallback(
+    (producto: Producto, vista: QuickActionView) => {
+      setVistaAccionInicial(vista);
+      setAperturaAcciones((n) => n + 1);
+      setProductForQuickActions(producto);
+    },
+    [],
+  );
+
+  const abrirQuickActionsMenu = useCallback(
+    (producto: Producto) => abrirAccionesRapidas(producto, "menu"),
+    [abrirAccionesRapidas],
+  );
+
+  const abrirEditarPrecio = useCallback(
+    (producto: Producto) => abrirAccionesRapidas(producto, "precio-venta"),
+    [abrirAccionesRapidas],
+  );
+
+  const abrirAgregarInventario = useCallback(
+    (producto: Producto) =>
+      abrirAccionesRapidas(producto, "agregar-inventario"),
+    [abrirAccionesRapidas],
+  );
+
+  const eliminarProducto = useCallback((producto: Producto) => {
+    setDeletingProduct(producto);
+  }, []);
+
+  const abrirDetalle = useCallback((producto: Producto) => {
+    setSelectedProductForDetail(producto);
+  }, []);
 
   const handleToggleActivo = useCallback(
     async (producto: Producto, activo: boolean) => {
@@ -418,7 +439,7 @@ export function InventoryPage() {
     [refreshProductos],
   );
 
-  const handleConfirmarPerdida = async (producto: Producto) => {
+  const handleConfirmarPerdida = useCallback(async (producto: Producto) => {
     try {
       const lotes = await lotesService.getByProducto(producto.id);
       const loteActivo =
@@ -433,7 +454,7 @@ export function InventoryPage() {
     } catch {
       toast.error("No se pudieron cargar los lotes del producto");
     }
-  };
+  }, []);
 
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -455,51 +476,26 @@ export function InventoryPage() {
     // mientras su código coincida con algún producto. Si el código se borra o
     // se renombra, el badge desaparece y la grilla vuelve sola al filtro
     // textual (filtros "limpios" sin efecto ni escritura de refs).
-    const coincideTexto = (p: ProductoInventario, termino: string) => {
-      const texto = normalizar(termino.trim());
-      return (
-        !texto ||
-        normalizar(p.name).includes(texto) ||
-        normalizar(p.brand).includes(texto) ||
-        normalizar(p.variant ?? "").includes(texto) ||
-        normalizar(p.codigoInterno).includes(texto) ||
-        normalizar(p.codigosBarras).includes(texto)
-      );
+    const filtros = {
+      categoriaId: selectedCategory,
+      kpi: activeKpiFilter,
     };
-
-    const coincideCategoria = (p: ProductoInventario) => {
-      if (selectedCategory === "all") return true;
-      const catSel = categories.find((c) => String(c.id) === selectedCategory);
-      return catSel ? p.category === catSel.nombre : false;
-    };
-
-    const coincideKpi = (p: ProductoInventario) => {
-      switch (activeKpiFilter) {
-        case "low_stock":
-          return p.stock < p.minStock && p.stock > 0;
-        case "expiring_soon":
-          return p.status === "por-vencer";
-        case "out_of_stock":
-          return p.stock === 0;
-        case "expired":
-          return p.status === "vencido";
-        default:
-          return true;
-      }
-    };
-
-    const pasaFiltros = (p: ProductoInventario, termino: string) =>
-      coincideTexto(p, termino) && coincideCategoria(p) && coincideKpi(p);
 
     const filasConEscaneo = barcodeEscaneado
-      ? productos.filter((p) => pasaFiltros(p, barcodeEscaneado))
+      ? filtrarProductos(productos, {
+          termino: barcodeEscaneado,
+          ...filtros,
+        })
       : null;
     const coincideEscaneo =
       filasConEscaneo !== null && filasConEscaneo.length > 0;
 
     let filasFiltradas: ProductoInventario[];
     if (barcodeEscaneado === null) {
-      filasFiltradas = productos.filter((p) => pasaFiltros(p, busqueda));
+      filasFiltradas = filtrarProductos(productos, {
+        termino: busqueda,
+        ...filtros,
+      });
     } else if (coincideEscaneo) {
       filasFiltradas = filasConEscaneo!;
     } else {
@@ -510,7 +506,7 @@ export function InventoryPage() {
       filasFiltradas,
       escaneoVigente: coincideEscaneo,
     };
-  }, [barcodeEscaneado, busqueda, selectedCategory, activeKpiFilter, categories, productos, productosBase]);
+  }, [barcodeEscaneado, busqueda, selectedCategory, activeKpiFilter, productos, productosBase]);
 
   const totalPaginas = Math.max(
     1,
@@ -526,20 +522,18 @@ export function InventoryPage() {
 
   const kpis = useMemo(
     () => ({
-      stockBajo: productosActivos.filter(
-        (p) => p.stock < p.minStock && p.stock > 0,
-      ).length,
-      porVencer: productosActivos.filter((p) => p.status === "por-vencer")
+      stockBajo: productos.filter((p) => p.stock < p.minStock && p.stock > 0)
         .length,
-      agotados: productosActivos.filter((p) => p.stock === 0).length,
-      vencidos: productosActivos.filter((p) => p.status === "vencido").length,
+      porVencer: productos.filter((p) => p.status === "por-vencer").length,
+      agotados: productos.filter((p) => p.stock === 0).length,
+      vencidos: productos.filter((p) => p.status === "vencido").length,
     }),
-    [productosActivos],
+    [productos],
   );
 
   // Ajuste de stock y merma requieren un lote activo (stock > 0): sin productos
   // con stock, esas acciones globales no tienen sentido y se bloquean.
-  const hayStockDisponible = productosActivos.some((p) => p.stock > 0);
+  const hayStockDisponible = productos.some((p) => p.stock > 0);
 
   // ── Atajos de teclado (deshabilitados mientras hay un modal abierto) ──
   const hayModalAbierto =
@@ -627,7 +621,7 @@ export function InventoryPage() {
   const abrirCardFoco = () => {
     if (cardFocoValida === null) return;
     const fila = filasPagina[cardFocoValida];
-    const raw = productosCrudos.find((p) => p.id === fila.id);
+    const raw = crudosPorId.get(fila.id);
     if (raw) abrirAccionesRapidas(raw, "menu");
   };
 
@@ -1056,82 +1050,25 @@ export function InventoryPage() {
           ref={grillaRef}
           className="mt-2 px-0.5 flex w-full min-w-0 flex-col gap-2.5"
         >
-          {filasPagina.map((producto, index) => {
-            const raw = productosCrudos.find((p) => p.id === producto.id);
-            return (
-              <div
-                key={producto.id}
-                data-card-idx={index}
-                className="w-full scroll-mt-36"
-              >
-                <ProductCard
-                  className={cn(
-                    cardFocoValida === index && "ring-2 ring-emerald-500/70",
-                  )}
-                  style={{
-                    animationDelay: index < 8 ? `${index * 20}ms` : "0ms",
-                  }}
-                  producto={raw}
-                  category={producto.category}
-                  name={producto.name}
-                  variant={producto.variant}
-                  brand={producto.brand || undefined}
-                  stock={producto.stock}
-                  minStock={producto.minStock}
-                  price={producto.price}
-                  expiresAt={producto.expiresAt ?? undefined}
-                  status={derivarStatus(producto)}
-                  codigoInterno={producto.codigoInterno}
-                  codigosBarras={producto.codigosBarras}
-                  highlightQuery={busqueda}
-                  inactivo={false}
-                  onToggleActivo={raw ? handleToggleActivo : undefined}
-                  togglingActivo={togglingActivoId === producto.id}
-                  onOpenQuickActions={
-                    raw ? (p) => abrirAccionesRapidas(p, "menu") : undefined
-                  }
-                  onOpenLotes={
-                    raw
-                      ? (p) => {
-                          setSelectedProductForDetail(null);
-                          setAbrirInventarioAuto(false);
-                          setLotesProducto(p);
-                        }
-                      : undefined
-                  }
-                  onDeleteProduct={
-                    raw ? (p) => setDeletingProduct(p) : undefined
-                  }
-                  onOpenDetail={() => {
-                    const detalle = productosCrudos.find(
-                      (p) => p.id === producto.id,
-                    );
-                    if (detalle) setSelectedProductForDetail(detalle);
-                  }}
-                  onEditPrice={
-                    raw
-                      ? (p) => abrirAccionesRapidas(p, "precio-venta")
-                      : undefined
-                  }
-                  onConfirmarPerdida={
-                    producto.status === "vencido" && producto.stock > 0
-                      ? () => {
-                          const lote = productosCrudos.find(
-                            (p) => p.id === producto.id,
-                          );
-                          if (lote) void handleConfirmarPerdida(lote);
-                        }
-                      : undefined
-                  }
-                  onAgregarInventario={
-                    raw && producto.stock <= 0
-                      ? () => abrirAccionesRapidas(raw, "agregar-inventario")
-                      : undefined
-                  }
-                />
-              </div>
-            );
-          })}
+          {filasPagina.map((producto, index) => (
+            <InventarioRow
+              key={producto.id}
+              raiz={crudosPorId.get(producto.id)}
+              vista={producto}
+              highlightQuery={busqueda}
+              index={index}
+              enfocada={cardFocoValida === index}
+              toggling={togglingActivoId === producto.id}
+              onToggleActivo={handleToggleActivo}
+              onOpenQuickActions={abrirQuickActionsMenu}
+              onOpenLotes={handleOpenLotes}
+              onDeleteProduct={eliminarProducto}
+              onOpenDetail={abrirDetalle}
+              onEditPrice={abrirEditarPrecio}
+              onConfirmarPerdida={handleConfirmarPerdida}
+              onAgregarInventario={abrirAgregarInventario}
+            />
+          ))}
 
           <div className="mt-2 flex flex-col items-center justify-between gap-2 sm:flex-row">
             <span className="text-xs font-medium text-slate-400 dark:text-slate-500">

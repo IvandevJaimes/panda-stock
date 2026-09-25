@@ -60,10 +60,10 @@ export interface ProductCardProps {
   onOpenQuickActions?: (producto: Producto) => void;
   onOpenLotes?: (producto: Producto) => void;
   onDeleteProduct?: (producto: Producto) => void;
-  onOpenDetail?: () => void;
+  onOpenDetail?: (producto: Producto) => void;
   onEditPrice?: (producto: Producto) => void;
-  onConfirmarPerdida?: () => void;
-  onAgregarInventario?: () => void;
+  onConfirmarPerdida?: (producto: Producto) => void;
+  onAgregarInventario?: (producto: Producto) => void;
   className?: string;
   style?: React.CSSProperties;
 }
@@ -178,7 +178,7 @@ export function ProductCard({
   return (
     <div
       style={style}
-      onClick={onOpenDetail}
+      onClick={() => producto && onOpenDetail?.(producto)}
       aria-label={name}
       className={cn(
         "w-full h-14 sm:h-16 rounded-2xl cursor-pointer border transition-colors duration-150 select-none shadow-xs overflow-hidden animate-entry-up",
@@ -444,7 +444,7 @@ export function ProductCard({
                     aria-label="Confirmar pérdida"
                     onClick={(e) => {
                       e.stopPropagation();
-                      onConfirmarPerdida();
+                      if (producto) onConfirmarPerdida?.(producto);
                     }}
                     className="h-8 shrink-0 gap-0 rounded-xl bg-red-600 px-1.5 py-0 text-white shadow-xs hover:bg-red-700 focus-visible:ring-red-500/30 dark:text-white dark:hover:bg-red-500 md:gap-2 md:px-3 md:text-xs md:dark:hover:bg-red-500"
                   >
@@ -471,7 +471,7 @@ export function ProductCard({
                     aria-label="Agregar inventario"
                     onClick={(e) => {
                       e.stopPropagation();
-                      onAgregarInventario();
+                      if (producto) onAgregarInventario?.(producto);
                     }}
                     className="h-8 shrink-0 gap-0 rounded-xl bg-emerald-600 px-1.5 py-0 text-white shadow-xs hover:bg-emerald-500 focus-visible:ring-emerald-500/30 dark:text-white dark:hover:bg-emerald-500 md:gap-2 md:px-3 md:text-xs md:dark:hover:bg-emerald-500"
                   >
