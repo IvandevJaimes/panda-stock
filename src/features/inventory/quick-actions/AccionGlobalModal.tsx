@@ -37,6 +37,28 @@ function normalizar(texto: string): string {
     .replace(/[\u0300-\u036f]/g, "");
 }
 
+/** ¿El producto (activo) coincide con el término normalizado? Fuente única
+ *  para el filtrado y para decidir si el escaneo sigue vigente. */
+function coincideConProducto(
+  p: ProductoConLoteActivo,
+  texto: string,
+  marcas: Marca[],
+  categorias: Categoria[],
+): boolean {
+  const marca = marcas.find((m) => m.id === p.marcaId)?.nombre ?? "";
+  const categoria =
+    categorias.find((c) => c.id === p.categoriaId)?.nombre ?? "";
+  const variant = p.variante ?? "";
+  return (
+    normalizar(p.nombre).includes(texto) ||
+    normalizar(marca).includes(texto) ||
+    normalizar(categoria).includes(texto) ||
+    normalizar(variant).includes(texto) ||
+    normalizar(p.codigoInterno ?? "").includes(texto) ||
+    normalizar(p.codigosBarras ?? "").includes(texto)
+  );
+}
+
 interface AccionGlobalModalProps {
   isOpen: boolean;
   accion: AccionGlobal | null;
@@ -112,25 +134,35 @@ export function AccionGlobalModal({
     isOpen && seleccionando && !cargandoLote,
   );
 
-  const productosFiltrados = useMemo(() => {
-    const termino = codigoEscaneado ?? busqueda;
-    const texto = normalizar(termino.trim());
+  // Escaneo DERIVADO (igual que la grilla de inventario): el filtro escaneado
+  // queda vigente SOLO mientras su código coincida con un producto activo. Si
+  // el producto se desactiva o se elimina, el badge desaparece solo y la lista
+  // vuelve a mostrar los productos activos.
+  const { productosFiltrados, escaneoVigente } = useMemo(() => {
     const activos = productos.filter((p) => p.activo);
-    if (!texto) return activos;
-    return activos.filter((p) => {
-      const marca = marcas.find((m) => m.id === p.marcaId)?.nombre ?? "";
-      const categoria =
-        categorias.find((c) => c.id === p.categoriaId)?.nombre ?? "";
-      const variant = p.variante ?? "";
-      return (
-        normalizar(p.nombre).includes(texto) ||
-        normalizar(marca).includes(texto) ||
-        normalizar(categoria).includes(texto) ||
-        normalizar(variant).includes(texto) ||
-        normalizar(p.codigoInterno ?? "").includes(texto) ||
-        normalizar(p.codigosBarras ?? "").includes(texto)
-      );
-    });
+
+    const filasConEscaneo = codigoEscaneado
+      ? activos.filter((p) =>
+          coincideConProducto(p, normalizar(codigoEscaneado.trim()), marcas, categorias),
+        )
+      : null;
+    const coincideEscaneo = filasConEscaneo !== null && filasConEscaneo.length > 0;
+
+    let filtradas: ProductoConLoteActivo[];
+    if (codigoEscaneado === null) {
+      filtradas = activos;
+    } else if (coincideEscaneo) {
+      filtradas = filasConEscaneo!;
+    } else {
+      const textoBusqueda = normalizar(busqueda.trim());
+      filtradas = textoBusqueda
+        ? activos.filter((p) =>
+            coincideConProducto(p, textoBusqueda, marcas, categorias),
+          )
+        : activos;
+    }
+
+    return { productosFiltrados: filtradas, escaneoVigente: coincideEscaneo };
   }, [productos, busqueda, codigoEscaneado, marcas, categorias]);
 
   const tituloModal = accion ? ACCION_LABEL[accion] : "Acción";
@@ -185,7 +217,9 @@ export function AccionGlobalModal({
     setSeleccionando(true);
   };
 
-  const hayFiltroActivo = busqueda.trim() !== "" || codigoEscaneado !== null;
+  const hayFiltroActivo =
+    busqueda.trim() !== "" ||
+    (codigoEscaneado !== null && escaneoVigente);
 
   const limpiarFiltros = () => {
     setBusqueda("");
@@ -266,7 +300,7 @@ export function AccionGlobalModal({
               </button>
             </Tooltip>
           </div>
-          {codigoEscaneado && (
+          {codigoEscaneado && escaneoVigente && (
             <div className="flex shrink-0 items-center justify-between gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 dark:border-emerald-400/20 dark:bg-emerald-400/10">
               <div className="flex items-center justify-center gap-2 min-w-0">
                 <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600 dark:bg-emerald-400/15 dark:text-emerald-300">
