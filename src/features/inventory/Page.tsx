@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   Archive,
-  ArrowLeft,
   Boxes,
   Clock,
   FilterX,
@@ -27,6 +26,7 @@ import { ProductDetailModal } from "./ProductDetailModal";
 import { LotesModal } from "./LotesModal";
 import { ConfirmarPerdidaModal } from "./ConfirmarPerdidaModal";
 import { MarcasModal } from "./MarcasModal";
+import { InactivosModal } from "./InactivosModal";
 import { ScanBadge } from "./ScanBadge";
 import { esLoteVencido } from "./loteHelpers";
 import { ProductQuickActionsModal } from "./quick-actions";
@@ -217,6 +217,7 @@ const modAtajo = (tecla: string, shift = false) =>
 export function InventoryPage() {
   const [busqueda, setBusqueda] = useState("");
   const [barcodeEscaneado, setBarcodeEscaneado] = useState<string | null>(null);
+  const [inactivosAbierta, setInactivosAbierta] = useState(false);
   const [activeKpiFilter, setActiveKpiFilter] = useState<KpiFilter>("all");
   const [paginaActual, setPaginaActual] = useState(1);
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
@@ -224,7 +225,6 @@ export function InventoryPage() {
   const [isCreateCategoryOpen, setIsCreateCategoryOpen] = useState(false);
   const [isCreateProductOpen, setIsCreateProductOpen] = useState(false);
   const [marcasAbiertas, setMarcasAbiertas] = useState(false);
-  const [verInactivos, setVerInactivos] = useState(false);
   const [selectedProductForDetail, setSelectedProductForDetail] =
     useState<Producto | null>(null);
   const [productForQuickActions, setProductForQuickActions] =
@@ -344,9 +344,7 @@ export function InventoryPage() {
   }, [productosCrudos, categories, marcas]);
 
   const productos = useMemo(() => {
-    const visibles = productosCrudos.filter((p) =>
-      verInactivos ? !p.activo : p.activo,
-    );
+    const visibles = productosCrudos.filter((p) => p.activo);
     const filtrados = visibles.filter(
       (p) =>
         (orden !== "sin_marca" || p.marcaId === null) &&
@@ -355,7 +353,7 @@ export function InventoryPage() {
     return ordenarProductos(filtrados, orden).map((p) =>
       mapearProducto(p, categories, marcas),
     );
-  }, [productosCrudos, orden, categories, marcas, verInactivos]);
+  }, [productosCrudos, orden, categories, marcas]);
 
   const handleKpiClick = (filter: KpiFilter) => {
     setActiveKpiFilter((prev) => {
@@ -370,7 +368,6 @@ export function InventoryPage() {
   };
 
   const hayFiltroActivo =
-    verInactivos ||
     barcodeEscaneado !== null ||
     busqueda.trim() !== "" ||
     activeKpiFilter !== "all" ||
@@ -378,7 +375,6 @@ export function InventoryPage() {
     orden !== "creado_desc";
 
   const limpiarFiltros = () => {
-    setVerInactivos(false);
     setBusqueda("");
     setBarcodeEscaneado(null);
     setActiveKpiFilter("all");
@@ -449,7 +445,6 @@ export function InventoryPage() {
     return counts;
   }, [productos]);
   const totalProducts = productos.length;
-  const totalActivos = productosCrudos.filter((p) => p.activo).length;
   const totalInactivos = productosCrudos.filter((p) => !p.activo).length;
 
   const { filasFiltradas, escaneoVigente } = useMemo(() => {
@@ -548,6 +543,7 @@ export function InventoryPage() {
 
   // ── Atajos de teclado (deshabilitados mientras hay un modal abierto) ──
   const hayModalAbierto =
+    inactivosAbierta ||
     isCreateProductOpen ||
     marcasAbiertas ||
     isCreateCategoryOpen ||
@@ -572,6 +568,7 @@ export function InventoryPage() {
       setBarcodeEscaneado(null);
       return;
     }
+
     if (!producto.activo) {
       toast.error(
         `El producto "${producto.nombre}" está desactivado: no aparece en la búsqueda`,
@@ -584,7 +581,6 @@ export function InventoryPage() {
     setActiveKpiFilter("all");
     setSelectedCategory("all");
     setOrden("creado_desc");
-    setVerInactivos(false);
     setPaginaActual(1);
     buscadorRef.current?.focus();
   };
@@ -665,13 +661,13 @@ export function InventoryPage() {
     },
     { enabled: !hayModalAbierto, ignoreInputs: false },
   );
-  // Ctrl+Shift+N → nueva categoría (solo en la vista de activos, donde vive el botón).
+  // Ctrl+Shift+N → nueva categoría.
   useHotkey(
     "mod+shift+n",
     () => {
       setIsCreateCategoryOpen(true);
     },
-    { enabled: !hayModalAbierto && !verInactivos, ignoreInputs: false },
+    { enabled: !hayModalAbierto, ignoreInputs: false },
   );
   // ↑ / ↓ → navegar entre cards; Enter → abrir quick actions de la card foco.
   useHotkey(
@@ -704,38 +700,13 @@ export function InventoryPage() {
       {/* ── Encabezado ── */}
       <div className="flex flex-row items-center justify-between gap-3">
         <div className="flex  items-center gap-2">
-          {verInactivos && (
-            <div className="flex items-center gap-2">
-              <Tooltip content="Volver a los productos activos" placement="top">
-                <button
-                  type="button"
-                  onClick={limpiarFiltros}
-                  aria-label="Volver al inventario activo"
-                  className="grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-xl border border-slate-200 text-slate-500 transition-colors hover:border-slate-300 hover:text-slate-700 dark:border-slate-700/80 dark:text-slate-400 dark:hover:border-slate-600 dark:hover:text-slate-200"
-                >
-                  <ArrowLeft className="h-4.5 w-4.5" />
-                </button>
-              </Tooltip>
-              <h1 className="font-display text-xl font-bold text-slate-900 dark:text-white sm:text-2xl">
-                {verInactivos ? "Desactivados" : "Inventario"}
-              </h1>
-            </div>
-          )}
-          {!verInactivos && (
-            <h1 className="font-display text-xl font-bold text-slate-900 dark:text-white sm:text-2xl">
-              Inventario
-            </h1>
-          )}
+          <h1 className="font-display text-xl font-bold text-slate-900 dark:text-white sm:text-2xl">
+            Inventario
+          </h1>
           <Tooltip
-            content={
-              verInactivos
-                ? `${productos.length} ${
-                    productos.length === 1 ? "desactivado" : "desactivados"
-                  }`
-                : `${productos.length} ${
-                    productos.length === 1 ? "producto" : "productos"
-                  }`
-            }
+            content={`${productos.length} ${
+              productos.length === 1 ? "producto" : "productos"
+            }`}
             placement="top"
           >
             <span className="inline-flex shrink-0 select-none items-center rounded-full border border-slate-200 bg-slate-100 px-2.5 py-0.5 font-display text-base font-bold text-emerald-600 dark:border-slate-700/80 dark:bg-slate-800 dark:text-emerald-400">
@@ -745,144 +716,110 @@ export function InventoryPage() {
         </div>
         <div className="flex items-center gap-2">
           <Tooltip
-            content={
-              verInactivos
-                ? "Volver a los productos activos"
-                : `Ver los productos desactivados (${totalInactivos})`
-            }
+            content={`Ver los productos desactivados (${totalInactivos})`}
             placement="top"
           >
             <button
               type="button"
-              onClick={() => {
-                setVerInactivos((prev) => !prev);
-                setActiveKpiFilter("all");
-                setSelectedCategory("all");
-                setOrden("creado_desc");
-                setBarcodeEscaneado(null);
-                setPaginaActual(1);
-                setCardFoco(null);
-              }}
-              aria-pressed={verInactivos}
-              aria-label={
-                verInactivos ? "Ver productos activos" : "Ver desactivados"
-              }
-              className={cn(
-                "flex shrink-0 select-none cursor-pointer items-center gap-1.5 rounded-2xl border px-2 py-2 text-sm font-medium transition-colors duration-150",
-                verInactivos
-                  ? "border-slate-300 bg-slate-200 text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
-                  : "border-slate-200 text-slate-400 hover:border-slate-300 hover:text-slate-600 dark:border-slate-700/80 dark:text-slate-500 dark:hover:border-slate-600 dark:hover:text-slate-300",
-              )}
+              onClick={() => setInactivosAbierta(true)}
+              aria-label="Ver desactivados"
+              className="flex shrink-0 select-none cursor-pointer items-center gap-1.5 rounded-2xl border border-slate-200 px-2 py-2 text-sm font-medium text-slate-400 transition-colors duration-150 hover:border-slate-300 hover:text-slate-600 dark:border-slate-700/80 dark:text-slate-500 dark:hover:border-slate-600 dark:hover:text-slate-300"
             >
               <Archive className="h-5 w-5" />
-              <span
-                className={cn(
-                  "select-none rounded-full px-1.5 py-0.5 text-xs font-semibold leading-none",
-                  verInactivos
-                    ? "bg-slate-700 text-slate-100 dark:bg-slate-600 dark:text-white"
-                    : "bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-400",
-                )}
-              >
-                {verInactivos ? totalActivos : totalInactivos}
+              <span className="select-none rounded-full bg-slate-200 px-1.5 py-0.5 text-xs font-semibold leading-none text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+                {totalInactivos}
               </span>
             </button>
           </Tooltip>
-          {!verInactivos && (
-            <Tooltip
-              content={`Abrir marcas · ${MOD_TEXTO}+M`}
-              placement="bottom"
+          <Tooltip
+            content={`Abrir marcas · ${MOD_TEXTO}+M`}
+            placement="bottom"
+          >
+            <Button
+              variant="outline"
+              onClick={() => setMarcasAbiertas(true)}
+              aria-keyshortcuts={modAtajo("M")}
+              className="whitespace-nowrap rounded-2xl px-2 py-2 text-xs sm:text-sm "
             >
-              <Button
-                variant="outline"
-                onClick={() => setMarcasAbiertas(true)}
-                aria-keyshortcuts={modAtajo("M")}
-                className="whitespace-nowrap rounded-2xl px-2 py-2 text-xs sm:text-sm "
-              >
-                Marcas
-                <span className=" select-none rounded-full  border border-slate-200 bg-slate-100 px-2  py-0.5 text-[10px] sm:text-xs font-semibold text-slate-600 dark:border-slate-700/80 dark:bg-slate-800 dark:text-slate-300">
-                  {marcas.filter((m) => m.activo).length}
-                </span>
-              </Button>
-            </Tooltip>
-          )}
-          {!verInactivos && (
-            <Tooltip
-              content={`Nuevo producto · ${MOD_TEXTO}+N`}
-              placement="bottom"
+              Marcas
+              <span className=" select-none rounded-full  border border-slate-200 bg-slate-100 px-2  py-0.5 text-[10px] sm:text-xs font-semibold text-slate-600 dark:border-slate-700/80 dark:bg-slate-800 dark:text-slate-300">
+                {marcas.filter((m) => m.activo).length}
+              </span>
+            </Button>
+          </Tooltip>
+          <Tooltip
+            content={`Nuevo producto · ${MOD_TEXTO}+N`}
+            placement="bottom"
+          >
+            <Button
+              variant="primary"
+              onClick={() => setIsCreateProductOpen(true)}
+              aria-keyshortcuts={modAtajo("N")}
+              className="h-10 shrink-0 gap-2 rounded-2xl px-4 text-sm font-bold shadow-xs sm:h-12 sm:px-6 sm:text-base"
             >
-              <Button
-                variant="primary"
-                onClick={() => setIsCreateProductOpen(true)}
-                aria-keyshortcuts={modAtajo("N")}
-                className="h-10 shrink-0 gap-2 rounded-2xl px-4 text-sm font-bold shadow-xs sm:h-12 sm:px-6 sm:text-base"
-              >
-                <PackagePlus className="h-5 w-5" />
-                <span>Nuevo producto</span>
-              </Button>
-            </Tooltip>
-          )}
+              <PackagePlus className="h-5 w-5" />
+              <span>Nuevo producto</span>
+            </Button>
+          </Tooltip>
         </div>
       </div>
 
       {/* ── KPIs ── */}
-      {!verInactivos && (
-        <div className="mt-2 grid grid-cols-2 gap-2.5 sm:gap-3.5 lg:grid-cols-4">
-          <KpiCard
-            className="animate-entry-up stagger-1"
-            icon={<AlertTriangle className="h-4 w-4 sm:h-4.5 sm:w-4.5" />}
-            iconBgClass="bg-amber-100 text-amber-600 dark:bg-amber-950/50 dark:text-amber-400"
-            title="Stock bajo"
-            value={kpis.stockBajo}
-            subtitle="por debajo del mínimo"
-            subtitleHighlightClass="font-medium text-amber-600 dark:text-amber-400"
-            onClick={() => handleKpiClick("low_stock")}
-            isActive={activeKpiFilter === "low_stock"}
-            activeColor="amber"
-          />
-          <KpiCard
-            className="animate-entry-up stagger-2"
-            icon={<Clock className="h-4 w-4 sm:h-4.5 sm:w-4.5" />}
-            iconBgClass="bg-amber-100 text-amber-600 dark:bg-amber-950/50 dark:text-amber-400"
-            title="Por vencer"
-            value={kpis.porVencer}
-            subtitle="próximos 14 días"
-            subtitleHighlightClass="font-medium text-amber-600 dark:text-amber-400"
-            onClick={() => handleKpiClick("expiring_soon")}
-            isActive={activeKpiFilter === "expiring_soon"}
-            activeColor="amber"
-          />
-          <KpiCard
-            className="animate-entry-up stagger-3"
-            icon={<PackageX className="h-4 w-4 sm:h-4.5 sm:w-4.5" />}
-            iconBgClass="bg-red-100 text-red-600 border border-red-200 dark:bg-red-950/60 dark:text-red-400 dark:border-red-900/60"
-            title="Agotados"
-            value={kpis.agotados}
-            subtitle="sin existencias"
-            subtitleHighlightClass="font-medium text-red-600/80 dark:text-red-400/80"
-            onClick={() => handleKpiClick("out_of_stock")}
-            isActive={activeKpiFilter === "out_of_stock"}
-            activeColor="red"
-          />
-          <KpiCard
-            className="animate-entry-up stagger-4"
-            icon={<XCircle className="h-4 w-4 sm:h-4.5 sm:w-4.5" />}
-            iconBgClass="bg-red-100 text-red-600 border border-red-200 dark:bg-red-950/60 dark:text-red-400 dark:border-red-900/60"
-            title="Vencidos"
-            value={kpis.vencidos}
-            subtitle="requieren baja o descarte"
-            subtitleHighlightClass="font-medium text-red-600/80 dark:text-red-400/80"
-            onClick={() => handleKpiClick("expired")}
-            isActive={activeKpiFilter === "expired"}
-            activeColor="red"
-          />
-        </div>
-      )}
+      <div className="mt-2 grid grid-cols-2 gap-2.5 sm:gap-3.5 lg:grid-cols-4">
+        <KpiCard
+          className="animate-entry-up stagger-1"
+          icon={<AlertTriangle className="h-4 w-4 sm:h-4.5 sm:w-4.5" />}
+          iconBgClass="bg-amber-100 text-amber-600 dark:bg-amber-950/50 dark:text-amber-400"
+          title="Stock bajo"
+          value={kpis.stockBajo}
+          subtitle="por debajo del mínimo"
+          subtitleHighlightClass="font-medium text-amber-600 dark:text-amber-400"
+          onClick={() => handleKpiClick("low_stock")}
+          isActive={activeKpiFilter === "low_stock"}
+          activeColor="amber"
+        />
+        <KpiCard
+          className="animate-entry-up stagger-2"
+          icon={<Clock className="h-4 w-4 sm:h-4.5 sm:w-4.5" />}
+          iconBgClass="bg-amber-100 text-amber-600 dark:bg-amber-950/50 dark:text-amber-400"
+          title="Por vencer"
+          value={kpis.porVencer}
+          subtitle="próximos 14 días"
+          subtitleHighlightClass="font-medium text-amber-600 dark:text-amber-400"
+          onClick={() => handleKpiClick("expiring_soon")}
+          isActive={activeKpiFilter === "expiring_soon"}
+          activeColor="amber"
+        />
+        <KpiCard
+          className="animate-entry-up stagger-3"
+          icon={<PackageX className="h-4 w-4 sm:h-4.5 sm:w-4.5" />}
+          iconBgClass="bg-red-100 text-red-600 border border-red-200 dark:bg-red-950/60 dark:text-red-400 dark:border-red-900/60"
+          title="Agotados"
+          value={kpis.agotados}
+          subtitle="sin existencias"
+          subtitleHighlightClass="font-medium text-red-600/80 dark:text-red-400/80"
+          onClick={() => handleKpiClick("out_of_stock")}
+          isActive={activeKpiFilter === "out_of_stock"}
+          activeColor="red"
+        />
+        <KpiCard
+          className="animate-entry-up stagger-4"
+          icon={<XCircle className="h-4 w-4 sm:h-4.5 sm:w-4.5" />}
+          iconBgClass="bg-red-100 text-red-600 border border-red-200 dark:bg-red-950/60 dark:text-red-400 dark:border-red-900/60"
+          title="Vencidos"
+          value={kpis.vencidos}
+          subtitle="requieren baja o descarte"
+          subtitleHighlightClass="font-medium text-red-600/80 dark:text-red-400/80"
+          onClick={() => handleKpiClick("expired")}
+          isActive={activeKpiFilter === "expired"}
+          activeColor="red"
+        />
+      </div>
 
       {/* ── Contenedor sticky: categorías + toolbar se anclan al top al scrollear ── */}
       <div className="sticky top-0 z-20 flex w-full min-w-0 flex-col gap-2.5 border-slate-200/80 bg-[#f4f6f8] pt-3 pb-3 transition-colors select-none relative after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-3 after:bg-gradient-to-b after:from-slate-900/10 after:to-transparent after:content-[''] dark:border-slate-800/60 dark:bg-[#0b0f17] dark:after:from-black/45">
-        {!verInactivos && (
-          /* ── Barra de categorías: anclaje fijo + carrusel desplazable ── */
-          <div className="flex w-full items-center select-none">
+        {/* ── Barra de categorías: anclaje fijo + carrusel desplazable ── */}
+        <div className="flex w-full items-center select-none">
             {/* 1. Anclaje fijo: botón Nueva + separador + fondo opaco + máscara degradada */}
             <div className="relative z-10 flex shrink-0 items-center bg-[#f4f6f8]  pb-2 dark:bg-[#0b0f17]">
               <Tooltip
@@ -953,8 +890,7 @@ export function InventoryPage() {
                 aria-hidden="true"
               />
             </div>
-          </div>
-        )}
+        </div>
 
         {/* ── Barra de herramientas ── */}
         <div className="flex pt-0.5 w-full  min-w-0 flex-col items-stretch justify-between gap-3 lg:flex-row lg:items-center">
@@ -991,19 +927,17 @@ export function InventoryPage() {
                 ) : undefined
               }
             />
-            {!verInactivos && (
-              <CustomSelect
-                options={OPCIONES_ORDEN}
-                value={orden}
-                onChange={(value) => {
-                  setOrden(value as OrdenInventario);
-                  setBarcodeEscaneado(null);
-                  setPaginaActual(1);
-                  setCardFoco(null);
-                }}
-                className="w-44 shrink-0 sm:w-48"
-              />
-            )}
+            <CustomSelect
+              options={OPCIONES_ORDEN}
+              value={orden}
+              onChange={(value) => {
+                setOrden(value as OrdenInventario);
+                setBarcodeEscaneado(null);
+                setPaginaActual(1);
+                setCardFoco(null);
+              }}
+              className="w-44 shrink-0 sm:w-48"
+            />
 
             <Tooltip
               content={
@@ -1031,42 +965,38 @@ export function InventoryPage() {
             </Tooltip>
           </div>
           <div className="flex flex-nowrap items-center gap-2.5 overflow-x-auto pb-1 lg:pb-0">
-            {!verInactivos && (
-              <>
-                <div
-                  className="h-6 w-px hidden lg:block shrink-0 self-center bg-slate-200 sm:h-7 dark:bg-slate-700/60"
-                  aria-hidden="true"
-                />
+            <div
+              className="h-6 w-px hidden lg:block shrink-0 self-center bg-slate-200 sm:h-7 dark:bg-slate-700/60"
+              aria-hidden="true"
+            />
 
-                <Button
-                  variant="primary"
-                  icon={<Plus size={16} />}
-                  onClick={() => setAccionGlobal("agregar-inventario")}
-                  disabled={productos.length === 0}
-                  className="whitespace-nowrap"
-                >
-                  Agregar Inventario
-                </Button>
-                <Button
-                  variant="outline"
-                  icon={<SlidersHorizontal size={16} />}
-                  onClick={() => setAccionGlobal("ajustar-stock")}
-                  disabled={!hayStockDisponible}
-                  className="whitespace-nowrap"
-                >
-                  Ajustar stock
-                </Button>
-                <Button
-                  variant="danger"
-                  icon={<Minus size={16} />}
-                  onClick={() => setAccionGlobal("registrar-perdida")}
-                  disabled={!hayStockDisponible}
-                  className="whitespace-nowrap"
-                >
-                  Registrar merma
-                </Button>
-              </>
-            )}
+            <Button
+              variant="primary"
+              icon={<Plus size={16} />}
+              onClick={() => setAccionGlobal("agregar-inventario")}
+              disabled={productos.length === 0}
+              className="whitespace-nowrap"
+            >
+              Agregar Inventario
+            </Button>
+            <Button
+              variant="outline"
+              icon={<SlidersHorizontal size={16} />}
+              onClick={() => setAccionGlobal("ajustar-stock")}
+              disabled={!hayStockDisponible}
+              className="whitespace-nowrap"
+            >
+              Ajustar stock
+            </Button>
+            <Button
+              variant="danger"
+              icon={<Minus size={16} />}
+              onClick={() => setAccionGlobal("registrar-perdida")}
+              disabled={!hayStockDisponible}
+              className="whitespace-nowrap"
+            >
+              Registrar merma
+            </Button>
           </div>
         </div>
       </div>
@@ -1093,33 +1023,16 @@ export function InventoryPage() {
         productos.length === 0 ? (
           <EmptyState
             icon={<Boxes className="h-12 w-12 stroke-[1.5]" />}
-            title={
-              verInactivos
-                ? "No hay productos desactivados"
-                : "Todavía no hay productos"
-            }
-            description={
-              verInactivos
-                ? "Todos los productos del inventario están activos."
-                : "Creá tu primer producto para empezar a controlar el inventario."
-            }
+            title="Todavía no hay productos"
+            description="Creá tu primer producto para empezar a controlar el inventario."
             action={
-              verInactivos ? (
-                <Button
-                  variant="outline"
-                  onClick={() => setVerInactivos(false)}
-                >
-                  Ver productos activos
-                </Button>
-              ) : (
-                <Button
-                  variant="primary"
-                  onClick={() => setIsCreateProductOpen(true)}
-                >
-                  <PackagePlus className="h-4 w-4" />
-                  Nuevo producto
-                </Button>
-              )
+              <Button
+                variant="primary"
+                onClick={() => setIsCreateProductOpen(true)}
+              >
+                <PackagePlus className="h-4 w-4" />
+                Nuevo producto
+              </Button>
             }
           />
         ) : (
@@ -1171,7 +1084,7 @@ export function InventoryPage() {
                   codigoInterno={producto.codigoInterno}
                   codigosBarras={producto.codigosBarras}
                   highlightQuery={busqueda}
-                  inactivo={verInactivos}
+                  inactivo={false}
                   onToggleActivo={raw ? handleToggleActivo : undefined}
                   togglingActivo={togglingActivoId === producto.id}
                   onOpenQuickActions={
@@ -1276,6 +1189,15 @@ export function InventoryPage() {
           setMarcasAbiertas(false);
           setPaginaActual(1);
         }}
+      />
+
+      <InactivosModal
+        isOpen={inactivosAbierta}
+        onClose={() => setInactivosAbierta(false)}
+        productos={productosCrudos.filter((p) => !p.activo)}
+        marcas={marcas}
+        categorias={categories}
+        onChanged={() => void refreshProductos()}
       />
 
       <EditCategoryModal

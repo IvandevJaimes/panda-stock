@@ -15,6 +15,7 @@ export type BarcodeScannerContext =
   | 'sales'
   | 'inventory'
   | 'inventory-action'
+  | 'inventory-inactivos'
   | null
 
 /**
