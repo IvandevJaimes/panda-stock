@@ -28,6 +28,10 @@ import { HeaderMini } from "./HeaderMini";
 import { ACCION_LABEL, FORM_ID } from "./types";
 import { useBarcodeScanner } from "../../../hooks/useBarcodeScanner";
 import { useCodigosBarrasUnicos } from "../../../hooks/useCodigosBarrasUnicos";
+import {
+  dismissCodigoEnUso,
+  toastCodigoEnUso,
+} from "../../../lib/codigosBarras";
 
 interface EditarProductoFormProps {
   producto: Producto;
@@ -72,8 +76,6 @@ export function EditarProductoForm({
     handleSubmit,
     getValues,
     setValue,
-    setError,
-    clearErrors,
     control,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
@@ -92,12 +94,16 @@ export function EditarProductoForm({
   const valorMarca = useWatch({ control, name: "marca" }) ?? "";
 
   // Verificación en caliente: el producto en edición queda exento de su propio
-  // código; cualquier otro código ya asociado a otro producto activo marca error.
+  // código; cualquier otro código ya asociado a otro producto avisa con un toast
+  // (se oculta al corregir el campo). Si el código está en uso, no queda escrito.
   useCodigosBarrasUnicos(
     control,
-    (mensaje) => setError("codigosBarras", { type: "manual", message: mensaje }),
-    () => clearErrors("codigosBarras"),
-    { excluirProductoId: producto?.id ?? null },
+    (mensaje) => toastCodigoEnUso(mensaje),
+    () => dismissCodigoEnUso(),
+    {
+      excluirProductoId: producto?.id ?? null,
+      setValorCampo: (valor) => setValue("codigosBarras", valor),
+    },
   );
 
   // Scanner: al escanear un código, se escribe en "Códigos de barra" sin importar
@@ -233,16 +239,11 @@ export function EditarProductoForm({
           : "Error al actualizar el producto";
 
       if (mensaje.toLowerCase().includes("de barras")) {
-        setError("codigosBarras", { type: "manual", message: mensaje });
-        toast.error(mensaje);
+        toastCodigoEnUso(mensaje);
       } else if (
         mensaje.toLowerCase().includes("unique") &&
         mensaje.toLowerCase().includes("codigo_interno")
       ) {
-        setError("codigoInterno", {
-          type: "manual",
-          message: "Este código ya está en uso",
-        });
         toast.error("El código ya existe en otro producto");
       } else {
         toast.error(mensaje);

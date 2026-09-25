@@ -30,6 +30,10 @@ import type {
 import { Tooltip } from "../../components/ui/Tooltip";
 import { useBarcodeScanner } from "../../hooks/useBarcodeScanner";
 import { useCodigosBarrasUnicos } from "../../hooks/useCodigosBarrasUnicos";
+import {
+  dismissCodigoEnUso,
+  toastCodigoEnUso,
+} from "../../lib/codigosBarras";
 
 export interface CreateProductModalProps {
   isOpen: boolean;
@@ -87,8 +91,6 @@ export function CreateProductModal({
     reset,
     setValue,
     getValues,
-    setError,
-    clearErrors,
     control,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
@@ -97,12 +99,14 @@ export function CreateProductModal({
 
   const [creandoCategoria, setCreandoCategoria] = React.useState(false);
 
-  // Verificación en caliente: marca un error apenas el código de barra ya está
-  // asociado a otro producto activo (se limpia al corregir el campo).
+  // Verificación en caliente: avisa con un toast apenas un código de barra ya
+  // está asociado a otro producto (se oculta al corregir el campo). Si el código
+  // está en uso, no queda escrito: se revierte quitándolo del campo.
   useCodigosBarrasUnicos(
     control,
-    (mensaje) => setError("codigosBarras", { type: "manual", message: mensaje }),
-    () => clearErrors("codigosBarras"),
+    (mensaje) => toastCodigoEnUso(mensaje),
+    () => dismissCodigoEnUso(),
+    { setValorCampo: (valor) => setValue("codigosBarras", valor) },
   );
 
   // Scanner: al escanear un código, se escribe en "Códigos de barra" sin importar
@@ -249,19 +253,11 @@ export function CreateProductModal({
       error instanceof Error ? error.message : "Error al crear el producto";
 
     if (mensaje.toLowerCase().includes("de barras")) {
-      setError("codigosBarras", {
-        type: "manual",
-        message: mensaje,
-      });
-      toast.error(mensaje);
+      toastCodigoEnUso(mensaje);
     } else if (
       mensaje.toLowerCase().includes("unique") &&
       mensaje.toLowerCase().includes("codigo_interno")
     ) {
-      setError("codigoInterno", {
-        type: "manual",
-        message: "Este código ya está en uso",
-      });
       toast.error("El código ya existe en otro producto");
     } else {
       toast.error(mensaje);

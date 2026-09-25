@@ -1,4 +1,5 @@
 import type { ConflictoCodigo } from '../../electron/db/types'
+import { toast } from 'sonner'
 
 /**
  * Longitud mínima que obliga a considerar "terminado" el último token de la
@@ -45,4 +46,20 @@ export function formatearConflictos(conflictos: ConflictoCodigo[]): string | nul
   return `Códigos ya en uso en otros productos: ${conflictos
     .map((conflicto) => `"${conflicto.codigo}" → "${conflicto.producto}"`)
     .join(' | ')}`
+}
+
+/**
+ * Id estable del toast de "código ya en uso": con él el toast se reemplaza en
+ * vez de apilarse mientras el usuario corrige el campo.
+ */
+const TOAST_CODIGO_EN_USO = 'codigo-en-uso'
+
+/** Muestra (o actualiza) el toast de código de barra ya en uso por otro producto. */
+export function toastCodigoEnUso(mensaje: string): void {
+  toast.error(mensaje, { id: TOAST_CODIGO_EN_USO })
+}
+
+/** Oculta el toast de código en uso (por ejemplo, al corregir el campo). */
+export function dismissCodigoEnUso(): void {
+  toast.dismiss(TOAST_CODIGO_EN_USO)
 }

@@ -10,6 +10,10 @@ import { HeaderMini } from "./HeaderMini";
 import { ACCION_LABEL, FORM_ID } from "./types";
 import { useBarcodeScanner } from "../../../hooks/useBarcodeScanner";
 import { useCodigosBarrasUnicos } from "../../../hooks/useCodigosBarrasUnicos";
+import {
+  dismissCodigoEnUso,
+  toastCodigoEnUso,
+} from "../../../lib/codigosBarras";
 
 interface EditarCodigoValues {
   codigoInterno: string;
@@ -36,8 +40,6 @@ export function EditarCodigoForm({
     handleSubmit,
     setValue,
     getValues,
-    setError,
-    clearErrors,
     control,
     formState: { errors, isSubmitting },
   } = useForm<EditarCodigoValues>({
@@ -48,12 +50,16 @@ export function EditarCodigoForm({
   });
 
   // Verificación en caliente: el producto en edición queda exento de su propio
-  // código; cualquier otro código ya asociado a otro producto activo marca error.
+  // código; cualquier otro código ya asociado a otro producto avisa con un toast
+  // (se oculta al corregir el campo). Si el código está en uso, no queda escrito.
   useCodigosBarrasUnicos(
     control,
-    (mensaje) => setError("codigosBarras", { type: "manual", message: mensaje }),
-    () => clearErrors("codigosBarras"),
-    { excluirProductoId: producto?.id ?? null },
+    (mensaje) => toastCodigoEnUso(mensaje),
+    () => dismissCodigoEnUso(),
+    {
+      excluirProductoId: producto?.id ?? null,
+      setValorCampo: (valor) => setValue("codigosBarras", valor),
+    },
   );
 
   // Scanner: al escanear un código, se escribe en "Códigos de barra" sin depender
@@ -104,9 +110,10 @@ export function EditarCodigoForm({
     } catch (error: unknown) {
       const mensaje = error instanceof Error ? error.message : String(error);
       if (mensaje.toLowerCase().includes("de barras")) {
-        setError("codigosBarras", { type: "manual", message: mensaje });
+        toastCodigoEnUso(mensaje);
+      } else {
+        toast.error(mensaje || "Error al actualizar código");
       }
-      toast.error(mensaje || "Error al actualizar código");
     } finally {
       onSubmittingChange(false);
     }

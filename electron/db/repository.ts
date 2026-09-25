@@ -319,26 +319,24 @@ function separarCodigosCsv(csv: string | null | undefined): string[] {
   )
 }
 
-/** Productos ACTIVOS que usan un código en coincidencia exacta (interno o de barras). */
-function listarProductosActivosConCodigo(codigo: string): Producto[] {
+/** Productos (activos o desactivados) que usan un código en coincidencia exacta (interno o de barras). */
+function listarProductosConCodigo(codigo: string): Producto[] {
   return getDb()
     .select()
     .from(productos)
     .where(
-      and(
-        eq(productos.activo, true),
-        or(
-          eq(productos.codigoInterno, codigo),
-          sql`instr(',' || ${productos.codigosBarras} || ',', ',' || ${codigo} || ',') > 0`,
-        ),
+      or(
+        eq(productos.codigoInterno, codigo),
+        sql`instr(',' || ${productos.codigosBarras} || ',', ',' || ${codigo} || ',') > 0`,
       ),
     )
     .all()
 }
 
 /**
- * Devuelve qué códigos de una lista ya están asociados a otro producto ACTIVO.
- * Los productos inactivos (borrados lógicos) liberan sus códigos: pueden reutilizarse.
+ * Devuelve qué códigos de una lista ya están asociados a otro producto.
+ * Un producto desactivado (borrado lógico) CONSERVA sus códigos: cederlos a
+ * otro producto impediría reactivarlo sin conflicto.
  */
 export function verificarCodigosEnUso(
   codigos: string[],
@@ -346,7 +344,7 @@ export function verificarCodigosEnUso(
 ): ConflictoCodigo[] {
   const conflictos: ConflictoCodigo[] = []
   for (const codigo of separarCodigosCsv(codigos.join(','))) {
-    const duenio = listarProductosActivosConCodigo(codigo).find(
+    const duenio = listarProductosConCodigo(codigo).find(
       (producto) => producto.id !== excluirProductoId,
     )
     if (duenio) conflictos.push({ codigo, producto: duenio.nombre })
@@ -354,7 +352,7 @@ export function verificarCodigosEnUso(
   return conflictos
 }
 
-/** Guardia autoritativa: lanza error si algún código ya pertenece a otro producto ACTIVO. */
+/** Guardia autoritativa: lanza error si algún código ya pertenece a otro producto. */
 function bloquearCodigosEnUso(codigos: string[], excluirProductoId?: number | null): void {
   const conflictos = verificarCodigosEnUso(codigos, excluirProductoId)
   if (conflictos.length > 0) {

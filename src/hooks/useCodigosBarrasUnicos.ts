@@ -9,19 +9,31 @@ import { productosService } from "../services/productos.service";
 import {
   formatearConflictos,
   obtenerCodigosParaVerificacion,
+  separarCodigos,
 } from "../lib/codigosBarras";
+import type { ConflictoCodigo } from "../../electron/db/types";
 
 type OpcionesHook = {
   /** Producto en edición: sus propios códigos no se consideran conflicto. */
   excluirProductoId?: number | null;
   /** Debounce en ms antes de consultar al proceso principal. */
   delayMs?: number;
+  /**
+   * Si se provee, al detectarse un código en uso se escribe de vuelta en el
+   * campo la lista SIN ese código, para que el código conflictivo no quede
+   * escrito (por ejemplo, tras un escaneo).
+   */
+  setValorCampo?: (valor: string) => void;
 };
+
+/** Tras un revert automático del campo, el toast debe seguir visible un momento. */
+const REVERT_PERSIST_MS = 600;
 
 /**
  * Chequea en caliente (debounced) que los códigos de barra del formulario no
- * estén ya asociados a otro producto activo. Marca o limpia el error del campo
- * "codigosBarras" a través de los callbacks que recibe por props.
+ * estén ya asociados a otro producto. Avisa con un toast a través de los
+ * callbacks que recibe por props y, si se pasó setValorCampo, revierte el campo
+ * quitando los códigos en uso (no quedan escritos).
  *
  * Los callbacks se guardan en refs para que el effect no se reinicie por
  * identidad cambiante (evita resetear el debounce en cada render).
@@ -32,7 +44,7 @@ export function useCodigosBarrasUnicos<TFieldValues extends FieldValues>(
   clearErrorCampo: () => void,
   opciones?: OpcionesHook,
 ): void {
-  const { excluirProductoId = null, delayMs = 300 } = opciones ?? {};
+  const { excluirProductoId = null, delayMs = 300, setValorCampo } = opciones ?? {};
   const valor = useWatch({
     control,
     name: "codigosBarras" as unknown as Path<TFieldValues>,
@@ -40,26 +52,42 @@ export function useCodigosBarrasUnicos<TFieldValues extends FieldValues>(
 
   const setErrorRef = useRef(setErrorCampo);
   const clearErrorRef = useRef(clearErrorCampo);
+  const setValorRef = useRef(setValorCampo);
+  const revertidoEn = useRef(-1);
 
   // Los callbacks se sincronizan en un effect (nunca en render) para que el
   // effect de verificación no dependa de su identidad y el debounce no se reinicie.
   useEffect(() => {
     setErrorRef.current = setErrorCampo;
     clearErrorRef.current = clearErrorCampo;
+    setValorRef.current = setValorCampo;
   });
 
   const ultimaSolicitud = useRef(0);
 
+  // Un revert automático no debe ocultar el toast que acaba de mostrarse;
+  // recién pasados REVERT_PERSIST_MS se vuelve a permitir limpiarlo.
+  function recienRevertido(): boolean {
+    return Date.now() - revertidoEn.current < REVERT_PERSIST_MS;
+  }
+
+  function quitadosDelConflicto(texto: string, conflictos: ConflictoCodigo[]): string {
+    const enConflicto = new Set(conflictos.map((conflicto) => conflicto.codigo));
+    return separarCodigos(texto)
+      .filter((codigo) => !enConflicto.has(codigo))
+      .join(", ");
+  }
+
   useEffect(() => {
     const texto = (typeof valor === "string" ? valor : "").trim();
     if (!texto) {
-      clearErrorRef.current();
+      if (!recienRevertido()) clearErrorRef.current();
       return;
     }
 
     const codigos = obtenerCodigosParaVerificacion(texto);
     if (codigos.length === 0) {
-      clearErrorRef.current();
+      if (!recienRevertido()) clearErrorRef.current();
       return;
     }
 
@@ -70,12 +98,22 @@ export function useCodigosBarrasUnicos<TFieldValues extends FieldValues>(
         .then((conflictos) => {
           if (solicitud !== ultimaSolicitud.current) return;
           const mensaje = formatearConflictos(conflictos);
-          if (mensaje) setErrorRef.current(mensaje);
-          else clearErrorRef.current();
+          if (mensaje) {
+            setErrorRef.current(mensaje);
+            if (setValorRef.current) {
+              const textoLimpio = quitadosDelConflicto(texto, conflictos);
+              if (textoLimpio !== texto) {
+                setValorRef.current(textoLimpio);
+                revertidoEn.current = Date.now();
+              }
+            }
+          } else if (!recienRevertido()) {
+            clearErrorRef.current();
+          }
         })
         .catch(() => {
           if (solicitud !== ultimaSolicitud.current) return;
-          clearErrorRef.current();
+          if (!recienRevertido()) clearErrorRef.current();
         });
     }, delayMs);
 

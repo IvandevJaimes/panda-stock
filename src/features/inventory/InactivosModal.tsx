@@ -152,7 +152,7 @@ export function InactivosModal({
       onClose={onClose}
       maxWidth="2xl"
       title="Productos desactivados"
-      height="h-[80vh]"
+      height="h-[60vh]"
     >
       <div className="flex flex-col gap-3">
         <div className="flex items-center gap-2">

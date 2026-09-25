@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { ScanLine, Search, SearchX, X } from "lucide-react";
+import { FilterX, ScanLine, Search, SearchX, X } from "lucide-react";
 import { toast } from "sonner";
 import { Modal } from "../../../components/ui/Modal";
 import { Button } from "../../../components/ui/Button";
@@ -185,6 +185,15 @@ export function AccionGlobalModal({
     setSeleccionando(true);
   };
 
+  const hayFiltroActivo = busqueda.trim() !== "" || codigoEscaneado !== null;
+
+  const limpiarFiltros = () => {
+    setBusqueda("");
+    setCodigoEscaneado(null);
+    setPaginaActual(1);
+    buscadorRef.current?.focus();
+  };
+
   const handleComplete = () => {
     onSuccess();
     handleClose();
@@ -222,19 +231,41 @@ export function AccionGlobalModal({
     >
       {seleccionando ? (
         <div className="flex min-h-0 h-full flex-col gap-3">
-          <Input
-            ref={buscadorRef}
-            value={busqueda}
-            onChange={(e) => {
-              setBusqueda(e.target.value);
-              setCodigoEscaneado(null);
-              setPaginaActual(1);
-            }}
-            placeholder="Buscar producto por nombre, marca, categoría o código..."
-            leftIcon={<Search size={16} />}
-            onClear={busqueda ? () => setBusqueda("") : undefined}
-            autoFocus
-          />
+          <div className="flex items-center gap-2">
+            <Input
+              ref={buscadorRef}
+              value={busqueda}
+              onChange={(e) => {
+                setBusqueda(e.target.value);
+                setCodigoEscaneado(null);
+                setPaginaActual(1);
+              }}
+              placeholder="Buscar producto por nombre, marca, categoría o código..."
+              leftIcon={<Search size={16} />}
+              onClear={hayFiltroActivo ? limpiarFiltros : undefined}
+              autoFocus
+              wrapperClassName="min-w-0 flex-1"
+            />
+            <Tooltip
+              content={hayFiltroActivo ? "Limpiar todos los filtros" : undefined}
+              placement="top"
+            >
+              <button
+                type="button"
+                onClick={limpiarFiltros}
+                disabled={!hayFiltroActivo}
+                aria-label="Limpiar todos los filtros"
+                className={cn(
+                  "shrink-0 select-none rounded-xl p-2 transition-colors duration-150",
+                  hayFiltroActivo
+                    ? "cursor-pointer text-slate-400 hover:text-red-600 dark:text-slate-500 dark:hover:text-red-400"
+                    : "cursor-not-allowed text-slate-400 opacity-25 dark:text-slate-600",
+                )}
+              >
+                <FilterX className="h-5 w-5" />
+              </button>
+            </Tooltip>
+          </div>
           {codigoEscaneado && (
             <div className="flex shrink-0 items-center justify-between gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 dark:border-emerald-400/20 dark:bg-emerald-400/10">
               <div className="flex items-center justify-center gap-2 min-w-0">
