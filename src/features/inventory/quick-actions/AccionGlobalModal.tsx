@@ -10,6 +10,8 @@ import { Pagination } from "../../../components/ui/Pagination";
 import { useBarcodeScanner } from "../../../hooks/useBarcodeScanner";
 import { productosService } from "../../../services/productos.service";
 import { formatearCodigo } from "./formatters";
+import { buildAssetUrl } from "../../../lib/assets";
+import { getProductPlaceholder } from "../../../lib/productPlaceholder";
 import { AgregarInventarioForm } from "./AgregarInventarioForm";
 import { AjustarStockLoteForm } from "../lote-actions/AjustarStockLoteForm";
 import { RegistrarPerdidaLoteForm } from "../lote-actions/RegistrarPerdidaLoteForm";
@@ -162,8 +164,20 @@ export function AccionGlobalModal({
         : activos;
     }
 
-    return { productosFiltrados: filtradas, escaneoVigente: coincideEscaneo };
-  }, [productos, busqueda, codigoEscaneado, marcas, categorias]);
+    // El cajero busca con el lector los productos que están en estantería. El
+    // orden por prioridad depende de la acción: para "agregar inventario" se
+    // prioriza reponer lo que falta (sin stock arriba); para ajustes y mermas,
+    // los que SÍ tienen stock van arriba. Sort estable: conserva el orden
+    // original dentro de cada grupo.
+    const conPrioridad = [...filtradas].sort(
+      (a, b) =>
+        accion === "agregar-inventario"
+          ? Number(a.stockActual > 0) - Number(b.stockActual > 0)
+          : Number(b.stockActual > 0) - Number(a.stockActual > 0),
+    );
+
+    return { productosFiltrados: conPrioridad, escaneoVigente: coincideEscaneo };
+  }, [productos, busqueda, codigoEscaneado, marcas, categorias, accion]);
 
   const tituloModal = accion ? ACCION_LABEL[accion] : "Acción";
   const formId = accion
@@ -366,17 +380,33 @@ export function AccionGlobalModal({
                     onClick={() => void handleSeleccionarProducto(producto)}
                     disabled={sinStock}
                     className={cn(
-                      "flex w-full items-center justify-between gap-3 rounded-xl border border-slate-200 px-3.5 py-2.5 text-left transition-colors dark:border-slate-800",
+                      "flex w-full min-h-16 shrink-0 items-stretch overflow-hidden rounded-xl border border-slate-200 text-left transition-colors dark:border-slate-800",
                       sinStock
                         ? "cursor-not-allowed opacity-40 dark:opacity-40"
                         : "cursor-pointer hover:border-emerald-500/40 hover:bg-emerald-500/5 dark:hover:border-emerald-500/30",
                     )}
                   >
-                    <span className="min-w-0">
+                    <span className="flex w-13 shrink-0 items-center justify-center overflow-hidden bg-slate-200/60 sm:w-15 dark:bg-slate-800/60">
+                      {(() => {
+                        const imgUrl = producto.imgPath
+                          ? buildAssetUrl(producto.imgPath)
+                          : null;
+                        return (
+                          <img
+                            src={imgUrl ?? getProductPlaceholder(producto.id)}
+                            alt={imgUrl ? producto.nombre : `${producto.nombre} sin foto`}
+                            loading="lazy"
+                            draggable={false}
+                            className="h-full w-full object-cover"
+                          />
+                        );
+                      })()}
+                    </span>
+                    <span className="flex min-w-0 flex-1 flex-col justify-center py-2.5 pl-3 pr-3">
                       <span className="block truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
                         <HighlightMatch
                           text={producto.nombre}
-                          query={busqueda}
+                          query={codigoEscaneado ?? busqueda}
                           compact
                         />
                         {producto.variante && (
@@ -389,14 +419,16 @@ export function AccionGlobalModal({
                         {detalle || "Sin categoría"}
                       </span>
                     </span>
-                    <span
-                      className={
-                        producto.stockActual > 0
-                          ? "shrink-0 text-xs font-semibold text-emerald-600 dark:text-emerald-400"
-                          : "shrink-0 text-xs font-semibold text-red-500 dark:text-red-400"
-                      }
-                    >
-                      {producto.stockActual} und
+                    <span className="flex shrink-0 items-center pr-3">
+                      <span
+                        className={
+                          producto.stockActual > 0
+                            ? "shrink-0 text-xs font-semibold text-emerald-600 dark:text-emerald-400"
+                            : "shrink-0 text-xs font-semibold text-red-500 dark:text-red-400"
+                        }
+                      >
+                        {producto.stockActual} und
+                      </span>
                     </span>
                   </button>
                 );
