@@ -1,6 +1,7 @@
 import {
   memo,
   useCallback,
+  useDeferredValue,
   useEffect,
   useMemo,
   useRef,
@@ -206,6 +207,10 @@ const InventarioRow = memo(function InventarioRow({
 
 export function InventoryPage() {
   const [busqueda, setBusqueda] = useState("");
+  // El input actualiza `busqueda` al instante (tecleo a 60fps); el filtrado y
+  // el resaltado consumen una copia diferida que React re-sincroniza cuando
+  // hay presupuesto. Así escribir nunca se traba por re-renderizar la grilla.
+  const busquedaDeferida = useDeferredValue(busqueda);
   const [barcodeEscaneado, setBarcodeEscaneado] = useState<string | null>(null);
   const [inactivosAbierta, setInactivosAbierta] = useState(false);
   const [activeKpiFilter, setActiveKpiFilter] = useState<KpiFilter>("all");
@@ -493,7 +498,7 @@ export function InventoryPage() {
     let filasFiltradas: ProductoInventario[];
     if (barcodeEscaneado === null) {
       filasFiltradas = filtrarProductos(productos, {
-        termino: busqueda,
+        termino: busquedaDeferida,
         ...filtros,
       });
     } else if (coincideEscaneo) {
@@ -506,7 +511,7 @@ export function InventoryPage() {
       filasFiltradas,
       escaneoVigente: coincideEscaneo,
     };
-  }, [barcodeEscaneado, busqueda, selectedCategory, activeKpiFilter, productos, productosBase]);
+  }, [barcodeEscaneado, busquedaDeferida, selectedCategory, activeKpiFilter, productos, productosBase]);
 
   const totalPaginas = Math.max(
     1,
@@ -1055,7 +1060,7 @@ export function InventoryPage() {
               key={producto.id}
               raiz={crudosPorId.get(producto.id)}
               vista={producto}
-              highlightQuery={busqueda}
+              highlightQuery={busquedaDeferida}
               index={index}
               enfocada={cardFocoValida === index}
               toggling={togglingActivoId === producto.id}
