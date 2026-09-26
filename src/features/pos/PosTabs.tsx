@@ -3,6 +3,7 @@ import { Plus, X } from "lucide-react";
 import { cn } from "../../lib/cn";
 import { Tooltip } from "../../components/ui/Tooltip";
 import { ConfirmModal } from "../../components/ui/ConfirmModal";
+import { useAutoScrollHover } from "../../hooks/useAutoScrollHover";
 import { MAX_TICKETS, type TicketSession } from "./posQuery";
 
 /**
@@ -42,6 +43,7 @@ export function PosTabs({
   onClose,
 }: PosTabsProps) {
   const [aConfirmar, setAConfirmar] = useState<TicketSession | null>(null);
+  const { ref, alMover, alSalir } = useAutoScrollHover<HTMLDivElement>();
 
   const alTope = tickets.length >= MAX_TICKETS;
 
@@ -86,21 +88,36 @@ export function PosTabs({
         abrirla. `overflow-x-auto` sigue funcionando: si no entran, scrollean.
       */}
       <div
+        ref={ref}
         role="group"
         aria-label="Tickets de venta abiertos"
-        className="flex min-w-0 items-end gap-1.5 overflow-x-auto"
+        onMouseMove={alMover}
+        onMouseLeave={alSalir}
+        // `scrollbar-none` no es decorativo: sin él, la barra de scroll horizontal
+        // le ROBA altura al grupo y, como la fila de afuera alinea todo con
+        // `items-end`, las pestañas quedan flotando ~15px por encima del `Cart`
+        // con un hueco vacío entre la tira y el panel. Ocultarla devuelve esa
+        // altura a la tira, que vuelve a apoyarse contra el borde de arriba del
+        // `Cart`. El scroll sigue funcionando (rueda, trackpad, teclado) y, con
+        // la barra invisible, `alMover` es lo que hace discoverrible que la tira
+        // se mueve: al pegar el cursor a un borde, corre sola para ese lado.
+        className="scrollbar-none flex min-w-0 items-end gap-1.5 overflow-x-auto"
       >
         {tickets.map((ticket, indice) => {
           const activo = ticket.id === activeTicketId;
           const esPrimera = indice === 0;
           const sePuedeCerrar = !esPrimera;
-          // La última pierde el borde derecho porque a su lado no hay otra
-          // pestaña: hay el `+`. Ese borde caía justo sobre el botón y se leía
-          // como una línea que lo separaba, cuando en realidad el `+` no tiene
-          // borde propio. Quitarlo deja al botón pegado a la pestaña, que es la
-          // intención. El `+` siempre se renderiza (deshabilitado en el quinto
-          // ticket), así que la última pestaña siempre es la que hace frontera
-          // con él.
+          const esUltima = indice === tickets.length - 1;
+          // El borde derecho de la última depende de si al lado hay un `+` o no.
+          //
+          // Con el `+` pegado, el borde caía justo sobre el botón y se leía como
+          // una línea que lo separaba de la pestaña, cuando en realidad el `+` no
+          // tiene borde propio. Al llegar al tope el `+` desaparece, y entonces la
+          // última pestaña queda con el flanco derecho abierto: se lee como una
+          // pestaña a la que le falta el borde, y con ella se cae toda la
+          // silueta de la tira. Por eso el borde se pone solo cuando hace falta
+          // para cerrar la forma.
+          const cierraLaTira = esUltima && alTope;
 
           return (
             // El `-mb-px` va en el ENVOLTORIO, no en el botón: el wrapper es el
@@ -113,14 +130,15 @@ export function PosTabs({
                 aria-pressed={activo}
                 className={cn(
                   // Borde por lados, NO el shorthand `border`. El atajo de
-                  //tailwind se lleva las cuatro esquinas y después hay que
+                  // Tailwind se lleva las cuatro esquinas y después hay que
                   // desarmarlo con `border-b-0` y `border-r-0`; peor todavía,
                   // para `tailwind-merge` esos tres son grupos distintos, así que
                   // conviven y gana el que esté último en el CSS generado, no el
-                  // que va último en el string. Por eso `border-r-0` no
-                  // tapaba nada. Declarando solo los lados que se usan, la
-                  // última pestaña se queda SIN borde derecho de verdad.
-                  "flex items-center gap-1.5 border-t border-l py-2 text-sm font-medium transition-colors duration-150 select-none",
+                  // que va último en el string. Por eso `border-r-0` no tapaba
+                  // nada. Declarando los lados que se usan, `cierraLaTira` sí
+                  // agrega el derecho de verdad, sin tener que pelear con nadie.
+                  "flex items-center gap-1.5 border-t border-l py-2 text-sm font-medium transition-colors duration-200 select-none",
+                  cierraLaTira && "border-r",
                   REDONDEO_PESTANA,
                   // `pl-4 pr-8` en vez de `px-4` cuando hay ✕: hace falta ancho a
                   // la derecha, y `px-4` + `pr-8` no se combinan bien — `cn`
@@ -135,7 +153,24 @@ export function PosTabs({
                     : "cursor-pointer bg-slate-100 text-slate-500 hover:text-slate-700 border-slate-200 dark:bg-slate-800/50 dark:text-slate-400 dark:border-slate-800 dark:hover:text-slate-200",
                 )}
               >
-                Ticket {ticket.numero}
+                {/*
+                  La etiqueta se anima sola al activarse la pestaña. No hace
+                  falta estado ni `effect` para re-dispararla: una animación CSS
+                  arranca en el momento en que se agrega la clase, y como la
+                  clase es exactamente `activo && ...`, se agrega al pasar a
+                  activa y se quita al dejar de serlo.
+
+                  Va en un `span` y no en el botón a propósito. El `span` lleva
+                  el desplazamiento y el botón el `transition-colors` del fondo:
+                  son dos capas del mismo gesto, y en el mismo elemento una
+                  pisaría a la otra. Además el fondo tiene que crossfear con
+                  TODAS las pestañas a la vez —cambia el color de la nueva activa
+                  y de la que estaba activa— y eso lo hace la transición del
+                  botón, no la animación de la etiqueta.
+                */}
+                <span className={cn(activo && "animate-entry-up")}>
+                  Ticket {ticket.numero}
+                </span>
               </button>
 
               {/*
@@ -182,33 +217,36 @@ export function PosTabs({
         la última pestaña. El hover solo cambia el color del ícono, igual que en
         las pestañas inactivas; un fondo al hover hacía que el `+` se leyera como
         un elemento aparte y no como parte de la tira.
+
+        En el tope NO se renderiza, en vez de quedar deshabilitado. Un botón
+        apagado al 40% de opacidad es una promesa que el sistema no puede cumplir
+        —no hay un sexto ticket, no hay un estado alternativo— y encima obligaba
+        a mantener el `aria-label` del límite y el `title` para explicarlo. Sin
+        él, la ausencia ES el mensaje: no hay ningún botón porque no hay nada
+        que abrir. Y como la última pestaña es la única cerrable en ese momento
+        —la primera nunca se cierra y las otras cuatro siguen abiertas—, el
+        `+` tampoco era la única forma de seguir trabajando: alcanza con cerrar
+        cualquiera.
       */}
-      <div className="-mb-px shrink-0">
-        <Tooltip content="Abrir un ticket nuevo" placement="bottom">
-          <button
-            type="button"
-            onClick={onNew}
-            disabled={alTope}
-            aria-label={
-              alTope
-                ? `No se pueden abrir más de ${MAX_TICKETS} tickets`
-                : "Abrir un ticket nuevo"
-            }
-            title={
-              alTope ? `Máximo ${MAX_TICKETS} tickets abiertos` : undefined
-            }
-            className={cn(
-              "grid h-9 w-9 shrink-0 cursor-pointer place-items-center transition-colors duration-150",
-              REDONDEO_PESTANA,
-              "text-slate-400 hover:text-emerald-600 dark:text-slate-500 dark:hover:text-emerald-400",
-              "focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 focus-visible:outline-none dark:focus-visible:ring-offset-slate-900",
-              "disabled:pointer-events-none disabled:cursor-default disabled:opacity-40",
-            )}
-          >
-            <Plus size={15} aria-hidden="true" />
-          </button>
-        </Tooltip>
-      </div>
+      {!alTope && (
+        <div className="-mb-px shrink-0">
+          <Tooltip content="Abrir un ticket nuevo" placement="bottom">
+            <button
+              type="button"
+              onClick={onNew}
+              aria-label="Abrir un ticket nuevo"
+              className={cn(
+                "grid h-9 w-9 shrink-0 cursor-pointer place-items-center transition-colors duration-150",
+                REDONDEO_PESTANA,
+                "text-slate-400 hover:text-emerald-600 dark:text-slate-500 dark:hover:text-emerald-400",
+                "focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 focus-visible:outline-none dark:focus-visible:ring-offset-slate-900",
+              )}
+            >
+              <Plus size={15} aria-hidden="true" />
+            </button>
+          </Tooltip>
+        </div>
+      )}
 
       {aConfirmar && (
         <ConfirmModal

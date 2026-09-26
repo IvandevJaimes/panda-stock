@@ -39,11 +39,12 @@ function resumen(over: Partial<ResumenTicket> = {}): ResumenTicket {
   };
 }
 
-function montarCart(over: { resumen?: ResumenTicket; activeTicketId?: string } = {}) {
+function montarCart(over: { resumen?: ResumenTicket; activeTicketId?: string; numeroTicket?: number } = {}) {
   const props = {
     resumen: over.resumen ?? resumen(),
     metodoPago: "efectivo" as MetodoPagoPOS,
     activeTicketId: over.activeTicketId ?? "t1",
+    numeroTicket: over.numeroTicket ?? 1,
     onCambiarMetodoPago: vi.fn(),
     onCambiarCantidad: vi.fn(),
     onQuitar: vi.fn(),
@@ -131,15 +132,20 @@ describe("Cart: zona de items", () => {
     // La animación no reacciona a un estado: reacciona al MONTAJE. Por eso el
     // contenido va envuelto en un nodo con `key={activeTicketId}`, y por eso el
     // test compara identidad de nodo en vez de mirar clases.
+    //
+    // La clase es `animate-entry-up` y no un fade pelado a propósito: con solo
+    // opacidad el reemplazo de una lista por otra pasaba desapercibido. El
+    // desplazamiento es lo que hace legible el cambio, y comparte curva y
+    // duración con la etiqueta de la pestaña activa.
     const { container, props, rerender } = montarCart({ activeTicketId: "t1" });
     const antes = contenedorAnimado(container);
-    expect(clases(antes)).toContain("animate-entry-fade");
+    expect(clases(antes)).toContain("animate-entry-up");
 
     rerender(<Cart {...props} activeTicketId="t2" />);
 
     const despues = contenedorAnimado(container);
     expect(despues).not.toBe(antes);
-    expect(clases(despues)).toContain("animate-entry-fade");
+    expect(clases(despues)).toContain("animate-entry-up");
   });
 
   it("el borde superior del resumen separa la grilla del Subtotal", () => {
@@ -234,6 +240,7 @@ describe("Cart: totales", () => {
         resumen={nuevoResumen}
         metodoPago="efectivo"
         activeTicketId="t1"
+        numeroTicket={1}
         onCambiarMetodoPago={vi.fn()}
         onCambiarCantidad={vi.fn()}
         onQuitar={vi.fn()}

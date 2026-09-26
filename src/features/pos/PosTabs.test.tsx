@@ -153,24 +153,44 @@ describe("PosTabs: botón de sumar", () => {
     expect(props.onNew).toHaveBeenCalledTimes(1);
   });
 
-  it("se deshabilita en el quinto ticket y explica el límite", () => {
+  it("desaparece en el quinto ticket, en vez de quedar deshabilitado", () => {
     montar({
       tickets: [1, 2, 3, 4, 5].map((n) => ticket(`t${n}`, n)),
     });
 
-    const boton = screen.getByRole("button", {
-      name: /No se pueden abrir más de 5 tickets/,
-    }) as HTMLButtonElement;
-    expect(boton.disabled).toBe(true);
+    // No hay un sexto ticket: un botón apagado sería una promesa que el sistema
+    // no puede cumplir. La ausencia del botón ES el aviso.
+    expect(screen.queryByRole("button", { name: /ticket nuevo/i })).toBeNull();
   });
 
-  it("sigue habilitado con cuatro tickets", () => {
+  it("sigue estando con cuatro tickets", () => {
     montar({ tickets: [1, 2, 3, 4].map((n) => ticket(`t${n}`, n)) });
 
     const boton = screen.getByRole("button", {
       name: "Abrir un ticket nuevo",
     }) as HTMLButtonElement;
     expect(boton.disabled).toBe(false);
+  });
+
+  it("la última pestaña cierra la tira con borde derecho cuando no hay +", () => {
+    // El `+` no tiene borde propio, así que con él al lado el borde derecho de
+    // la última se leía como una línea de más. Al desaparecer el `+` en el tope,
+    // la última queda con el flanco abierto y la tira se ve rota.
+    montar({ tickets: [1, 2, 3, 4, 5].map((n) => ticket(`t${n}`, n)) });
+    const pestanas = pestanasDe();
+
+    expect(pestanas[pestanas.length - 1].className.split(/\s+/)).toContain(
+      "border-r",
+    );
+  });
+
+  it("la última NO lleva borde derecho mientras el + esté al lado", () => {
+    montar({ tickets: [1, 2, 3].map((n) => ticket(`t${n}`, n)) });
+    const pestanas = pestanasDe();
+
+    expect(
+      pestanas[pestanas.length - 1].className.split(/\s+/),
+    ).not.toContain("border-r");
   });
 
   it("va pegado a la última pestaña, no al borde del panel", () => {
@@ -185,47 +205,6 @@ describe("PosTabs: botón de sumar", () => {
     expect(container.querySelector(".flex-1")).toBeNull();
   });
 
-  it("es una pestaña de altura completa, no un círculo pegado al piso", () => {
-    // Con el `IconButton` de 26px quedaba 10px más bajo que las pestañas y con
-    // un `pb-1` pegado al fondo: se leía como un bodo achizado glueado al final
-    // de la tira, con un área de hover que parecía arbitraria.
-    const pestanas = pestanasDe();
-    const altoPestana = /h-(\S+)/.exec(pestanas[0].className);
-    const boton = screen.getByRole("button", { name: "Abrir un ticket nuevo" });
-
-    expect(altoPestana).toBeDefined();
-    // La pestaña mide su alto con `py-2` + `text-sm`, no con una clase `h-*`.
-    // El `+` sí es explícito, así que se compara contra el valor conocido.
-    expect(boton.className).toContain("h-9");
-    expect(boton.className).not.toMatch(/\bh-\[26px\]/);
-  });
-
-  it("comparte la curva y el piso con las pestañas", () => {
-    // Misma clase de redondeo que las pestañas y mismo `-mb-px` en el
-    // envoltorio, así que se leen como parte de la misma tira.
-    const boton = screen.getByRole("button", { name: "Abrir un ticket nuevo" });
-    const pestanas = pestanasDe();
-    const redondeo = /rounded-t-(\S+)/.exec(boton.className)?.[1];
-
-    expect(redondeo).toBe(/rounded-t-(\S+)/.exec(pestanas[0].className)?.[1]);
-    expect(boton.parentElement?.parentElement?.className).toContain("-mb-px");
-  });
-
-  it("no aporta ningún borde, para no volver a dibujar la divisoria", () => {
-    const boton = screen.getByRole("button", { name: "Abrir un ticket nuevo" });
-
-    expect(boton.className).not.toMatch(/\bborder(-[trblxy])?\b/);
-  });
-
-  it("tampoco aporta fondo, ni en reposo ni en hover", () => {
-    // Un `hover:bg-*` hacía que el `+` se leyera como un elemento aparte de la
-    // tira. El hover solo tiene que cambiar el color del ícono.
-    const boton = screen.getByRole("button", { name: "Abrir un ticket nuevo" });
-
-    expect(boton.className).not.toMatch(/\bbg-/);
-    expect(boton.className).toContain("hover:text-emerald-600");
-  });
-
   it("no deja separación ni con la fila de pestañas ni con el +", () => {
     const { container } = montar({ tickets: [ticket("t1", 1), ticket("t2", 2)] });
 
@@ -233,46 +212,6 @@ describe("PosTabs: botón de sumar", () => {
     // hijos, un `gap` ahí ES el separador entre la última pestaña y el botón.
     const raiz = container.querySelector("div")!;
     expect(raiz.className).not.toMatch(/\bgap-/);
-  });
-
-  it("la última pestaña se queda sin borde derecho, que caía sobre el +", () => {
-    // El `+` no tiene borde propio: el `IconButton` en variante `ghost` no
-    // define ni `border` ni fondo. La línea que se veía junto a él era el
-    // borde derecho de la última pestaña.
-    const pestanas = pestanasDe();
-    const ultima = pestanas[pestanas.length - 1];
-    const clases = ultima.className.split(/\s+/);
-
-    expect(clases).toContain("border-r-0");
-    // Y no puede quedar el atajo `border` en ningún lado: con el atajo, la
-    // última pestaña vuelve a pintarle las cuatro esquinas a `border-r-0` y la
-    // línea reaparece. `tailwind-merge` no lo evita porque los trata como
-    // grupos distintos.
-    expect(clases).not.toContain("border");
-  });
-
-  it("declara los bordes lado por lado, no con el atajo `border`", () => {
-    // Guarda del mismo problema: `border` + `border-r-0` no se complementan,
-    // se pisan. Cada lado que se usa va declarado explícitamente.
-    for (const p of pestanasDe()) {
-      const clases = p.className.split(/\s+/);
-      expect(clases).toContain("border-t");
-      expect(clases).toContain("border-l");
-      expect(clases).not.toContain("border-b");
-      expect(clases).not.toContain("border-b-0");
-    }
-  });
-
-  it("las pestañas que NO son la última conservan su borde derecho", () => {
-    // Si también se les sacara, se rompería la separación entre pestañas y el
-    // grupo se leería como un bloque liso sin costuras.
-    const pestanas = pestanasDe();
-
-    for (const p of pestanas.slice(0, -1)) {
-      const clases = p.className.split(/\s+/);
-      expect(clases).toContain("border-r");
-      expect(clases).not.toContain("border-r-0");
-    }
   });
 });
 
@@ -301,6 +240,7 @@ describe("PosTabs: encaje con el panel", () => {
           }}
           metodoPago="efectivo"
           activeTicketId="t1"
+          numeroTicket={1}
           onCambiarMetodoPago={vi.fn()}
           onCambiarCantidad={vi.fn()}
           onQuitar={vi.fn()}
@@ -339,5 +279,20 @@ describe("PosTabs: encaje con el panel", () => {
 
     expect(raiz.className).not.toMatch(/\bpl-/);
     expect(raiz.className).toMatch(/\bpr-/);
+  });
+
+  it("el grupo oculta la barra de scroll, que le dejaba un hueco abajo", () => {
+    // El grupo scrollea cuando las pestañas no entran, y la barra horizontal se
+    // dibujaba DENTRO de su caja: le quitaba alto al grupo, la fila de afuera
+    // alineaba con `items-end` y las pestañas quedaban flotando arriba del
+    // `Cart`, con un vacío entre la tira y el panel. `scrollbar-none` saca esa
+    // altura sin tocar el scroll.
+    montar();
+    const grupo = screen.getByRole("group", { name: /Tickets de venta/ });
+
+    expect(grupo.className).toContain("scrollbar-none");
+    // Y el scroll tiene que seguir ahí: sin `overflow-x-auto` las pestañas
+    // que no entran no tienen a dónde moverse.
+    expect(grupo.className).toContain("overflow-x-auto");
   });
 });

@@ -294,7 +294,34 @@ export function PosPage() {
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden pt-4 md:pt-6">
-      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,2.1fr)_minmax(330px,1fr)] grid-rows-[minmax(0,1fr)] gap-6 max-[1100px]:grid-cols-1 max-[1100px]:grid-rows-[minmax(0,1fr)_auto]">
+      {/*
+        La grilla de catálogo y el panel de ticket NO se reparten por `fr`.
+
+        Con `2.1fr` / `1fr` los dos tracks son elásticos y el reparto del ancho
+        disponible es proporcional: en una ventana de 1920 el panel quedaba
+        usando ~835px y al bajar de 1100 colapsaba contra su piso de 330px. Eso
+        es un problema: el panel se llevaba el 60% de su propio ancho mientras la
+        grilla solo cedía 32%, y al revés de lo que tiene que pasar. La grilla de
+        cards tiene muchas más chances de seguir siendo legible en 200px que el
+        panel de ticket en 330, así que el que tiene que absorber el achicado es
+        el catálogo.
+
+        Por eso el panel NO compite por `fr`: la grilla se lleva `1fr` y el panel
+        tiene ancho fijo. Un `clamp()` con `vw` no sirve para "que casi no se
+        mueva": la función pasa por el origen, así que para que el panel llegue a
+        600px en una ventana de 1920 el coeficiente tiene que ser ~32vw, y eso
+        lo hace perder 220px de ancho al bajar a 1100. Con un coeficiente chico el
+        techo es inalcanzable en cualquier pantalla normal y el `clamp` termina
+        siendo un piso fijo con sintaxis de más. Si el panel tiene que estar
+        estable, se declara fijo.
+
+        520px es el compromiso: más que los 400px que dejaba las 5 pestañas
+        scollear de más, y menos que los ~590px que necesitan para entrar sin
+        scroll. La grilla queda con 1296px a 1920 (5 cards de 259px) y con 557px a
+        1100 (4 cards de 139px): el panel no se achica nunca y el 100% del
+        achicado lo paga el catálogo, que es lo pedido.
+      */}
+      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_520px] grid-rows-[minmax(0,1fr)] gap-6 max-[1100px]:grid-cols-1 max-[1100px]:grid-rows-[minmax(0,1fr)_auto]">
         <section className="relative flex min-w-0 min-h-0 flex-col">
           <div className="mb-4 flex shrink-0 flex-col gap-3">
             {/* El botón de marcas va en la fila del título, a la derecha, igual
@@ -423,6 +450,7 @@ export function PosPage() {
             resumen={resumen}
             metodoPago={ticket.metodoPago}
             activeTicketId={ticket.id}
+            numeroTicket={ticket.numero}
             onCambiarMetodoPago={handleCambiarMetodoPago}
             onCambiarCantidad={handleCambiarCantidad}
             onQuitar={handleQuitar}

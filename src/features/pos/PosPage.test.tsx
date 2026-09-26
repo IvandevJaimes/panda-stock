@@ -61,7 +61,9 @@ describe("PosPage", () => {
     render(<PosPage />);
 
     expect(await esperarCatalogo()).toBeTruthy();
-    expect(screen.getByText("Sin productos todavía")).toBeTruthy();
+    // El empty nombra el ticket: con varios abiertos, un texto genérico no
+    // decía cuál de los tickets vacíos estabas mirando.
+    expect(screen.getByText("El ticket 1 está vacío")).toBeTruthy();
     expect(
       screen.getByText("Elegí del catálogo para armar la venta"),
     ).toBeTruthy();
@@ -884,7 +886,7 @@ describe("PosPage", () => {
       screen.getByRole("button", { name: /quitar gaseosa cola del ticket/i }),
     );
     await waitFor(() => {
-      expect(screen.getByText("Sin productos todavía")).toBeTruthy();
+      expect(screen.getByText("El ticket 1 está vacío")).toBeTruthy();
     });
   });
 

@@ -18,6 +18,15 @@ type CartProps = {
    * saltar a otra venta.
    */
   activeTicketId: string
+  /**
+   * Número del ticket activo, para el empty. No es un dato decorativo: con
+   * varios tickets abiertos, "Sin productos todavía" es el mismo texto para
+   * todos, así que al cambiar de pestaña el panel no decía cuál de los tickets
+   * vacíos estabas mirando. El número es lo que ancla la vista al ticket que se
+   * acaba de seleccionar, y va en el empty y no en el encabezado porque el
+   * encabezado tiene que decir "Ticket de venta" siempre, esté vacío o no.
+   */
+  numeroTicket: number
   onCambiarMetodoPago: (metodo: MetodoPagoPOS) => void
   onCambiarCantidad: (productoId: number, cantidad: number) => void
   onQuitar: (productoId: number) => void
@@ -29,6 +38,7 @@ export function Cart({
   resumen,
   metodoPago,
   activeTicketId,
+  numeroTicket,
   onCambiarMetodoPago,
   onCambiarCantidad,
   onQuitar,
@@ -57,14 +67,19 @@ export function Cart({
       </div>
 
       {/* Todo lo que cambia al cambiar de pestaña va dentro de este nodo con
-          `key`. React lo desmonta y monta de nuevo, y como la animación CSS de
-          `.animate-entry-fade` arranca sola en el montaje, el fade se repite en
-          cada cambio sin que ninguna clase ni estado tenga que saber que hay
-          pestañas. `.animate-entry-up` serviría mal: arrastra 6px hacia abajo y
-          el contenido no entra desde abajo, cambia de golpe. */}
+          `key`. React lo desmonta y monta de nuevo, y como la animación CSS
+          arranca sola en el montaje, se repite en cada cambio sin que ninguna
+          clase ni estado tenga que saber que hay pestañas.
+
+          Es `animate-entry-up` y no un fade pelado: acá el contenido no aparece,
+          se REEMPLAZA por el de otro ticket, y con solo opacidad el cambio pasaba
+          desapercibido — veías la lista nueva, pero no veías el cambio. El
+          desplazamiento de 6px es lo que lo vuelve legible. Comparte duración y
+          curva con la etiqueta de la pestaña activa, así los dos movimientos se
+          leen como un gesto único y no como dos animaciones sueltas. */}
       <div
         key={activeTicketId}
-        className="flex min-h-0 flex-1 animate-entry-fade flex-col"
+        className="animate-entry-up flex min-h-0 flex-1 flex-col"
       >
         {/* El scroll va acá y en ningún otro lado: es el único hijo que puede
             crecer sin límites. `min-h-0` es obligatorio — sin él, el `flex-1`
@@ -80,7 +95,7 @@ export function Cart({
                 aria-hidden="true"
               />
               <p className="font-display text-[15px] font-semibold text-slate-600 dark:text-slate-400">
-                Sin productos todavía
+                El ticket {numeroTicket} está vacío
               </p>
               <span className="text-[13px] text-slate-500 dark:text-slate-500">
                 Elegí del catálogo para armar la venta
