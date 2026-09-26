@@ -150,7 +150,9 @@ export function PosTabs({
                       // costura desaparece y la pestaña se lee como la parte de
                       // arriba del panel y no como un elemento pegado.
                       "relative z-10 cursor-default bg-white text-emerald-600 border-slate-200 dark:bg-[#111827] dark:text-emerald-400 dark:border-slate-800"
-                    : "cursor-pointer bg-slate-100 text-slate-500 hover:text-slate-700 border-slate-200 dark:bg-slate-800/50 dark:text-slate-400 dark:border-slate-800 dark:hover:text-slate-200",
+                    : // Inactivas OPACAS, no translúcidas: la tira flota sobre el
+                      // backdrop del drawer y cualquier alpha se paga en contraste.
+                      "cursor-pointer bg-slate-100 text-slate-500 hover:text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800 dark:hover:text-slate-200",
                 )}
               >
                 {/*

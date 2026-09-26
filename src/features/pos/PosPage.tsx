@@ -1,5 +1,5 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
-import { FilterX, Search, TrendingUp } from 'lucide-react'
+import { ChevronLeft, ChevronRight, FilterX, Search, ShoppingCart, TrendingUp } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '../../lib/cn'
 import { CustomSelect } from '../../components/ui/CustomSelect'
@@ -9,6 +9,7 @@ import { LoadingState } from '../../components/ui/LoadingState'
 import { Tooltip } from '../../components/ui/Tooltip'
 import { MarcasModal } from '../../components/inventory/MarcasModal'
 import { useHotkey } from '../../hooks/useHotkey'
+import { useMediaQuery } from '../../hooks/useMediaQuery'
 import { MOD_IS_META } from '../../lib/hotkeys'
 import type { Categoria, Marca, ProductoConLoteActivo } from '../../../electron/db/types'
 import { categoriasService } from '../../services/categorias.service'
@@ -31,6 +32,7 @@ import {
   crearTicket,
   esVendible,
   filtrarCatalogoPOS,
+  formatearMoneda,
   mapearProductosPOS,
   puedeAbrirTicket,
   quitarDelTicket,
@@ -54,6 +56,12 @@ const MOD_TEXTO = MOD_IS_META ? 'Cmd' : 'Ctrl'
 /** Formato W3C para aria-keyshortcuts (ej: "Control+KeyM"). */
 const modAtajo = (tecla: string, shift = false) =>
   `${MOD_IS_META ? 'Meta' : 'Control'}${shift ? '+Shift' : ''}+Key${tecla}`
+
+// Corte del modo colapsable. El mismo número va en el `useMediaQuery` de
+// `ticketColapsable` y en las variantes `max-[1024px]:` de `NoVendiblesBadge` y
+// `ProductGrid`. Tailwind no puede leer esta constante, así que hay que
+// acordarse a mano.
+const ANCHO_MOBILE = 1024
 
 export function PosPage() {
   const [productosCrudos, setProductosCrudos] = useState<ProductoConLoteActivo[]>([])
@@ -191,6 +199,33 @@ export function PosPage() {
 
   const resumen = useMemo(() => resumirTicket(ticket.items), [ticket])
 
+  const ticketColapsable = useMediaQuery(`(max-width: ${ANCHO_MOBILE}px)`)
+
+  // Local a propósito y no en `ui.store`: el `isRightSidebarOpen` de ese store
+  // es el drawer de Ajustes del shell, y compartirlo hacía que abrir el ticket
+  // abriera también Ajustes.
+  const [ticketAbierto, setTicketAbierto] = useState(false)
+  const abrirPanelTicket = useCallback(() => setTicketAbierto(true), [])
+  const cerrarPanelTicket = useCallback(() => setTicketAbierto(false), [])
+
+  // Al volver a escritorio el drawer deja de existir, así que el estado no puede
+  // quedar abierto. Se ajusta en la fase de render y no en un `useEffect` para
+  // no provocar el segundo render en cascada que marca `set-state-in-effect`.
+  const [mobileAlAbrir, setMobileAlAbrir] = useState(ticketColapsable)
+  if (mobileAlAbrir !== ticketColapsable) {
+    setMobileAlAbrir(ticketColapsable)
+    if (!ticketColapsable) setTicketAbierto(false)
+  }
+
+  useEffect(() => {
+    if (!ticketColapsable || !ticketAbierto) return
+    const alPresionar = (evento: KeyboardEvent) => {
+      if (evento.key === 'Escape') cerrarPanelTicket()
+    }
+    window.addEventListener('keydown', alPresionar)
+    return () => window.removeEventListener('keydown', alPresionar)
+  }, [ticketColapsable, ticketAbierto, cerrarPanelTicket])
+
   const handleAgregar = useCallback(
     (producto: ProductoPOS) => {
       setTickets((previos) =>
@@ -295,34 +330,20 @@ export function PosPage() {
   return (
     <div className="flex h-full w-full flex-col overflow-hidden pt-4 md:pt-6">
       {/*
-        La grilla de catálogo y el panel de ticket NO se reparten por `fr`.
+        El panel tiene ancho fijo y la grilla se lleva el resto. Con `fr` los
+        dos tracks son elásticos y el reparto es proporcional, así que el panel
+        se llevó el 60% de su ancho mientras la grilla cedía 32% — al revés de
+        lo que tiene que pasar. Un `clamp(vw)` tampoco sirve: para que el panel
+        llegue a 600px a 1920 el coeficiente tiene que ser ~32vw, y eso lo hace
+        perder 220px al bajar a 1100.
 
-        Con `2.1fr` / `1fr` los dos tracks son elásticos y el reparto del ancho
-        disponible es proporcional: en una ventana de 1920 el panel quedaba
-        usando ~835px y al bajar de 1100 colapsaba contra su piso de 330px. Eso
-        es un problema: el panel se llevaba el 60% de su propio ancho mientras la
-        grilla solo cedía 32%, y al revés de lo que tiene que pasar. La grilla de
-        cards tiene muchas más chances de seguir siendo legible en 200px que el
-        panel de ticket en 330, así que el que tiene que absorber el achicado es
-        el catálogo.
-
-        Por eso el panel NO compite por `fr`: la grilla se lleva `1fr` y el panel
-        tiene ancho fijo. Un `clamp()` con `vw` no sirve para "que casi no se
-        mueva": la función pasa por el origen, así que para que el panel llegue a
-        600px en una ventana de 1920 el coeficiente tiene que ser ~32vw, y eso
-        lo hace perder 220px de ancho al bajar a 1100. Con un coeficiente chico el
-        techo es inalcanzable en cualquier pantalla normal y el `clamp` termina
-        siendo un piso fijo con sintaxis de más. Si el panel tiene que estar
-        estable, se declara fijo.
-
-        520px es el compromiso: más que los 400px que dejaba las 5 pestañas
-        scollear de más, y menos que los ~590px que necesitan para entrar sin
-        scroll. La grilla queda con 1296px a 1920 (5 cards de 259px) y con 557px a
-        1100 (4 cards de 139px): el panel no se achica nunca y el 100% del
-        achicado lo paga el catálogo, que es lo pedido.
+        Las filas del apilado NO pueden llevar `auto`: las dimensiona el
+        contenido, así que un ticket largo crece, la fila `1fr` de la grilla
+        colapsa a 0 y el ticket la tapa. Mobile tiene UNA sola fila porque el
+        ticket es un drawer `fixed`, fuera del flujo.
       */}
-      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_520px] grid-rows-[minmax(0,1fr)] gap-6 max-[1100px]:grid-cols-1 max-[1100px]:grid-rows-[minmax(0,1fr)_auto]">
-        <section className="relative flex min-w-0 min-h-0 flex-col">
+      <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)] gap-6 min-[1025px]:grid-cols-[minmax(0,1fr)_520px]">
+        <section className="relative flex min-w-0 min-h-0 flex-col overflow-hidden">
           <div className="mb-4 flex shrink-0 flex-col gap-3">
             {/* El botón de marcas va en la fila del título, a la derecha, igual
                 que en Inventario: el título y la acción que cambia el
@@ -433,11 +454,51 @@ export function PosPage() {
           {!errorProductos && <NoVendiblesBadge conteo={bloqueo} />}
         </section>
 
-            {/* La columna derecha es una sola cosa: el `sticky` y el reparto de
-                alto viven acá, y el `Cart` solo ocupa lo que queda debajo de
-                las pestañas. Si el `sticky` se quedara en el `Cart`, el panel
-                se iría al scrollear y dejaría las pestañas pegadas arriba. */}
-        <div className="sticky top-4 flex min-h-0 flex-col">
+        {/*
+          `PosTabs` y `Cart` son hermanos directos y sin envoltura: las
+          pestañas son el borde superior del panel, así que tienen que tocar el
+          `Cart` (de ahí el `-mb-px` de cada pestaña).
+
+          `min-h-0` sí o sí: sin él el `flex-1` del `Cart` no baja de su altura
+          de contenido y el flexbox le roba espacio a las pestañas.
+
+          En mobile el mismo `<aside>` pasa a ser `fixed`, o sea que sale del
+          flujo y la grilla de arriba queda con una sola columna. Cerrado lleva
+          `invisible` además de `translate-x-full` porque `translate` solo lo
+          mueve de la pantalla pero lo deja enfocable con el teclado. Este
+          wrapper no lleva fondo a propósito: las tabs tienen que flotar sobre
+          el backdrop, y el `Cart` es el que aporta la superficie.
+        */}
+        <aside
+          className={cn(
+            'relative flex min-h-0 flex-col my-1',
+            ticketColapsable &&
+              cn(
+                // El `top` se cuenta desde `<main>`, no desde el viewport: ese
+                // elemento tiene `transform-gpu` y `will-change-transform`, y
+                // ambas crean un containing block para los descendientes
+                // `fixed`. `<main>` ya arranca debajo del header, así que el
+                // margen de 8px va directo y no hay que sumar los 72 del header.
+                'fixed top-2 right-0 bottom-0 z-40 w-[min(420px,92vw)] shadow-2xl',
+                'transition-transform duration-300 ease-out',
+                ticketAbierto
+                  ? 'translate-x-0'
+                  : 'invisible translate-x-full pointer-events-none',
+              ),
+          )}
+        >
+          {/* Asa en el borde IZQUIERDO: es el borde que el dedo acaba de cruzar. */}
+          {ticketColapsable && ticketAbierto && (
+            <button
+              type="button"
+              onClick={cerrarPanelTicket}
+              aria-label="Cerrar el panel del ticket"
+              className="absolute top-1/2 left-0 z-10 flex -translate-x-1/2 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-slate-200 bg-white p-2.5 text-slate-500 shadow-lg shadow-slate-900/10 transition-colors hover:bg-slate-50 hover:text-slate-700 dark:border-slate-700 dark:bg-secondary dark:text-slate-300 dark:hover:bg-slate-800"
+            >
+              <ChevronRight size={18} aria-hidden="true" />
+            </button>
+          )}
+
           <PosTabs
             tickets={tickets}
             activeTicketId={activeTicketId}
@@ -457,8 +518,67 @@ export function PosPage() {
             onVaciar={handleVaciar}
             onCobrar={handleCobrar}
           />
-        </div>
+        </aside>
       </div>
+
+      {/* Backdrop: `button` y no `div` porque el click para cerrar tiene que ser
+          alcanzable con teclado. Va después de la grilla para no taparle el
+          foco al catálogo. */}
+      {ticketColapsable && ticketAbierto && (
+        <button
+          type="button"
+          onClick={cerrarPanelTicket}
+          aria-label="Cerrar el panel del ticket"
+          className="animate-entry-fade fixed inset-0 z-30 cursor-default bg-slate-900/40 backdrop-blur-[2px]"
+        />
+      )}
+
+      {/* Botón flotante: pill pegado al borde derecho, en la esquina inferior y
+          DEBAJO del de no vendibles. Apilar obliga a que el badge suba y a que
+          `ProductGrid` reserve `max-[1024px]:pb-32`. */}
+      {ticketColapsable && !ticketAbierto && (
+        <button
+          type="button"
+          onClick={abrirPanelTicket}
+          aria-label={
+            resumen.unidades === 0
+              ? `Abrir el ticket ${ticket.numero}, está vacío`
+              : `Abrir el ticket ${ticket.numero} con ${resumen.unidades} ${resumen.unidades === 1 ? 'ítem' : 'ítems'} por ${formatearMoneda(resumen.total)}`
+          }
+          className="animate-stock-fab-in fixed right-0 bottom-4 z-30 flex cursor-pointer items-center gap-2.5 rounded-l-2xl border border-r-0 border-slate-200 bg-white py-3 pr-2.5 pl-3.5 text-left shadow-lg shadow-slate-900/10 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-secondary dark:hover:bg-slate-800"
+        >
+          <ShoppingCart
+            size={18}
+            className="shrink-0 text-emerald-500 dark:text-emerald-400"
+            aria-hidden="true"
+          />
+
+          {/* El número de ticket va primero porque es lo que no se puede deducir
+              de los otros dos datos. */}
+          <span className="flex flex-col items-start leading-tight">
+            <span className="text-[10px] font-semibold tracking-wide text-slate-400 uppercase dark:text-slate-500">
+              Ticket {ticket.numero}
+            </span>
+            <span className="font-display text-sm font-bold tabular-nums text-slate-900 dark:text-white">
+              {resumen.unidades === 0
+                ? 'Vacío'
+                : `${resumen.unidades} ${resumen.unidades === 1 ? 'ítem' : 'ítems'}`}
+              {resumen.unidades > 0 && (
+                <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                  {' · '}
+                  {formatearMoneda(resumen.total)}
+                </span>
+              )}
+            </span>
+          </span>
+
+          <ChevronLeft
+            size={16}
+            className="shrink-0 text-slate-400 dark:text-slate-500"
+            aria-hidden="true"
+          />
+        </button>
+      )}
 
       {/* Elegir una marca la escribe en el buscador en vez de setear un filtro
           aparte: `coincideBusquedaPOS` ya matchea por marca, así que un filtro

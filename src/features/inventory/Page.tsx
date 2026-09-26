@@ -55,6 +55,7 @@ import { EmptyState } from "../../components/ui/EmptyState";
 import { LoadingState } from "../../components/ui/LoadingState";
 import { useCategories } from "../../hooks/useCategories";
 import { useHotkey } from "../../hooks/useHotkey";
+import { useAutoScrollHover } from "../../hooks/useAutoScrollHover";
 import { useBarcodeScanner } from "../../hooks/useBarcodeScanner";
 import { MOD_IS_META } from "../../lib/hotkeys";
 import { Input } from "../../components/ui/Input";
@@ -226,6 +227,8 @@ export function InventoryPage() {
   const [activeKpiFilter, setActiveKpiFilter] = useState<KpiFilter>("all");
   const [paginaActual, setPaginaActual] = useState(1);
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const { ref: refCategorias, alMover: alMoverCategorias, alSalir: alSalirCategorias } =
+    useAutoScrollHover<HTMLDivElement>();
   const [orden, setOrden] = useState<OrdenInventario>("creado_desc");
   const [isCreateCategoryOpen, setIsCreateCategoryOpen] = useState(false);
   const [isCreateProductOpen, setIsCreateProductOpen] = useState(false);
@@ -887,7 +890,7 @@ export function InventoryPage() {
         {/* ── Barra de categorías: anclaje fijo + carrusel desplazable ── */}
         <div className="flex w-full items-center select-none">
             {/* 1. Anclaje fijo: botón Nueva + separador + fondo opaco + máscara degradada */}
-            <div className="relative z-10 flex shrink-0 items-center bg-[#f4f6f8]  pb-2 dark:bg-[#0b0f17]">
+            <div className="relative z-10 flex shrink-0 items-center bg-[#f4f6f8] dark:bg-[#0b0f17]">
               <Tooltip
                 content={`Crear una nueva categoría · ${MOD_TEXTO}+Shift+N`}
                 placement="top"
@@ -917,7 +920,12 @@ export function InventoryPage() {
             </div>
 
             {/* 2. Carrusel desplazable: Todas + categorías */}
-            <div className="custom-scrollbar flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto pl-1 pb-2 pr-8 sm:pr-10">
+            <div
+              ref={refCategorias}
+              onMouseMove={alMoverCategorias}
+              onMouseLeave={alSalirCategorias}
+              className="scrollbar-none flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto pl-1 pr-8 sm:pr-10"
+            >
               <Pill
                 label="Todas"
                 active={selectedCategory === "all"}

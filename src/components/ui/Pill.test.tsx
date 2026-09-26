@@ -12,8 +12,8 @@ describe("Pill", () => {
     const boton = screen.getByRole("button", { name: /bebidas/i });
     expect(boton.tagName).toBe("BUTTON");
     expect(boton).toHaveProperty("type", "button");
-    // El contenedor no debe seguir愨 Role de button, o habría dos controles
-    // para la misma acción y el nombre accesible se duplicaría.
+    // El contenedor no debe seguir siendo Role de button, o habría dos
+    // controles para la misma acción y el nombre accesible se duplicaría.
     expect(boton.parentElement?.getAttribute("role")).toBeNull();
   });
 

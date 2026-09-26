@@ -1,4 +1,5 @@
 import { Pill } from '../../components/ui/Pill'
+import { useAutoScrollHover } from '../../hooks/useAutoScrollHover'
 import type { CategoriaCatalogo } from './posQuery'
 
 type CategoryFilterProps = {
@@ -19,9 +20,14 @@ export function CategoryFilter({
   valor,
   onChange,
 }: CategoryFilterProps) {
+  const { ref, alMover, alSalir } = useAutoScrollHover<HTMLDivElement>()
+
   return (
     <div
-      className="custom-scrollbar flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto pb-1 pl-1 pr-4"
+      ref={ref}
+      onMouseMove={alMover}
+      onMouseLeave={alSalir}
+      className="scrollbar-none flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto pl-1 pr-4"
       role="group"
       aria-label="Filtrar por categoría"
     >

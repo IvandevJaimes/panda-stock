@@ -7,6 +7,7 @@ import type {
   ProductoConLoteActivo,
 } from "../../../electron/db/types";
 import { PosPage } from "./PosPage";
+import { useUIStore } from "../../stores/ui.store";
 
 const categorias: Categoria[] = [{ id: 1, nombre: "Bebidas", activo: true }];
 
@@ -1023,5 +1024,225 @@ describe("PosPage", () => {
       // El título tampoco puede prometer gestión.
       expect(screen.queryByText(/gestionar marcas/i)).toBeNull();
     });
+  });
+});
+
+describe("PosPage · ticket colapsable en mobile", () => {
+  // `matches: true` para cualquier query: a `useMediaQuery` solo le interesa
+  // decidir en qué breakpoint estamos, no calcular nada.
+  function stubVentanaMovil() {
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: true,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+  }
+
+  // El nombre accesible lleva el número adentro (`Abrir el ticket 1, está
+  // vacío`), así que el matcher va flojo: la aserción es sobre la existencia
+  // del botón, no sobre la redacción.
+  const botonAbrir = () =>
+    screen.queryByRole("button", { name: /abrir el ticket \d/i });
+
+  const salidasDeCierre = () =>
+    screen.queryAllByRole("button", { name: /cerrar el panel del ticket/i });
+
+  beforeEach(() => {
+    // El drawer es estado local de `PosPage`, así que cada `render` arranca
+    // cerrado y no hay nada que resetear.
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("en escritorio no hay botón flotante: el ticket ya está a la vista", async () => {
+    render(<PosPage />);
+    await esperarCatalogo();
+
+    expect(botonAbrir()).toBeNull();
+    expect(salidasDeCierre()).toHaveLength(0);
+  });
+
+  it("en mobile muestra el botón flotante y el ticket abre al tocarlo", async () => {
+    stubVentanaMovil();
+    const user = userEvent.setup();
+    render(<PosPage />);
+    await esperarCatalogo();
+
+    expect(botonAbrir()).toBeTruthy();
+    // Cerrado no hay asa ni backdrop: son las dos salidas del panel abierto.
+    expect(salidasDeCierre()).toHaveLength(0);
+
+    await user.click(botonAbrir()!);
+
+    // Lo que se verifica es que aparezcan las salidas: un drawer sin forma de
+    // cerrarse es un callejón sin salida.
+    expect(salidasDeCierre().length).toBeGreaterThan(0);
+    expect(botonAbrir()).toBeNull();
+  });
+
+  it("el botón flotante dice cuántos ítems hay y cuánto suman", async () => {
+    stubVentanaMovil();
+    const user = userEvent.setup();
+    render(<PosPage />);
+    await esperarCatalogo();
+
+    // Vacío lo dice de entrada: abrir un panel a ciegas en mobile hace pensar
+    // que la app no leyó el escaneo.
+    expect(
+      screen.getByRole("button", {
+        name: /abrir el ticket 1, está vacío/i,
+      }),
+    ).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: /agregar gaseosa cola/i }));
+
+    // Con el carrito invisible el total es lo único que confirma que lo
+    // escaneado entró.
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", {
+          name: /abrir el ticket 1 con 1 ítem por \$200\.00/i,
+        }),
+      ).toBeTruthy();
+    });
+  });
+
+  it("el botón flotante dice qué ticket está abierto", async () => {
+    stubVentanaMovil();
+    const user = userEvent.setup();
+    render(<PosPage />);
+    await esperarCatalogo();
+
+    // Por defecto se abre el ticket 1, y al crear un segundo el botón pasa a
+    // anunciar el 2: si se quedara en el 1 mandaría al ticket equivocado.
+    expect(
+      screen.getByRole("button", { name: /abrir el ticket 1,/i }),
+    ).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: /abrir un ticket nuevo/i }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /abrir el ticket 2, está vacío/i }),
+      ).toBeTruthy();
+    });
+    expect(
+      screen.queryByRole("button", { name: /abrir el ticket 1,/i }),
+    ).toBeNull();
+  });
+
+  it("el asa del borde cierra el ticket", async () => {
+    stubVentanaMovil();
+    const user = userEvent.setup();
+    render(<PosPage />);
+    await esperarCatalogo();
+
+    await user.click(botonAbrir()!);
+    expect(salidasDeCierre().length).toBeGreaterThan(0);
+
+    await user.click(salidasDeCierre()[0]);
+
+    await waitFor(() => {
+      expect(salidasDeCierre()).toHaveLength(0);
+    });
+    expect(botonAbrir()).toBeTruthy();
+  });
+
+  it("el backdrop cierra el ticket", async () => {
+    stubVentanaMovil();
+    const user = userEvent.setup();
+    render(<PosPage />);
+    await esperarCatalogo();
+
+    await user.click(botonAbrir()!);
+    // El backdrop es el segundo control: mismo nombre que el asa, pero es el
+    // que cubre el catálogo.
+    await user.click(salidasDeCierre()[1]);
+
+    await waitFor(() => {
+      expect(salidasDeCierre()).toHaveLength(0);
+    });
+  });
+
+  it("Escape cierra el ticket", async () => {
+    stubVentanaMovil();
+    const user = userEvent.setup();
+    render(<PosPage />);
+    await esperarCatalogo();
+
+    await user.click(botonAbrir()!);
+    await user.keyboard("{Escape}");
+
+    await waitFor(() => {
+      expect(salidasDeCierre()).toHaveLength(0);
+    });
+  });
+
+  it("al volver a escritorio el drawer se cierra solo", async () => {
+    const usuario = userEvent.setup();
+
+    // El stub tiene que soportar `change` de verdad: con un `matches` fijo el
+    // test pasaría sin ejercitar nada, porque el drawer seguiría abierto.
+    const suscriptores = new Set<(evento: { matches: boolean }) => void>();
+    let mobile = true;
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      get matches() {
+        return mobile;
+      },
+      media: query,
+      onchange: null,
+      addEventListener: (_tipo: string, fn: (evento: { matches: boolean }) => void) => {
+        suscriptores.add(fn);
+      },
+      removeEventListener: (_tipo: string, fn: (evento: { matches: boolean }) => void) => {
+        suscriptores.delete(fn);
+      },
+      addListener: (fn: (evento: { matches: boolean }) => void) => {
+        suscriptores.add(fn);
+      },
+      removeListener: (fn: (evento: { matches: boolean }) => void) => {
+        suscriptores.delete(fn);
+      },
+      dispatchEvent: () => false,
+    }));
+
+    render(<PosPage />);
+    await esperarCatalogo();
+
+    await usuario.click(botonAbrir()!);
+    expect(salidasDeCierre().length).toBeGreaterThan(0);
+
+    // Se simula lo que hace el navegador al cruzar el breakpoint: cambiar el
+    // resultado y avisarle a los suscriptores.
+    await act(async () => {
+      mobile = false;
+      for (const fn of suscriptores) fn({ matches: false });
+    });
+
+    // El drawer no existe en escritorio, así que el estado no puede quedar
+    // abierto: si quedara, la próxima vez que la ventana se angosta taparía el
+    // catálogo sin que nadie lo pidiera.
+    expect(botonAbrir()).toBeNull();
+    expect(salidasDeCierre()).toHaveLength(0);
+  });
+
+  it("abrir el ticket no toca el drawer de Ajustes", async () => {
+    stubVentanaMovil();
+    const user = userEvent.setup();
+    render(<PosPage />);
+    await esperarCatalogo();
+
+    // El drawer de Ajustes del shell se llama casi igual que el nuestro: este
+    // test existe para que volver a engancharlos salte rojo.
+    await user.click(botonAbrir()!);
+
+    expect(useUIStore.getState().isRightSidebarOpen).toBe(false);
   });
 });

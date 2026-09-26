@@ -53,6 +53,14 @@ Todos los commits deben seguir el estándar de **Conventional Commits traducido 
   - Fuentes tipográficas: `Nunito Sans` para cuerpo/sans y `Rubik` para encabezados/display (`font-display`).
   - Se mantiene la regla global `user-select: none` para experiencia tipo app de escritorio.
 
+### 2.1 Comentarios en el Código
+
+- **Comentá lo no obvio, nada más.** Un comentario tiene que justificar una decisión o advertir sobre una trampa. Si el código ya lo dice, el comentario es ruido.
+- **Prohibido comentar por comentar.** No vale como excusa para describir qué hace la función, aclarar el tipo, ni para narrar un cambio.
+- **Sin comentarios que cuenten la historia del código** ("antes era X", "se cambió porque Y", "ya se intentó Z"). Eso es historial de commits, no código.
+- **Si un comentario necesita más de unas 4 líneas para explicar una línea de código, la decisión está mal tomada.** Revisá el diseño antes que escribir el comentario.
+- **Lo que sí vale la pena:** trampas de CSS o de framework que no se deducen leyendo (containing blocks, orden de cascada, interacciones de `z-index`), invariantes que si se rompen fallan en silencio, y acoplamientos no visibles en el archivo (números que deben coincidir en varios lugares).
+
 ---
 
 ## 🏛️ 3. Arquitectura del Proyecto y Stack Tecnológico

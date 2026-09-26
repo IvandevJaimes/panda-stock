@@ -49,11 +49,13 @@ export function Cart({
   const vacio = resumen.unidades === 0
 
   return (
-    // `min-h-0 flex-1` en vez de `sticky top-4`: el `sticky` pasó a la
-    // columna que envuelve ticket + pestañas, y el alto lo reparte el flex de
-    // esa columna. Acá el panel solo ocupa lo que queda debajo de las pestañas.
-    <aside className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg max-[1100px]:static dark:border-slate-800 dark:bg-[#111827]">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 bg-gradient-to-b from-slate-50 to-white px-[22px] py-[18px] dark:border-slate-800 dark:from-secondary/40 dark:to-[#111827]">
+    // `min-h-0 flex-1` en vez de `sticky`: el alto lo reparte el flex de la
+    // columna `<aside>` de `PosPage`, no el `Cart`.
+    //
+    // El panel trae su propia superficie (borde, radio, sombra y fondo con dark
+    // mode). Por eso `PosPage` NO lo envuelve en otra caja.
+    <aside className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-[#111827]">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 bg-white px-[22px] py-[18px] dark:border-slate-800 dark:bg-[#111827]">
         <div className="flex items-center gap-2.5">
           <Ticket size={20} className="shrink-0 text-emerald-500" aria-hidden="true" />
           <h2 className="font-display text-[17px] tracking-tight text-slate-900 dark:text-slate-100">

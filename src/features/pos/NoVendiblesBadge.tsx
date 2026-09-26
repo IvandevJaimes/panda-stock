@@ -45,7 +45,10 @@ export function NoVendiblesBadge({ conteo }: NoVendiblesBadgeProps) {
         type="button"
         aria-label={`Ver productos no vendibles: ${detalle(conteo)}`}
         className={cn(
-          'animate-stock-fab-in absolute right-4 bottom-4 z-20 inline-flex cursor-pointer items-center gap-1.5',
+          // `bottom-20` hasta 1024: el pill del ticket mide ~56px y se apila
+          // justo debajo, en la misma esquina. El número tiene que ser el mismo
+          // que `ANCHO_MOBILE` en `PosPage`, o el badge queda flotando solo.
+          'animate-stock-fab-in absolute right-4 bottom-4 z-20 inline-flex cursor-pointer items-center gap-1.5 max-[1024px]:bottom-20',
           'rounded-full border border-red-200 bg-white py-2 pr-3 pl-2.5 shadow-lg shadow-slate-900/10',
           'transition-[border-color,box-shadow] duration-150 hover:border-red-300 hover:shadow-xl',
           'dark:border-red-500/30 dark:bg-secondary dark:shadow-black/40 dark:hover:border-red-500/50',

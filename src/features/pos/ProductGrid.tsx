@@ -85,8 +85,21 @@ export function ProductGrid({
     <div
       className={cn(
         contenedor,
-        'grid auto-rows-min px-1 pb-20 pt-1 grid-cols-2 content-start gap-2 overflow-y-auto',
-        'md:grid-cols-3 md:gap-3 lg:grid-cols-4 xl:grid-cols-5',
+        // `pb-32` hasta 1024: el pill del ticket se apila debajo del badge de no
+        // vendibles y sin el padding extra la última fila no se puede despejar.
+        //
+        // Las columnas no son monótonas a propósito: suben a 5 en `md` y bajan
+        // a 3 en 1025, porque hasta 1024 el ticket es `fixed` y no ocupa ancho,
+        // y a partir de ahí se come 520px de grilla. De 1025 para arriba escala
+        // 3 → 4 → 5.
+        //
+        // La banda colapsada va como RANGO (`md:max-[1025px]`) y no como `md:`
+        // porque si no, entre 1025 y 1279 matchean las dos reglas y gana la que
+        // Tailwind emite última: `min-[1025px]` sale antes que `md`, así que
+        // ganaba el 5. Con el rango no hay solape. Y es 1025 y no 1024 porque
+        // las variantes `max-*` de v4 son estrictas (`< 1025px`, no `<=`).
+        'grid auto-rows-min px-1 pb-16 pt-1 grid-cols-3 content-start gap-2 overflow-y-auto max-[1024px]:pb-32',
+        'md:gap-3 md:max-[1025px]:grid-cols-5 min-[1025px]:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5',
       )}
     >
       {productos.map((producto) => (
