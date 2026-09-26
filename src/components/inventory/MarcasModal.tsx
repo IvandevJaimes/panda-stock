@@ -2,14 +2,14 @@ import { useState } from "react";
 import { FilterX, Pencil, Plus, Search, Store, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "../../lib/cn";
-import { Modal } from "../../components/ui/Modal";
-import { CustomSelect } from "../../components/ui/CustomSelect";
-import { Tooltip } from "../../components/ui/Tooltip";
-import { EmptyStateCompact } from "../../components/ui/EmptyStateCompact";
-import { ConfirmModal } from "../../components/ui/ConfirmModal";
-import { Pagination } from "../../components/ui/Pagination";
-import { CreateBrandModal } from "../../components/inventory/CreateBrandModal";
-import { EditBrandModal } from "../../components/inventory/EditBrandModal";
+import { Modal } from "../ui/Modal";
+import { CustomSelect } from "../ui/CustomSelect";
+import { Tooltip } from "../ui/Tooltip";
+import { EmptyStateCompact } from "../ui/EmptyStateCompact";
+import { ConfirmModal } from "../ui/ConfirmModal";
+import { Pagination } from "../ui/Pagination";
+import { CreateBrandModal } from "./CreateBrandModal";
+import { EditBrandModal } from "./EditBrandModal";
 import { marcasService } from "../../services/marcas.service";
 import type { Marca, ProductoConLoteActivo } from "../../../electron/db/types";
 
@@ -25,6 +25,13 @@ export interface MarcasModalProps {
   onChanged?: () => void;
   /** Se llama al hacer click en una card de marca (para filtrar por ella) */
   onSelectMarca?: (nombre: string) => void;
+  /**
+   * Si es false el modal es solo un selector: deja de ofrecer crear, renombrar
+   * y eliminar marcas. El POS lo usa así porque es una pantalla de venta, no de
+   * mantenimiento, y desde el mostrador no corresponde dar de alta ni borrar
+   * marcas. Por defecto true para no cambiar el comportamiento de Inventario.
+   */
+  gestion?: boolean;
 }
 
 const MARCAS_POR_PAGINA = 20;
@@ -42,7 +49,7 @@ const ORDENES_MARCA: { value: OrdenMarca; label: string }[] = [
 // ---------------------------------------------------------------------------
 // Componente
 // ---------------------------------------------------------------------------
-export function MarcasModal({ isOpen, onClose, marcas, productos, onChanged, onSelectMarca }: MarcasModalProps) {
+export function MarcasModal({ isOpen, onClose, marcas, productos, onChanged, onSelectMarca, gestion = true }: MarcasModalProps) {
   const [busquedaMarca, setBusquedaMarca] = useState("");
   const [orden, setOrden] = useState<OrdenMarca>("defecto");
   const [creandoMarca, setCreandoMarca] = useState(false);
@@ -132,7 +139,7 @@ export function MarcasModal({ isOpen, onClose, marcas, productos, onChanged, onS
         <div className="mb-4 flex items-end justify-between gap-3">
           <div>
             <p className="font-display text-base font-semibold text-slate-900 dark:text-white">
-              Gestionar marcas
+              {gestion ? "Gestionar marcas" : "Elegir marca"}
             </p>
             <p className="mt-0.5 text-xs font-medium text-slate-400 dark:text-slate-500">
               {marcasActivas.length}{" "}
@@ -140,14 +147,16 @@ export function MarcasModal({ isOpen, onClose, marcas, productos, onChanged, onS
               {totalProductos === 1 ? "producto asignado" : "productos asignados"}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => setCreandoMarca(true)}
-            className="flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3.5 text-sm font-semibold text-emerald-700 transition-all hover:bg-emerald-500/20 active:scale-95 dark:text-emerald-400"
-          >
-            <Plus className="h-4 w-4" aria-hidden />
-            Nueva marca
-          </button>
+          {gestion && (
+            <button
+              type="button"
+              onClick={() => setCreandoMarca(true)}
+              className="flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3.5 text-sm font-semibold text-emerald-700 transition-all hover:bg-emerald-500/20 active:scale-95 dark:text-emerald-400"
+            >
+              <Plus className="h-4 w-4" aria-hidden />
+              Nueva marca
+            </button>
+          )}
         </div>
 
         {/* Buscador + orden + limpiar */}
@@ -218,7 +227,11 @@ export function MarcasModal({ isOpen, onClose, marcas, productos, onChanged, onS
           <EmptyStateCompact
             icon={<Store className="h-6 w-6" />}
             title="Todavía no hay marcas"
-            description="Creá la primera marca o cargá productos con marca."
+            description={
+              gestion
+                ? "Creá la primera marca o cargá productos con marca."
+                : "No hay marcas cargadas para filtrar."
+            }
           />
         ) : marcasFiltradas.length === 0 ? (
           <EmptyStateCompact
@@ -234,55 +247,57 @@ export function MarcasModal({ isOpen, onClose, marcas, productos, onChanged, onS
                 return (
                   <div
                     key={marca.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => onSelectMarca?.(marca.nombre)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        onSelectMarca?.(marca.nombre);
-                      }
-                    }}
-                    className="flex w-full cursor-pointer items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3.5 shadow-sm transition-colors duration-150 hover:border-emerald-500/50 focus-visible:border-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/30 dark:border-slate-700/70 dark:bg-slate-800/70 dark:shadow-black/10 dark:hover:border-emerald-500/50"
+                    className="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white shadow-sm transition-colors duration-150 hover:border-emerald-500/50 dark:border-slate-700/70 dark:bg-slate-800/70 dark:shadow-black/10 dark:hover:border-emerald-500/50"
                   >
-                    <span className="flex min-w-0 flex-1 flex-col">
-                      <span className="truncate font-display text-[15px] font-semibold leading-tight text-slate-900 dark:text-slate-100">
-                        {marca.nombre}
-                      </span>
-                      <span className="text-xs font-medium text-slate-400 dark:text-slate-500">
-                        {cantidad === 0
-                          ? "Sin productos asignados"
-                          : `${cantidad} ${cantidad === 1 ? "producto asignado" : "productos asignados"}`}
-                      </span>
-                    </span>
-
-                    <div
-                      className="flex shrink-0 items-center gap-1"
-                      onClick={(e) => e.stopPropagation()}
+                    {/* Mismo criterio que en `Pill`: la etiqueta es un
+                        <button> real y las acciones van como HERMANAS. El
+                        markup anterior era un div role="button" con el
+                        onKeyDown a mano que anidaba los botones de editar y
+                        eliminar — HTML inválido que rompe la activación por
+                        teclado. */}
+                    <button
+                      type="button"
+                      onClick={() => onSelectMarca?.(marca.nombre)}
+                      className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-2xl px-4 py-3.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/30"
                     >
-                      <Tooltip content="Editar marca" placement="top">
-                        <button
-                          type="button"
-                          onClick={() => setEditandoMarca(marca)}
-                          aria-label={`Renombrar ${marca.nombre}`}
-                          className="grid h-7 w-7 cursor-pointer place-items-center rounded-lg text-slate-400 transition-colors hover:bg-emerald-50 hover:text-emerald-600 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-400"
-                        >
-                          <Pencil className="h-3.5 w-3.5" aria-hidden />
-                        </button>
-                      </Tooltip>
-                      {cantidad === 0 && (
-                        <Tooltip content="Eliminar marca" placement="top">
+                      <span className="flex min-w-0 flex-1 flex-col">
+                        <span className="truncate font-display text-[15px] font-semibold leading-tight text-slate-900 dark:text-slate-100">
+                          {marca.nombre}
+                        </span>
+                        <span className="text-xs font-medium text-slate-400 dark:text-slate-500">
+                          {cantidad === 0
+                            ? "Sin productos asignados"
+                            : `${cantidad} ${cantidad === 1 ? "producto asignado" : "productos asignados"}`}
+                        </span>
+                      </span>
+                    </button>
+
+                    {gestion && (
+                      <div className="flex shrink-0 items-center gap-1 pr-4">
+                        <Tooltip content="Editar marca" placement="top">
                           <button
                             type="button"
-                            onClick={() => setEliminando(marca)}
-                            aria-label={`Eliminar ${marca.nombre}`}
-                            className="grid h-7 w-7 cursor-pointer place-items-center rounded-lg text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-500/10 dark:hover:text-rose-400"
+                            onClick={() => setEditandoMarca(marca)}
+                            aria-label={`Renombrar ${marca.nombre}`}
+                            className="grid h-7 w-7 cursor-pointer place-items-center rounded-lg text-slate-400 transition-colors hover:bg-emerald-50 hover:text-emerald-600 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-400"
                           >
-                            <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                            <Pencil className="h-3.5 w-3.5" aria-hidden />
                           </button>
                         </Tooltip>
-                      )}
-                    </div>
+                        {cantidad === 0 && (
+                          <Tooltip content="Eliminar marca" placement="top">
+                            <button
+                              type="button"
+                              onClick={() => setEliminando(marca)}
+                              aria-label={`Eliminar ${marca.nombre}`}
+                              className="grid h-7 w-7 cursor-pointer place-items-center rounded-lg text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-500/10 dark:hover:text-rose-400"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                            </button>
+                          </Tooltip>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -305,41 +320,48 @@ export function MarcasModal({ isOpen, onClose, marcas, productos, onChanged, onS
           </>
         )}
 
-        <CreateBrandModal
-          isOpen={creandoMarca}
-          onClose={() => setCreandoMarca(false)}
-          brands={marcasActivas}
-          onSuccess={() => {
-            setCreandoMarca(false);
-            onChanged?.();
-            toast.success("Marca creada correctamente");
-          }}
-        />
+        {/* Los tres modales de gestión no se montan si el modo es selector:
+            son 3 subárboles con estado propio que en el POS no se pueden
+            abrir nunca, y `onChanged` no llega a disparar. */}
+        {gestion && (
+          <>
+            <CreateBrandModal
+              isOpen={creandoMarca}
+              onClose={() => setCreandoMarca(false)}
+              brands={marcasActivas}
+              onSuccess={() => {
+                setCreandoMarca(false);
+                onChanged?.();
+                toast.success("Marca creada correctamente");
+              }}
+            />
 
-        <EditBrandModal
-          isOpen={editandoMarca !== null}
-          onClose={() => setEditandoMarca(null)}
-          brand={editandoMarca}
-          brands={marcasActivas}
-          onSuccess={() => {
-            setEditandoMarca(null);
-            onChanged?.();
-            toast.success("Marca actualizada correctamente");
-          }}
-        />
+            <EditBrandModal
+              isOpen={editandoMarca !== null}
+              onClose={() => setEditandoMarca(null)}
+              brand={editandoMarca}
+              brands={marcasActivas}
+              onSuccess={() => {
+                setEditandoMarca(null);
+                onChanged?.();
+                toast.success("Marca actualizada correctamente");
+              }}
+            />
 
-        <ConfirmModal
-          isOpen={eliminando !== null}
-          onClose={() => setEliminando(null)}
-          onConfirm={confirmarEliminar}
-          title="Eliminar marca"
-          description={
-            eliminando
-              ? `¿Seguro que querés eliminar la marca "${eliminando.nombre}"? Los productos la dejarán de mostrar.`
-              : ""
-          }
-          confirmText="Eliminar"
-        />
+            <ConfirmModal
+              isOpen={eliminando !== null}
+              onClose={() => setEliminando(null)}
+              onConfirm={confirmarEliminar}
+              title="Eliminar marca"
+              description={
+                eliminando
+                  ? `¿Seguro que querés eliminar la marca "${eliminando.nombre}"? Los productos la dejarán de mostrar.`
+                  : ""
+              }
+              confirmText="Eliminar"
+            />
+          </>
+        )}
       </div>
     </Modal>
   );

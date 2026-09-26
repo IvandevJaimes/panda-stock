@@ -35,7 +35,7 @@ import { CreateProductModal } from "./CreateProductModal";
 import { ProductDetailModal } from "./ProductDetailModal";
 import { LotesModal } from "./LotesModal";
 import { ConfirmarPerdidaModal } from "./ConfirmarPerdidaModal";
-import { MarcasModal } from "./MarcasModal";
+import { MarcasModal } from "../../components/inventory/MarcasModal";
 import { InactivosModal } from "./InactivosModal";
 import { ScanBadge } from "./ScanBadge";
 import { esLoteVencido } from "./loteHelpers";
