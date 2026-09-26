@@ -1,14 +1,22 @@
 import { describe, expect, it } from "vitest";
 import {
+  actualizarTicketActivo,
   agregarAlTicket,
+  agregarTicket,
   calcularLinea,
   cambiarCantidadTicket,
+  cambiarMetodoPagoTicket,
+  cerrarTicket,
   construirCategorias,
   contarBloqueados,
+  crearTicket,
+  puedeAbrirTicket,
+  ticketActivo,
   aplicarValorVista,
   aplicarVistaCatalogo,
   etiquetaVista,
   valorVistaActiva,
+  MAX_TICKETS,
   OPCIONES_ORDEN,
   OPCIONES_VISTA,
   type OrdenCatalogo,
@@ -29,6 +37,7 @@ import {
   tipoTarifaPorCantidad,
   tieneStockBajo,
   type ItemTicket,
+  type TicketSession,
 } from "./posQuery";
 import type {
   Categoria,
@@ -754,5 +763,156 @@ describe("formatearMoneda", () => {
   it("muestra el signo peso y dos decimales", () => {
     expect(formatearMoneda(0)).toBe("$0.00");
     expect(formatearMoneda(1234.5)).toBe("$1234.50");
+  });
+});
+
+describe("sesiones de ticket", () => {
+  const producto = productoPOS();
+
+  function sesiones(n: number): TicketSession[] {
+    return Array.from({ length: n }, (_, i) => crearTicket(`t${i + 1}`, i + 1));
+  }
+
+  function conItems(id: string, numero: number, cantidad: number): TicketSession {
+    return {
+      ...crearTicket(id, numero),
+      items: Array.from({ length: cantidad }, (_, i) => ({
+        productoId: i + 1,
+        nombre: `Producto ${i + 1}`,
+        precioVenta: 1000,
+        costo: 700,
+        cantidad: 1,
+        imgPath: null,
+      })),
+    };
+  }
+
+  describe("crearTicket", () => {
+    it("arranca vacío y en efectivo", () => {
+      const ticket = crearTicket("t1", 1);
+      expect(ticket.items).toEqual([]);
+      expect(ticket.metodoPago).toBe("efectivo");
+    });
+  });
+
+  describe("agregarTicket y puedeAbrirTicket", () => {
+    it("agrega al final y numera por posición", () => {
+      const tickets = agregarTicket(sesiones(2), "t3");
+      expect(tickets).toHaveLength(3);
+      expect(tickets[2].id).toBe("t3");
+      expect(tickets[2].numero).toBe(3);
+    });
+
+    it("deja cinco tickets y frena el sexto", () => {
+      let tickets = sesiones(MAX_TICKETS);
+      expect(puedeAbrirTicket(tickets)).toBe(false);
+
+      tickets = agregarTicket(tickets, "t6");
+      expect(tickets).toHaveLength(MAX_TICKETS);
+      // El que se pasó no se agrega: la pestaña nueva ni siquiera debería
+      // aparecer en el listado.
+      expect(tickets.some((t) => t.id === "t6")).toBe(false);
+    });
+
+    it("permite abrir de nuevo después de cerrar una", () => {
+      expect(puedeAbrirTicket(sesiones(MAX_TICKETS - 1))).toBe(true);
+    });
+  });
+
+  describe("actualizarTicketActivo", () => {
+    it("solo toca la sesión indicada y deja las otras con la misma referencia", () => {
+      const tickets = [conItems("t1", 1, 1), conItems("t2", 2, 2)];
+      const resultado = actualizarTicketActivo(tickets, "t2", (items) =>
+        agregarAlTicket(items, producto),
+      );
+
+      // t1 no se toca: misma referencia y mismos items.
+      expect(resultado[0]).toBe(tickets[0]);
+      expect(resultado[0].items).toHaveLength(1);
+      expect(resultado[0].items[0].cantidad).toBe(1);
+
+      // `producto` es el id 1 y `conItems` ya lo dejó en t2, así que
+      // `agregarAlTicket` acumula sobre esa línea en vez de abrir una nueva.
+      // Lo que se verifica es que la mutación cayó en t2: si se aplicara al
+      // primer ticket del arreglo, el cantidad de t1 sería 2.
+      expect(resultado[1].items).toHaveLength(2);
+      expect(resultado[1].items.find((i) => i.productoId === 1)?.cantidad).toBe(2);
+    });
+
+    it("no hace nada si el id no existe", () => {
+      const tickets = sesiones(2);
+      const resultado = actualizarTicketActivo(tickets, "nope", () => [
+        { productoId: 9, nombre: "X", precioVenta: 1, costo: 1, cantidad: 1, imgPath: null },
+      ]);
+      expect(resultado).toEqual(tickets);
+    });
+  });
+
+  describe("cambiarMetodoPagoTicket", () => {
+    it("el método de pago es por sesión, no global", () => {
+      const tickets = sesiones(2);
+      const resultado = cambiarMetodoPagoTicket(tickets, "t2", "transferencia");
+      expect(resultado[0].metodoPago).toBe("efectivo");
+      expect(resultado[1].metodoPago).toBe("transferencia");
+    });
+  });
+
+  describe("cerrarTicket", () => {
+    it("al cerrar el último abre uno nuevo en blanco, número 1", () => {
+      const resultado = cerrarTicket(sesiones(1), "t1", "t1", "t2");
+      expect(resultado.tickets).toHaveLength(1);
+      expect(resultado.tickets[0].id).toBe("t2");
+      expect(resultado.tickets[0].numero).toBe(1);
+      expect(resultado.tickets[0].items).toEqual([]);
+      expect(resultado.activeTicketId).toBe("t2");
+    });
+
+    it("al cerrar el activo cae en el contiguo anterior", () => {
+      const resultado = cerrarTicket(sesiones(3), "t3", "t3", "t4");
+      expect(resultado.tickets.map((t) => t.id)).toEqual(["t1", "t2"]);
+      expect(resultado.activeTicketId).toBe("t2");
+    });
+
+    it("al cerrar el primero de varios cae en el que le sigue", () => {
+      const resultado = cerrarTicket(sesiones(3), "t1", "t1", "t4");
+      expect(resultado.tickets.map((t) => t.id)).toEqual(["t2", "t3"]);
+      expect(resultado.activeTicketId).toBe("t2");
+    });
+
+    it("al cerrar el del medio renumera para que no quede hueco", () => {
+      const resultado = cerrarTicket(sesiones(3), "t2", "t2", "t4");
+      expect(resultado.tickets.map((t) => t.numero)).toEqual([1, 2]);
+      // El tercero pasó de 3 a 2: un hueco del tipo "Ticket 1, Ticket 3" se lee
+      // como un bug.
+      expect(resultado.activeTicketId).toBe("t1");
+    });
+
+    it("cerrar uno que no es el activo no mueve la vista", () => {
+      const resultado = cerrarTicket(sesiones(3), "t2", "t3", "t4");
+      expect(resultado.tickets.map((t) => t.id)).toEqual(["t1", "t3"]);
+      expect(resultado.activeTicketId).toBe("t3");
+    });
+
+    it("conserva el contenido de los tickets que quedan", () => {
+      const tickets = [conItems("t1", 1, 2), conItems("t2", 2, 1)];
+      const resultado = cerrarTicket(tickets, "t1", "t1", "t3");
+      expect(resultado.tickets[0].items).toHaveLength(1);
+    });
+  });
+
+  describe("ticketActivo", () => {
+    it("devuelve la sesión pedida", () => {
+      const tickets = sesiones(2);
+      expect(ticketActivo(tickets, "t2").id).toBe("t2");
+    });
+
+    it("cae en la primera si el id no existe, sin romper", () => {
+      const tickets = sesiones(2);
+      expect(ticketActivo(tickets, "nope").id).toBe("t1");
+    });
+
+    it("degrada a un ticket vacío en vez de devolver undefined", () => {
+      expect(ticketActivo([], "t1").items).toEqual([]);
+    });
   });
 });

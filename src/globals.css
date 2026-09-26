@@ -20,9 +20,10 @@
 
 * {
   user-select: none;
-
 }
-
+*:focus {
+  outline: none;
+}
 /* Reset del tooltip de Tippy: sin fondo ni padding nativos, estilizado por Tailwind */
 .tippy-box {
   background-color: transparent !important;

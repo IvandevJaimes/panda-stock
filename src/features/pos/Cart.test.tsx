@@ -39,10 +39,11 @@ function resumen(over: Partial<ResumenTicket> = {}): ResumenTicket {
   };
 }
 
-function montarCart(over: { resumen?: ResumenTicket } = {}) {
+function montarCart(over: { resumen?: ResumenTicket; activeTicketId?: string } = {}) {
   const props = {
     resumen: over.resumen ?? resumen(),
     metodoPago: "efectivo" as MetodoPagoPOS,
+    activeTicketId: over.activeTicketId ?? "t1",
     onCambiarMetodoPago: vi.fn(),
     onCambiarCantidad: vi.fn(),
     onQuitar: vi.fn(),
@@ -66,6 +67,18 @@ function zonaDeItems(container: HTMLElement): HTMLElement {
   return zona as HTMLElement;
 }
 
+/**
+ * Contenedor con `key` que envuelve la lista y los totales, y que se remonta en
+ * cada cambio de pestaña para repetir la animación de entrada. Es el único hijo
+ * del `aside` que crece; el resto lleva `shrink-0`.
+ */
+function contenedorAnimado(container: HTMLElement): HTMLElement {
+  const zona = zonaDeItems(container);
+  const padre = zona.parentElement;
+  if (!padre) throw new Error("la zona de items no tiene contenedor");
+  return padre as HTMLElement;
+}
+
 function clases(elemento: Element): string {
   return elemento.className;
 }
@@ -82,16 +95,51 @@ describe("Cart: zona de items", () => {
   it("el header y las secciones de abajo no se comprimen", () => {
     // Sin shrink-0, el algoritmo de flex les roba altura a los bloques fijos
     // cuando la lista scrollea, y "Cobrar" se aplasta o se solapa.
+    //
+    // La invariante es de dos niveles desde que la lista y los totales viven
+    // dentro del contenedor animado: en el `aside`, todo lo que NO crece
+    // lleva `shrink-0`; y dentro del contenedor animado, el resumen también.
     const { container } = montarCart();
     const aside = asideDe(container);
+    const animado = contenedorAnimado(container);
 
-    const fijos = Array.from(aside.children).filter(
-      (hijo) => hijo !== zonaDeItems(container),
+    const fijosDelAside = Array.from(aside.children).filter(
+      (hijo) => hijo !== animado,
     );
-    expect(fijos.length).toBeGreaterThan(0);
-    for (const fijo of fijos) {
+    expect(fijosDelAside.length).toBeGreaterThan(0);
+    for (const fijo of fijosDelAside) {
       expect(clases(fijo)).toContain("shrink-0");
     }
+
+    // El contenedor animado es el que crece, y necesita `min-h-0` para poder
+    // bajar de su altura de contenido: sin eso, el flex-1 de la lista de
+    // adentro no scrollea.
+    expect(clases(animado)).toContain("flex-1");
+    expect(clases(animado)).toContain("min-h-0");
+    expect(clases(animado)).toContain("flex-col");
+
+    const fijosDelAnimado = Array.from(animado.children).filter(
+      (hijo) => hijo !== zonaDeItems(container),
+    );
+    expect(fijosDelAnimado.length).toBeGreaterThan(0);
+    for (const fijo of fijosDelAnimado) {
+      expect(clases(fijo)).toContain("shrink-0");
+    }
+  });
+
+  it("el contenido se remonta al cambiar de pestaña y eso repite la animación", () => {
+    // La animación no reacciona a un estado: reacciona al MONTAJE. Por eso el
+    // contenido va envuelto en un nodo con `key={activeTicketId}`, y por eso el
+    // test compara identidad de nodo en vez de mirar clases.
+    const { container, props, rerender } = montarCart({ activeTicketId: "t1" });
+    const antes = contenedorAnimado(container);
+    expect(clases(antes)).toContain("animate-entry-fade");
+
+    rerender(<Cart {...props} activeTicketId="t2" />);
+
+    const despues = contenedorAnimado(container);
+    expect(despues).not.toBe(antes);
+    expect(clases(despues)).toContain("animate-entry-fade");
   });
 
   it("el borde superior del resumen separa la grilla del Subtotal", () => {
@@ -185,6 +233,7 @@ describe("Cart: totales", () => {
       <Cart
         resumen={nuevoResumen}
         metodoPago="efectivo"
+        activeTicketId="t1"
         onCambiarMetodoPago={vi.fn()}
         onCambiarCantidad={vi.fn()}
         onQuitar={vi.fn()}

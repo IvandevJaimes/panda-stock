@@ -1,4 +1,4 @@
-import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react'
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { FilterX, Search, TrendingUp } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '../../lib/cn'
@@ -16,28 +16,36 @@ import { marcasService } from '../../services/marcas.service'
 import { productosService } from '../../services/productos.service'
 import { Cart } from './Cart'
 import { CategoryFilter } from './CategoryFilter'
+import { PosTabs } from './PosTabs'
 import { ProductGrid } from './ProductGrid'
 import { NoVendiblesBadge } from './NoVendiblesBadge'
 import {
+  actualizarTicketActivo,
   agregarAlTicket,
+  agregarTicket,
   cambiarCantidadTicket,
+  cambiarMetodoPagoTicket,
+  cerrarTicket,
   construirCategorias,
   contarBloqueados,
+  crearTicket,
   esVendible,
   filtrarCatalogoPOS,
   mapearProductosPOS,
+  puedeAbrirTicket,
   quitarDelTicket,
   resumirTicket,
   separarPorDisponibilidad,
+  ticketActivo,
   aplicarValorVista,
   aplicarVistaCatalogo,
   etiquetaVista,
   valorVistaActiva,
   OPCIONES_VISTA,
   VISTA_POR_DEFECTO,
-  type ItemTicket,
   type MetodoPagoPOS,
   type ProductoPOS,
+  type TicketSession,
   type VistaCatalogo,
 } from './posQuery'
 
@@ -58,8 +66,21 @@ export function PosPage() {
   const [busqueda, setBusqueda] = useState('')
   const [categoriaId, setCategoriaId] = useState('all')
   const [vista, setVista] = useState<VistaCatalogo>(VISTA_POR_DEFECTO)
-  const [items, setItems] = useState<ItemTicket[]>([])
-  const [metodoPago, setMetodoPago] = useState<MetodoPagoPOS>('efectivo')
+
+  // Cada venta en curso es una sesión con su propio contenido y su propio
+  // método de pago. Siempre hay al menos una: `crearTicket` la abre y
+  // `cerrarTicket` la reabre si era la última, así que la pantalla de venta
+  // nunca queda sin dónde armar la venta siguiente.
+  const [tickets, setTickets] = useState<TicketSession[]>(() => [crearTicket('t1', 1)])
+  const [activeTicketId, setActiveTicketId] = useState('t1')
+
+  /**
+   * Los ids se generan acá y no en `posQuery.ts` a propósito: `crearTicket` es
+   * pura y no puede inventar aleatoriedad. Un contador además deja el id legible
+   * en los tests y en el devtools, cosa que un `randomUUID` no.
+   */
+  const contadorTicket = useRef(1)
+  const siguienteIdTicket = useCallback(() => `t${++contadorTicket.current}`, [])
 
   const busquedaDiferida = useDeferredValue(busqueda)
 
@@ -160,23 +181,83 @@ export function PosPage() {
     [vendiblesDeBusqueda, categorias, categoriaId],
   )
 
-  const resumen = useMemo(() => resumirTicket(items), [items])
+  // Todo el carrito se deriva de la sesión activa: el resumen, el total y el
+  // contador de ítems nunca miran el arreglo completo, así que es imposible
+  // que el total de la pantalla sea el de otra venta.
+  const ticket = useMemo(
+    () => ticketActivo(tickets, activeTicketId),
+    [tickets, activeTicketId],
+  )
 
-  const handleAgregar = useCallback((producto: ProductoPOS) => {
-    setItems((previos) => agregarAlTicket(previos, producto))
-  }, [])
+  const resumen = useMemo(() => resumirTicket(ticket.items), [ticket])
 
-  const handleCambiarCantidad = useCallback((productoId: number, cantidad: number) => {
-    setItems((previos) => cambiarCantidadTicket(previos, productoId, cantidad))
-  }, [])
+  const handleAgregar = useCallback(
+    (producto: ProductoPOS) => {
+      setTickets((previos) =>
+        actualizarTicketActivo(previos, activeTicketId, (items) =>
+          agregarAlTicket(items, producto),
+        ),
+      )
+    },
+    [activeTicketId],
+  )
 
-  const handleQuitar = useCallback((productoId: number) => {
-    setItems((previos) => quitarDelTicket(previos, productoId))
-  }, [])
+  const handleCambiarCantidad = useCallback(
+    (productoId: number, cantidad: number) => {
+      setTickets((previos) =>
+        actualizarTicketActivo(previos, activeTicketId, (items) =>
+          cambiarCantidadTicket(items, productoId, cantidad),
+        ),
+      )
+    },
+    [activeTicketId],
+  )
 
+  const handleQuitar = useCallback(
+    (productoId: number) => {
+      setTickets((previos) =>
+        actualizarTicketActivo(previos, activeTicketId, (items) =>
+          quitarDelTicket(items, productoId),
+        ),
+      )
+    },
+    [activeTicketId],
+  )
+
+  // Vaciar es por sesión, no global: vaciar el ticket que se está mirando no
+  // puede borrar las otras ventas abiertas.
   const handleVaciar = useCallback(() => {
-    setItems([])
+    setTickets((previos) => actualizarTicketActivo(previos, activeTicketId, () => []))
+  }, [activeTicketId])
+
+  const handleCambiarMetodoPago = useCallback(
+    (metodo: MetodoPagoPOS) => {
+      setTickets((previos) =>
+        cambiarMetodoPagoTicket(previos, activeTicketId, metodo),
+      )
+    },
+    [activeTicketId],
+  )
+
+  const handleSelectTicket = useCallback((id: string) => {
+    setActiveTicketId(id)
   }, [])
+
+  const handleNuevoTicket = useCallback(() => {
+    if (!puedeAbrirTicket(tickets)) return
+    const id = siguienteIdTicket()
+    setTickets((previos) => agregarTicket(previos, id))
+    setActiveTicketId(id)
+  }, [tickets, siguienteIdTicket])
+
+  const handleCloseTicket = useCallback(
+    (id: string) => {
+      const resultado = cerrarTicket(tickets, id, activeTicketId, siguienteIdTicket())
+      setTickets(resultado.tickets)
+      setActiveTicketId(resultado.activeTicketId)
+    },
+    [tickets, activeTicketId, siguienteIdTicket],
+  )
 
   const handleLimpiarFiltros = useCallback(() => {
     setBusqueda('')
@@ -185,8 +266,19 @@ export function PosPage() {
   }, [])
 
   const handleCobrar = useCallback(() => {
-    toast.info('El cobro todavía no está conectado: la venta no se registra')
-  }, [])
+    // Sin este guarda, un cobro sobre un ticket vacío anunciaría una venta que
+    // no ocurrió. Hoy el botón llega deshabilitado en ese caso, pero el handler
+    // no debería depender de que eso siga siendo cierto.
+    if (ticket.items.length === 0) return
+
+    // `cerrarTicket` se calcula por fuera del updater a propósito: meter un
+    // `setActiveTicketId` adentro de un `setTickets` es un efecto dentro de un
+    // updater, que React puede ejecutar dos veces en StrictMode.
+    const resultado = cerrarTicket(tickets, activeTicketId, activeTicketId, siguienteIdTicket())
+    setTickets(resultado.tickets)
+    setActiveTicketId(resultado.activeTicketId)
+    toast.success('Venta completada')
+  }, [ticket.items.length, tickets, activeTicketId, siguienteIdTicket])
 
   // La carga reemplaza la página entera, no solo la grilla: renderizar el
   // buscador y el carrito vacíos mientras se cargan los datos se lee como una
@@ -314,15 +406,30 @@ export function PosPage() {
           {!errorProductos && <NoVendiblesBadge conteo={bloqueo} />}
         </section>
 
-        <Cart
-          resumen={resumen}
-          metodoPago={metodoPago}
-          onCambiarMetodoPago={setMetodoPago}
-          onCambiarCantidad={handleCambiarCantidad}
-          onQuitar={handleQuitar}
-          onVaciar={handleVaciar}
-          onCobrar={handleCobrar}
-        />
+            {/* La columna derecha es una sola cosa: el `sticky` y el reparto de
+                alto viven acá, y el `Cart` solo ocupa lo que queda debajo de
+                las pestañas. Si el `sticky` se quedara en el `Cart`, el panel
+                se iría al scrollear y dejaría las pestañas pegadas arriba. */}
+        <div className="sticky top-4 flex min-h-0 flex-col">
+          <PosTabs
+            tickets={tickets}
+            activeTicketId={activeTicketId}
+            onSelect={handleSelectTicket}
+            onNew={handleNuevoTicket}
+            onClose={handleCloseTicket}
+          />
+
+          <Cart
+            resumen={resumen}
+            metodoPago={ticket.metodoPago}
+            activeTicketId={ticket.id}
+            onCambiarMetodoPago={handleCambiarMetodoPago}
+            onCambiarCantidad={handleCambiarCantidad}
+            onQuitar={handleQuitar}
+            onVaciar={handleVaciar}
+            onCobrar={handleCobrar}
+          />
+        </div>
       </div>
 
       {/* Elegir una marca la escribe en el buscador en vez de setear un filtro

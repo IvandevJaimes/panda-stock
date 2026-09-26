@@ -508,6 +508,148 @@ export function quitarDelTicket(
   return items.filter((item) => item.productoId !== productoId)
 }
 
+// ---------------------------------------------------------------------------
+// Sesiones de ticket (pestañas múltiples)
+//
+// Cada venta en curso es una sesión con su propio contenido y su propio método
+// de pago. El método de pago va POR SESIÓN y no global a propósito: con tres
+// ventas abiertas, una esperando transferencia y otra efectivo, un selector
+// único haría que el cajero pagara con el método del ticket que estaba
+// mirando hace un rato, no con el del que tiene delante.
+// ---------------------------------------------------------------------------
+
+/**
+ * Máximo de tickets abiertos a la vez. Cinco es el punto en el que las pestañas
+ * todavía se leen de un vistazo; a partir de ahí "Ticket 5" exige scrollear el
+ * listado para sólo confirmarlo, y confirmar mal un método de pago es un
+ * error de caja.
+ */
+export const MAX_TICKETS = 5
+
+export type TicketSession = {
+  id: string
+  /** Posición 1-based, siempre contigua. Ver `renumerarTickets`. */
+  numero: number
+  items: ItemTicket[]
+  metodoPago: MetodoPagoPOS
+}
+
+export function crearTicket(id: string, numero: number): TicketSession {
+  return { id, numero, items: [], metodoPago: 'efectivo' }
+}
+
+export function puedeAbrirTicket(tickets: TicketSession[]): boolean {
+  return tickets.length < MAX_TICKETS
+}
+
+/**
+ * Abre un ticket nuevo al final. El `numero` sale de la posición, no de un
+ * contador que se incrementa: si algún día se cerrara una pestaña del medio,
+ * el contador dejaría un hueco ("Ticket 1, Ticket 3") que se lee como un bug.
+ */
+export function agregarTicket(
+  tickets: TicketSession[],
+  id: string,
+): TicketSession[] {
+  if (!puedeAbrirTicket(tickets)) return tickets
+  return [...tickets, crearTicket(id, tickets.length + 1)]
+}
+
+/**
+ * Aplica una mutación de items SOLO sobre el ticket indicado. Todas las
+ * mutaciones de `ItemTicket[]` entran por acá, así que agregar, cambiar
+ * cantidad, quitar y vaciar no pueden olvidarse de acotarse a la pestaña
+ * activa: el acotado está en un solo lugar.
+ */
+export function actualizarTicketActivo(
+  tickets: TicketSession[],
+  idActivo: string,
+  mutador: (items: ItemTicket[]) => ItemTicket[],
+): TicketSession[] {
+  return tickets.map((ticket) =>
+    ticket.id === idActivo ? { ...ticket, items: mutador(ticket.items) } : ticket,
+  )
+}
+
+export function cambiarMetodoPagoTicket(
+  tickets: TicketSession[],
+  idActivo: string,
+  metodoPago: MetodoPagoPOS,
+): TicketSession[] {
+  return tickets.map((ticket) =>
+    ticket.id === idActivo ? { ...ticket, metodoPago } : ticket,
+  )
+}
+
+/**
+ * Renumera para que no queden huecos. Compara antes de clonar para conservar
+ * la identidad de las sesiones que no cambian: es lo que evita que cerrar una
+ * pestaña que no tiene nada que ver con la activa la vuelva a renderizar.
+ */
+function renumerarTickets(tickets: TicketSession[]): TicketSession[] {
+  return tickets.map((ticket, indice) =>
+    ticket.numero === indice + 1 ? ticket : { ...ticket, numero: indice + 1 },
+  )
+}
+
+/**
+ * Cierra un ticket y decide cuál queda en pantalla.
+ *
+ * - Si era el último abierto, se crea uno nuevo en blanco: nunca hay cero
+ *   pestañas, porque sin ninguna la pantalla de venta no tiene dónde armar la
+ *   venta siguiente.
+ * - Si se cerró el activo, se muestra el contiguo anterior (que queda ocupando
+ *   el lugar que acaba de quedar libre) o el primero, si se cerró el de más
+ *   abajo. Mirar hacia atrás deja la vista donde estaba el trabajo anterior;
+ *   saltar a la siguiente obligaría a recorrer lo que se acaba de cerrar.
+ * - Si se cerró uno que NO era el activo, la vista no se mueve: el ticket
+ *   abierto sigue abierto y el cajero no pierde lo que estaba mirando.
+ */
+export function cerrarTicket(
+  tickets: TicketSession[],
+  idACerrar: string,
+  idActivo: string,
+  idNuevo: string,
+): { tickets: TicketSession[]; activeTicketId: string } {
+  const indice = tickets.findIndex((ticket) => ticket.id === idACerrar)
+  const restantes = renumerarTickets(
+    tickets.filter((ticket) => ticket.id !== idACerrar),
+  )
+
+  if (restantes.length === 0) {
+    const nuevo = crearTicket(idNuevo, 1)
+    return { tickets: [nuevo], activeTicketId: nuevo.id }
+  }
+
+  if (idACerrar !== idActivo) {
+    return { tickets: restantes, activeTicketId: idActivo }
+  }
+
+  const destino = Math.max(0, indice - 1)
+  return { tickets: restantes, activeTicketId: restantes[destino].id }
+}
+
+/**
+ * Red de seguridad para una rotura del invariante "siempre hay al menos un
+ * ticket". No debería alcanzarse nunca —`crearTicket` y `cerrarTicket` lo
+ * mantienen—, pero un `undefined` acá tumbaría la pantalla de venta entera. Con
+ * esto se degrada a un carrito vacío.
+ */
+export function ticketActivo(
+  tickets: TicketSession[],
+  id: string,
+): TicketSession {
+  return (
+    tickets.find((ticket) => ticket.id === id) ??
+    tickets[0] ?? {
+      id: '',
+      numero: 0,
+      items: [],
+      metodoPago: 'efectivo',
+    }
+  )
+}
+
 export function calcularLinea(item: ItemTicket): LineaTicket {
   const tipoTarifa = tipoTarifaPorCantidad(item.cantidad)
   const precioUnitario = precioUnitarioPorCantidad(item.precioVenta, item.cantidad)
