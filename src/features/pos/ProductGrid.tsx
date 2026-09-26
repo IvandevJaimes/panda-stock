@@ -37,18 +37,29 @@ export function ProductGrid({
   }
 
   if (productos.length === 0) {
-    const agotado = sinStock[0]
+    const haySinStock = sinStock.length > 0
 
     return (
       <div className={cn(contenedor, 'justify-center')}>
-        {agotado ? (
+        {haySinStock ? (
+          // El mensaje no nombra productos. Cuando la búsqueda viene de elegir
+          // una marca, decir "Sin stock: Coca Cola 2L" y "y 3 productos más"
+          // responde a una pregunta que nadie se hizo: el usuario no buscó un
+          // producto, buscó una marca. Y un nombre en el título ages la pantalla
+          // al de un solo artículo, cuando en realidad puede haber una marca
+          // entera detrás. El detalle de qué falta y por qué ya lo cuenta el
+          // badge flotante, que está al lado.
           <EmptyState
             icon={<PackageX className="h-12 w-12 stroke-[1.5] text-red-400 dark:text-red-500" />}
-            title={`Sin stock: ${agotado.nombre}`}
-            description={
-              sinStock.length > 1
-                ? `y ${sinStock.length - 1} producto${sinStock.length - 1 > 1 ? 's' : ''} más sin stock. No se pueden vender desde el punto de venta.`
-                : 'No se puede vender desde el punto de venta.'
+            title="Sin stock"
+            description="Los productos de esta marca no están disponibles para vender."
+            action={
+              onLimpiarFiltros ? (
+                <Button variant="outline" onClick={onLimpiarFiltros}>
+                  <FilterX className="h-4 w-4" aria-hidden />
+                  Limpiar filtros
+                </Button>
+              ) : undefined
             }
           />
         ) : (

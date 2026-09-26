@@ -152,7 +152,7 @@ describe("PosPage", () => {
     await user.type(buscador, "yerba");
 
     await waitFor(() => {
-      expect(screen.getByText(/sin stock: yerba/i)).toBeTruthy();
+      expect(screen.getByText("Sin stock")).toBeTruthy();
     });
   });
 
@@ -439,6 +439,7 @@ describe("PosPage", () => {
   });
 
   it("usa EmptyState de sin stock cuando lo único que coincide está agotado", async () => {
+    const user = userEvent.setup();
     window.electronAPI = {
       productos: {
         getAll: vi.fn().mockResolvedValue([
@@ -453,17 +454,75 @@ describe("PosPage", () => {
     render(<PosPage />);
     await esperarCatalogo();
 
-    await userEvent.setup().type(
-      screen.getByLabelText("Buscar producto"),
-      "yerba",
+    await user.type(screen.getByLabelText("Buscar producto"), "yerba");
+
+    await waitFor(() => {
+      expect(screen.getByText("Sin stock")).toBeTruthy();
+    });
+    expect(
+      screen.getByText(
+        "Los productos de esta marca no están disponibles para vender.",
+      ),
+    ).toBeTruthy();
+    // El mensaje no puede nombrar productos: si la búsqueda viene de elegir una
+    // marca, nadie buscó un producto puntual.
+    expect(screen.queryByText(/yerba/i)).toBeNull();
+  });
+
+  it("el EmptyState de sin stock ofrece limpiar los filtros", async () => {
+    const user = userEvent.setup();
+    window.electronAPI = {
+      productos: {
+        getAll: vi.fn().mockResolvedValue([
+          producto({ id: 1, nombre: "Gaseosa Cola" }),
+          producto({ id: 2, nombre: "Yerba", stockActual: 0 }),
+        ]),
+      },
+      categorias: { getAll: vi.fn().mockResolvedValue(categorias) },
+      marcas: { getAll: vi.fn().mockResolvedValue(marcas) },
+    } as unknown as Window["electronAPI"];
+
+    render(<PosPage />);
+    await esperarCatalogo();
+
+    await user.type(screen.getByLabelText("Buscar producto"), "yerba");
+    await waitFor(() => {
+      expect(screen.getByText("Sin stock")).toBeTruthy();
+    });
+
+    // Hay filtros activos, así que el botón existe y tiene que limpiar.
+    await user.click(
+      screen.getByRole("button", { name: /limpiar filtros/i }),
     );
 
     await waitFor(() => {
-      expect(screen.getByText("Sin stock: Yerba")).toBeTruthy();
+      expect(
+        screen.getByRole("button", { name: /agregar gaseosa cola/i }),
+      ).toBeTruthy();
     });
+  });
+
+  it("el EmptyState de sin stock no ofrece limpiar si no hay filtros", async () => {
+    // Catálogo entero bloqueado y sin búsqueda: no hay nada que limpiar, así
+    // que el botón no debe aparecer.
+    window.electronAPI = {
+      productos: {
+        getAll: vi.fn().mockResolvedValue([
+          producto({ id: 1, nombre: "Gaseosa Cola", stockActual: 0 }),
+        ]),
+      },
+      categorias: { getAll: vi.fn().mockResolvedValue(categorias) },
+      marcas: { getAll: vi.fn().mockResolvedValue(marcas) },
+    } as unknown as Window["electronAPI"];
+
+    render(<PosPage />);
+    await waitFor(() => {
+      expect(screen.getByText("Sin stock")).toBeTruthy();
+    });
+
     expect(
-      screen.getByText("No se puede vender desde el punto de venta."),
-    ).toBeTruthy();
+      screen.queryByRole("button", { name: /limpiar filtros/i }),
+    ).toBeNull();
   });
 
   it("el loading reemplaza la página entera, no solo la grilla", async () => {
@@ -826,6 +885,141 @@ describe("PosPage", () => {
     );
     await waitFor(() => {
       expect(screen.getByText("Sin productos todavía")).toBeTruthy();
+    });
+  });
+
+  describe("búsqueda por marca", () => {
+    const dosMarcas: Marca[] = [
+      { id: 1, nombre: "Coca-Cola", activo: true },
+      { id: 2, nombre: "Pepsi", activo: true },
+      { id: 3, nombre: "Marca Retirada", activo: false },
+    ];
+
+    beforeEach(() => {
+      window.electronAPI = {
+        productos: {
+          getAll: vi.fn().mockResolvedValue([
+            producto({ id: 1, nombre: "Gaseosa Cola", marcaId: 1 }),
+            producto({ id: 2, nombre: "Gaseosa Naranja", marcaId: 2 }),
+          ]),
+        },
+        categorias: { getAll: vi.fn().mockResolvedValue(categorias) },
+        marcas: { getAll: vi.fn().mockResolvedValue(dosMarcas) },
+      } as unknown as Window["electronAPI"];
+    });
+
+    it("el botón muestra el conteo de marcas activas, no el total", async () => {
+      render(<PosPage />);
+      await esperarCatalogo();
+
+      // 3 marcas en total pero solo 2 activas: contar todas mentiría.
+      const boton = screen.getByRole("button", { name: /marcas/i });
+      expect(boton.textContent).toContain("2");
+      expect(boton.textContent).not.toContain("3");
+    });
+
+    it("elegir una marca la escribe en el buscador y filtra el catálogo", async () => {
+      const user = userEvent.setup();
+      render(<PosPage />);
+      await esperarCatalogo();
+
+      await user.click(screen.getByRole("button", { name: /marcas/i }));
+
+      const cardMarca = await screen.findByRole("button", {
+        name: /coca-cola/i,
+      });
+      await user.click(cardMarca);
+
+      // La marca va al buscador, no a un filtro paralelo: coincideBusquedaPOS
+      // ya matchea por marca.
+      await waitFor(() => {
+        expect(
+          (screen.getByLabelText("Buscar producto") as HTMLInputElement).value,
+        ).toBe("Coca-Cola");
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole("button", { name: /agregar gaseosa cola/i }),
+        ).toBeTruthy();
+        expect(
+          screen.queryByRole("button", { name: /agregar gaseosa naranja/i }),
+        ).toBeNull();
+      });
+    });
+
+    it("el botón está en la fila del título, sobre el buscador", async () => {
+      render(<PosPage />);
+      await esperarCatalogo();
+
+      const boton = screen.getByRole("button", { name: /marcas/i });
+      const titulo = screen.getByRole("heading", { name: /vender/i });
+      const buscador = screen.getByLabelText("Buscar producto");
+
+      // Los botones viven en un grupo dentro de la fila del título, y esa fila
+      // está por encima del buscador en el documento.
+      const fila = titulo.parentElement;
+      expect(boton.parentElement?.parentElement).toBe(fila);
+      expect(
+        boton.compareDocumentPosition(buscador) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    });
+
+    it("el botón de más vendidos existe pero todavía no hace nada", async () => {
+      render(<PosPage />);
+      await esperarCatalogo();
+
+      const masVendidos = screen.getByRole("button", {
+        name: /ver los productos más vendidos/i,
+      });
+
+      // Va a la derecha de Marcas, en la misma fila del título.
+      const marcas = screen.getByRole("button", { name: /marcas/i });
+      expect(masVendidos.parentElement).toBe(marcas.parentElement);
+      // Marcas va a la izquierda, así que "más vendidos" lo FOLLOWS.
+      expect(
+        marcas.compareDocumentPosition(masVendidos) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+
+      // Placeholder: deshabilitado para que no sea un click que no hace nada.
+      expect((masVendidos as HTMLButtonElement).disabled).toBe(true);
+    });
+
+    it("Ctrl+M abre el modal de marcas", async () => {
+      const user = userEvent.setup();
+      render(<PosPage />);
+      await esperarCatalogo();
+
+      expect(screen.queryByRole("button", { name: /coca-cola/i })).toBeNull();
+
+      await user.keyboard("{Control>}m{/Control}");
+
+      expect(
+        await screen.findByRole("button", { name: /coca-cola/i }),
+      ).toBeTruthy();
+    });
+
+    it("el modal es de solo consulta: no se puede crear, renombrar ni eliminar", async () => {
+      const user = userEvent.setup();
+      render(<PosPage />);
+      await esperarCatalogo();
+
+      await user.click(screen.getByRole("button", { name: /marcas/i }));
+      await screen.findByRole("button", { name: /coca-cola/i });
+
+      // El POS es una pantalla de venta: desde el mostrador se consulta una
+      // marca, no se da de alta ni se borra.
+      expect(screen.queryByRole("button", { name: /nueva marca/i })).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: /^renombrar/i }),
+      ).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: /^eliminar/i }),
+      ).toBeNull();
+      // El título tampoco puede prometer gestión.
+      expect(screen.queryByText(/gestionar marcas/i)).toBeNull();
     });
   });
 });

@@ -1,11 +1,15 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react'
-import { FilterX, Search } from 'lucide-react'
+import { FilterX, Search, TrendingUp } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '../../lib/cn'
 import { CustomSelect } from '../../components/ui/CustomSelect'
+import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { LoadingState } from '../../components/ui/LoadingState'
 import { Tooltip } from '../../components/ui/Tooltip'
+import { MarcasModal } from '../../components/inventory/MarcasModal'
+import { useHotkey } from '../../hooks/useHotkey'
+import { MOD_IS_META } from '../../lib/hotkeys'
 import type { Categoria, Marca, ProductoConLoteActivo } from '../../../electron/db/types'
 import { categoriasService } from '../../services/categorias.service'
 import { marcasService } from '../../services/marcas.service'
@@ -37,12 +41,19 @@ import {
   type VistaCatalogo,
 } from './posQuery'
 
+/** Modificador de atajos según plataforma: "Ctrl" o "Cmd". */
+const MOD_TEXTO = MOD_IS_META ? 'Cmd' : 'Ctrl'
+/** Formato W3C para aria-keyshortcuts (ej: "Control+KeyM"). */
+const modAtajo = (tecla: string, shift = false) =>
+  `${MOD_IS_META ? 'Meta' : 'Control'}${shift ? '+Shift' : ''}+Key${tecla}`
+
 export function PosPage() {
   const [productosCrudos, setProductosCrudos] = useState<ProductoConLoteActivo[]>([])
   const [categorias, setCategorias] = useState<Categoria[]>([])
   const [marcas, setMarcas] = useState<Marca[]>([])
   const [cargando, setCargando] = useState(true)
   const [errorProductos, setErrorProductos] = useState<string | null>(null)
+  const [marcasAbiertas, setMarcasAbiertas] = useState(false)
 
   const [busqueda, setBusqueda] = useState('')
   const [categoriaId, setCategoriaId] = useState('all')
@@ -51,6 +62,15 @@ export function PosPage() {
   const [metodoPago, setMetodoPago] = useState<MetodoPagoPOS>('efectivo')
 
   const busquedaDiferida = useDeferredValue(busqueda)
+
+  const marcasActivas = useMemo(() => marcas.filter((m) => m.activo).length, [marcas])
+
+  // Ctrl+M → marcas, igual que en Inventario. Se deshabilita con el modal
+  // abierto para no reabrirlo encima del que ya está.
+  useHotkey('mod+m', () => setMarcasAbiertas(true), {
+    enabled: !marcasAbiertas,
+    ignoreInputs: false,
+  })
 
   useEffect(() => {
     let activo = true
@@ -185,10 +205,52 @@ export function PosPage() {
       <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,2.1fr)_minmax(330px,1fr)] grid-rows-[minmax(0,1fr)] gap-6 max-[1100px]:grid-cols-1 max-[1100px]:grid-rows-[minmax(0,1fr)_auto]">
         <section className="relative flex min-w-0 min-h-0 flex-col">
           <div className="mb-4 flex shrink-0 flex-col gap-3">
-            <div>
+            {/* El botón de marcas va en la fila del título, a la derecha, igual
+                que en Inventario: el título y la acción que cambia el
+                filtro conviven, y el buscador queda abajo como la caja donde
+                aterriza la marca elegida. */}
+            <div className="flex items-center justify-between gap-3">
               <h2 className="font-display font-semibold text-2xl tracking-tight text-slate-900 dark:text-white">
                 Vender
               </h2>
+
+              <div className="flex items-center gap-2">
+                <Tooltip
+                  content={`Abrir marcas · ${MOD_TEXTO}+M`}
+                  placement="bottom"
+                >
+                  <Button
+                    variant="outline"
+                    onClick={() => setMarcasAbiertas(true)}
+                    aria-keyshortcuts={modAtajo('M')}
+                    className="whitespace-nowrap rounded-2xl px-2 py-2 text-xs sm:text-sm"
+                  >
+                    Marcas
+                    <span className="select-none rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600 sm:text-xs dark:border-slate-700/80 dark:bg-slate-800 dark:text-slate-300">
+                      {marcasActivas}
+                    </span>
+                  </Button>
+                </Tooltip>
+
+                {/* Placeholder: el pedido fue explícitamente solo el botón, sin
+                    cablear la consulta de más vendidos. Va `disabled` a
+                    propósito para que no sea un click que no hace nada, con
+                    `disabled:opacity-100` para que el fondo se vea entero en
+                    lugar de lavado. Fondo verde suave: se distingue del
+                    outline blanco de Marcas sin competir con el `Cobrar`, que
+                    es el único botón sólido de la pantalla. */}
+                <Tooltip content="Próximamente" placement="bottom">
+                  <Button
+                    variant="ghost"
+                    disabled
+                    aria-label="Ver los productos más vendidos"
+                    className="disabled:opacity-100 whitespace-nowrap rounded-2xl border border-emerald-500/25 bg-emerald-500/10 px-2 py-2.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-500/20 hover:text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/15 dark:text-emerald-400 dark:hover:bg-emerald-500/25"
+                  >
+                    <TrendingUp size={15} className="shrink-0" aria-hidden />
+                    Más vendidos
+                  </Button>
+                </Tooltip>
+              </div>
             </div>
 
             <div className="flex min-w-0 flex-1 items-center gap-1.5">
@@ -262,6 +324,28 @@ export function PosPage() {
           onCobrar={handleCobrar}
         />
       </div>
+
+      {/* Elegir una marca la escribe en el buscador en vez de setear un filtro
+          aparte: `coincideBusquedaPOS` ya matchea por marca, así que un filtro
+          dedicado sería un segundo camino a lo mismo y después habría que
+          mantenerlos sincronizados.
+
+          `gestion={false}`: el POS es una pantalla de venta, no de
+          mantenimiento. Desde el mostrador se consulta una marca, no se dan de
+          alta ni se borran. Por eso tampoco hace falta `onChanged`: si el
+          modal no puede modificar marcas, el catálogo no puede quedar
+          desactualizado. */}
+      <MarcasModal
+        isOpen={marcasAbiertas}
+        onClose={() => setMarcasAbiertas(false)}
+        marcas={marcas}
+        productos={productosCrudos}
+        gestion={false}
+        onSelectMarca={(nombre) => {
+          setBusqueda(nombre)
+          setMarcasAbiertas(false)
+        }}
+      />
     </div>
   )
 }
