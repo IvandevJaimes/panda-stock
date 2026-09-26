@@ -52,6 +52,7 @@ import { AccionGlobalModal } from "./quick-actions/AccionGlobalModal";
 import type { AccionGlobal } from "./quick-actions/AccionGlobalModal";
 import type { QuickActionView } from "./quick-actions/types";
 import { EmptyState } from "../../components/ui/EmptyState";
+import { LoadingState } from "../../components/ui/LoadingState";
 import { useCategories } from "../../hooks/useCategories";
 import { useHotkey } from "../../hooks/useHotkey";
 import { useBarcodeScanner } from "../../hooks/useBarcodeScanner";
@@ -744,6 +745,22 @@ export function InventoryPage() {
     { enabled: !hayModalAbierto },
   );
 
+  // `main` en AppLayout es `flex-1` dentro de una columna `h-screen`, así que
+  // tiene altura definida: `h-full` alcanza y `min-h-[70vh]` sobra. El padding
+  // propio de la página tiene que quedar en el centro —si no, el bloque queda
+  // desplazado hacia abajo y no se ve centrado.
+  if (cargandoProductos && productos.length === 0) {
+    return (
+      <div className="flex h-full w-full items-center justify-center">
+        <LoadingState
+          title="Cargando inventario..."
+          description="Estamos trayendo el inventario desde la base de datos."
+          fullPage
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col gap-3 pt-4 md:pt-6">
       {/* ── Encabezado ── */}
@@ -1051,13 +1068,7 @@ export function InventoryPage() {
       </div>
 
       {/* ── Cuadrícula de productos ── */}
-      {cargandoProductos && productos.length === 0 ? (
-        <EmptyState
-          icon={<Boxes className="h-12 w-12 stroke-[1.5]" />}
-          title="Cargando productos…"
-          description="Estamos trayendo el inventario desde la base de datos."
-        />
-      ) : errorProductos && productos.length === 0 ? (
+      {errorProductos && productos.length === 0 ? (
         <EmptyState
           icon={<AlertTriangle className="h-12 w-12 stroke-[1.5]" />}
           title="No se pudieron cargar los productos"

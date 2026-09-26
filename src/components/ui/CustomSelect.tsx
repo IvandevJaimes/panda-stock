@@ -16,6 +16,12 @@ export interface CustomSelectProps {
   error?: boolean;
   className?: string;
   buttonClassName?: string;
+  /**
+   * Texto del botón cuando el estado no se puede derivar de una única opción.
+   * Se usa cuando varias opciones se combinan en un valor compuesto y el
+   * rótulo tiene que describir la combinación.
+   */
+  displayLabel?: string;
   footerLabel?: string;
   onFooterClick?: () => void;
 }
@@ -29,6 +35,7 @@ export function CustomSelect({
   error = false,
   className,
   buttonClassName,
+  displayLabel,
   footerLabel,
   onFooterClick,
 }: CustomSelectProps) {
@@ -81,7 +88,7 @@ export function CustomSelect({
         )}
       >
         <span className="truncate">
-          {selectedOption ? selectedOption.label : placeholder}
+          {displayLabel ?? (selectedOption ? selectedOption.label : placeholder)}
         </span>
         <ChevronDown
           className={cn(
