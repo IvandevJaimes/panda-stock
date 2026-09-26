@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { Cart } from "./Cart";
@@ -290,6 +290,77 @@ describe("Cart: animación de salida de un item", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("Cart: vaciar el ticket", () => {
+  // `unidades` es lo que decide si el botón está habilitado: sin esto el
+  // ticket cuenta como vacío y el click no dispara nada.
+  const resumenConItems = () =>
+    resumen({
+      lineas: [linea({ productoId: 1, nombre: "Gaseosa Cola" })],
+      unidades: 1,
+      subtotal: 1000,
+      total: 1000,
+    });
+
+  it("pide confirmación y no vacía al primer click", async () => {
+    const user = userEvent.setup();
+    const { props } = montarCart({ resumen: resumenConItems() });
+
+    await user.click(screen.getByRole("button", { name: /^vaciar$/i }));
+
+    // Abrir el modal no es vaciar: el click solo pide permiso.
+    expect(props.onVaciar).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("heading", { name: /vaciar ticket/i }),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/se van a quitar todos los productos del ticket/i),
+    ).toBeTruthy();
+  });
+
+  it("vacía recién cuando se confirma", async () => {
+    const user = userEvent.setup();
+    const { props } = montarCart({ resumen: resumenConItems() });
+
+    await user.click(screen.getByRole("button", { name: /^vaciar$/i }));
+
+    // Con el modal abierto hay dos botones "Vaciar": el del ticket y el de
+    // confirmar. Hay que preguntar adentro del diálogo.
+    const dialogo = await screen.findByRole("dialog");
+    await user.click(within(dialogo).getByRole("button", { name: /^vaciar$/i }));
+
+    expect(props.onVaciar).toHaveBeenCalledTimes(1);
+  });
+
+  it("cancelar no vacía", async () => {
+    const user = userEvent.setup();
+    const { props } = montarCart({ resumen: resumenConItems() });
+
+    await user.click(screen.getByRole("button", { name: /^vaciar$/i }));
+    await user.click(screen.getByRole("button", { name: /cancelar/i }));
+
+    expect(props.onVaciar).not.toHaveBeenCalled();
+  });
+
+  it("el botón de vaciar avisa en rojo al hover", () => {
+    const { container } = montarCart({ resumen: resumenConItems() });
+
+    // Buscarlo por rol y no con querySelector: el primer <button> del aside es
+    // el "−" del stepper del item, no el de Vaciar.
+    const boton = within(asideDe(container)).getByRole("button", {
+      name: /^vaciar$/i,
+    });
+
+    // Vaciar tira trabajo de armado: el hover tiene que anticiparlo.
+    expect(clases(boton)).toMatch(/hover:text-red-/);
+  });
+
+  it("no hay nada que vaciar con el ticket vacío", () => {
+    montarCart();
+    const boton = screen.getByRole("button", { name: /^vaciar$/i });
+    expect((boton as HTMLButtonElement).disabled).toBe(true);
   });
 });
 

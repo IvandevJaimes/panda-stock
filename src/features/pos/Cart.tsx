@@ -1,6 +1,8 @@
+import { useState } from 'react'
 import { ShoppingBag, Ticket, Trash2 } from 'lucide-react'
 import { cn } from '../../lib/cn'
 import { Button } from '../../components/ui/Button'
+import { ConfirmModal } from '../../components/ui/ConfirmModal'
 import { CartItem } from './CartItem'
 import { PaymentMethodSelector } from './PaymentMethodSelector'
 import { formatearMoneda, type MetodoPagoPOS, type ResumenTicket } from './posQuery'
@@ -24,6 +26,7 @@ export function Cart({
   onVaciar,
   onCobrar,
 }: CartProps) {
+  const [confirmandoVaciar, setConfirmandoVaciar] = useState(false)
   const vacio = resumen.unidades === 0
 
   return (
@@ -111,11 +114,11 @@ export function Cart({
       <div className="grid shrink-0 grid-cols-[auto_1fr] gap-3 border-t border-slate-200 px-[22px] pt-3 pb-3.5 max-[600px]:grid-cols-1 dark:border-slate-800">
         <button
           type="button"
-          onClick={onVaciar}
+          onClick={() => setConfirmandoVaciar(true)}
           disabled={vacio}
           className={cn(
             'inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-slate-200 bg-transparent px-[18px] py-2.5 font-display text-sm font-semibold text-slate-600 transition-colors duration-150',
-            'hover:bg-slate-50 hover:text-slate-900 dark:border-slate-800 dark:text-slate-400 dark:hover:bg-secondary/40 dark:hover:text-white',
+            'hover:border-red-300 hover:bg-red-500/10 hover:text-red-600 dark:border-slate-800 dark:text-slate-400 dark:hover:border-red-500/40 dark:hover:bg-red-500/10 dark:hover:text-red-400',
             'disabled:pointer-events-none disabled:opacity-50',
           )}
         >
@@ -140,6 +143,20 @@ export function Cart({
           Cobrar
         </Button>
       </div>
+
+      {/* Vaciar el ticket tira trabajo de armado: si el cajero lo pulsa sin
+          querer, se pierde la venta entera y no hay forma de recuperarla. Por
+          eso pide confirmación. */}
+      <ConfirmModal
+        isOpen={confirmandoVaciar}
+        onClose={() => setConfirmandoVaciar(false)}
+        onConfirm={() => {
+          onVaciar()
+        }}
+        title="Vaciar ticket"
+        description="Se van a quitar todos los productos del ticket. No se puede deshacer."
+        confirmText="Vaciar"
+      />
     </aside>
   )
 }
