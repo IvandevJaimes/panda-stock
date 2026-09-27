@@ -69,6 +69,7 @@ import {
 } from "../../components/ui/ProductCard";
 import { ContextMenu, ContextMenuItem } from "../../components/ui/ContextMenu";
 import { Tooltip } from "../../components/ui/Tooltip";
+import { productoEnTicketAbierto } from "../../stores/pos-tickets.store";
 import { productosService } from "../../services/productos.service";
 import { marcasService } from "../../services/marcas.service";
 import { lotesService } from "../../services/lotes.service";
@@ -434,7 +435,22 @@ export function InventoryPage() {
     [abrirAccionesRapidas],
   );
 
+  /**
+   * Borrar un producto que ya está en un ticket abierto dejaría esa venta
+   * apuntando a algo que no existe. En vez de romperla, se avisa: hay que
+   * cobrar el ticket o sacar la línea primero.
+   *
+   * El guard va acá y no en el `onConfirm` porque los tres caminos de borrado
+   * (card, menú contextual y detalle) pasan por acá, y avisar antes de abrir el
+   * diálogo de confirmación es más honesto que dejar confirmar y después fallar.
+   */
   const eliminarProducto = useCallback((producto: Producto) => {
+    if (productoEnTicketAbierto(producto.id)) {
+      toast.warning(
+        `"${producto.nombre}" está en un ticket abierto. Cobralo o quitá la línea antes de eliminarlo.`,
+      );
+      return;
+    }
     setDeletingProduct(producto);
   }, []);
 
@@ -1358,7 +1374,7 @@ export function InventoryPage() {
             setSelectedProductForDetail(null);
           }}
           onDelete={() => {
-            setDeletingProduct(selectedProductForDetail);
+            eliminarProducto(selectedProductForDetail);
             setSelectedProductForDetail(null);
           }}
           onMutated={() => {
