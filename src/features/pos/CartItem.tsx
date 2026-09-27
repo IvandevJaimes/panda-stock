@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { X } from "lucide-react";
+import { CircleSlash, X } from "lucide-react";
 import { cn } from "../../lib/cn";
 import { IconButton } from "../../components/ui/IconButton";
 import { QuantityStepper } from "../../components/ui/QuantityStepper";
 import { TruncatedText } from "../../components/ui/TruncatedText";
 import { buildAssetUrl } from "../../lib/assets";
 import { getProductPlaceholder } from "../../lib/productPlaceholder";
-import { formatearMoneda, type LineaTicket } from "./posQuery";
+import { formatearMoneda, MOTIVO_SIN_INCREMENTO, type LineaTicket } from "./posQuery";
 import { Tooltip } from "../../components/ui/Tooltip";
 
 /**
@@ -23,6 +23,8 @@ type CartItemProps = {
   onSeleccionar: (indice: number) => void;
   onCambiarCantidad: (productoId: number, cantidad: number) => void;
   onQuitar: (productoId: number) => void;
+  /** El producto se desactivó después de armar la línea: no se puede sumar más. */
+  desactivado?: boolean;
 };
 
 export function CartItem({
@@ -32,6 +34,7 @@ export function CartItem({
   onSeleccionar,
   onCambiarCantidad,
   onQuitar,
+  desactivado = false,
 }: CartItemProps) {
   const [saliendo, setSaliendo] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -97,11 +100,23 @@ export function CartItem({
         <p className="text-xs text-slate-500 dark:text-slate-500">
           {formatearMoneda(linea.precioUnitario)} c/u
         </p>
+        {desactivado && (
+          // El motivo se ve en la fila, no solo en el tooltip del `+`: el atajo
+          // de teclado también queda bloqueado y no tiene tooltip que mostrar.
+          <p
+            className="flex items-center gap-1 text-[11px] font-medium text-amber-600 dark:text-amber-400"
+            data-linea-desactivada=""
+          >
+            <CircleSlash size={11} className="shrink-0" aria-hidden="true" />
+            Desactivado
+          </p>
+        )}
       </div>
 
       <QuantityStepper
         value={linea.cantidad}
         onChange={(cantidad) => onCambiarCantidad(linea.productoId, cantidad)}
+        motivoSinIncremento={desactivado ? MOTIVO_SIN_INCREMENTO : undefined}
         // quantity 0 hace que la línea se elimine sola (ver cambiarCantidadTicket):
         // en el ticket, restar desde 1 equivale a quitar el producto.
         onRemove={() => onCambiarCantidad(linea.productoId, 0)}

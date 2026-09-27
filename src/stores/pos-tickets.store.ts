@@ -27,7 +27,15 @@ export type EstadoTickets = {
   tickets: TicketSession[]
   activeTicketId: string
   agregar: (producto: ProductoPOS) => void
-  cambiarCantidad: (productoId: number, cantidad: number) => void
+  /**
+   * `desactivados` viaja en la llamada y no en el store: es estado de la base,
+   * no de la sesión de tickets. Ver `cambiarCantidadTicket`.
+   */
+  cambiarCantidad: (
+    productoId: number,
+    cantidad: number,
+    desactivados?: Set<number>,
+  ) => void
   quitar: (productoId: number) => void
   vaciarActivo: () => void
   cambiarMetodoPago: (metodo: MetodoPagoPOS) => void
@@ -147,10 +155,10 @@ export const usePosTicketsStore = create<EstadoTickets>()(
           ),
         })),
 
-      cambiarCantidad: (productoId, cantidad) =>
+      cambiarCantidad: (productoId, cantidad, desactivados) =>
         set((estado) => ({
           tickets: actualizarTicketActivo(estado.tickets, estado.activeTicketId, (items) =>
-            cambiarCantidadTicket(items, productoId, cantidad),
+            cambiarCantidadTicket(items, productoId, cantidad, desactivados),
           ),
         })),
 

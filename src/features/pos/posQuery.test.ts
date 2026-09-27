@@ -5,6 +5,7 @@ import {
   agregarTicket,
   calcularLinea,
   cambiarCantidadTicket,
+  idsDesactivados,
   cambiarMetodoPagoTicket,
   cerrarTicket,
   construirCategorias,
@@ -701,6 +702,34 @@ describe("operaciones del ticket", () => {
   it("quita un ítem puntual", () => {
     const items = agregarAlTicket([], producto);
     expect(quitarDelTicket(items, producto.id)).toHaveLength(0);
+  });
+
+  it("una línea de producto desactivado no puede crecer, pero sí bajar", () => {
+    const items = agregarAlTicket([], producto);
+    const desactivados = new Set([producto.id]);
+
+    expect(
+      cambiarCantidadTicket(items, producto.id, 5, desactivados)[0].cantidad,
+    ).toBe(1);
+    expect(
+      cambiarCantidadTicket(items, producto.id, 3, desactivados)[0].cantidad,
+    ).toBe(1);
+    expect(cambiarCantidadTicket(items, producto.id, 0, desactivados)).toHaveLength(0);
+  });
+
+  it("sin el set de desactivados el incremento sigue permitido", () => {
+    const items = agregarAlTicket([], producto);
+    expect(cambiarCantidadTicket(items, producto.id, 5)[0].cantidad).toBe(5);
+  });
+
+  it("idsDesactivados separa los productos apagados de los encendidos", () => {
+    expect(
+      idsDesactivados([
+        { id: 1, activo: true },
+        { id: 2, activo: false },
+        { id: 3, activo: false },
+      ]),
+    ).toEqual(new Set([2, 3]));
   });
 
   it("rechaza agregar un producto agotado o vencido", () => {

@@ -248,6 +248,7 @@ describe("PosTabs: encaje con el panel", () => {
           onCambiarCantidad={vi.fn()}
           onQuitar={vi.fn()}
           onVaciar={vi.fn()}
+        idsDesactivados={new Set()}
           confirmandoVaciar={false}
           onSolicitarVaciar={vi.fn()}
           onCancelarVaciar={vi.fn()}

@@ -34,6 +34,8 @@ type CartProps = {
   onCambiarCantidad: (productoId: number, cantidad: number) => void
   onQuitar: (productoId: number) => void
   onVaciar: () => void
+  /** Ids de productos desactivados: bloquean el `+` de sus líneas. */
+  idsDesactivados: Set<number>
   /** El estado vive en `PosPage` para que `Ctrl+D` abra el mismo confirm. */
   confirmandoVaciar: boolean
   onSolicitarVaciar: () => void
@@ -53,6 +55,7 @@ export function Cart({
   onCambiarCantidad,
   onQuitar,
   onVaciar,
+  idsDesactivados,
   confirmandoVaciar,
   onSolicitarVaciar,
   onCancelarVaciar,
@@ -128,6 +131,7 @@ export function Cart({
                 onSeleccionar={onSeleccionarLinea}
                 onCambiarCantidad={onCambiarCantidad}
                 onQuitar={onQuitar}
+                desactivado={idsDesactivados.has(linea.productoId)}
               />
             ))
           )}

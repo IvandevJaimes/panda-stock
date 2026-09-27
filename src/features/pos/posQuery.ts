@@ -522,12 +522,42 @@ export function agregarAlTicket(
   ]
 }
 
+/**
+ * Motivo único del bloqueo. Vive acá porque lo necesitan a la vez el tooltip
+ * del botón `+` y el atajo de teclado: si el texto viviera en cada uno, un día
+ * uno dice "desactivado" y el otro "inactivo" y nadie sabe cuál es el bueno.
+ */
+export const MOTIVO_SIN_INCREMENTO = 'Producto desactivado: reactivalo para agregar más unidades'
+
+/**
+ * Ids de los productos que están en la base pero desactivados.
+ *
+ * Vive fuera del store de tickets a propósito: `activo` es dato de la base, y
+ * meterlo en Zustand sería duplicar SQLite en memoria. El ticket guarda lo que
+ * el cajero decidió; si después de armar la línea el producto se desactiva,
+ * la línea sigue cobrable pero deja de crecer.
+ */
+export function idsDesactivados(
+  productos: { id: number; activo: boolean }[],
+): Set<number> {
+  return new Set(
+    productos.filter((p) => !p.activo).map((p) => p.id),
+  )
+}
+
 export function cambiarCantidadTicket(
   items: ItemTicket[],
   productoId: number,
   cantidad: number,
+  /** Si el producto está desactivado, la línea no puede crecer: solo bajar o quitar. */
+  desactivados?: Set<number>,
 ): ItemTicket[] {
   if (cantidad <= 0) return items.filter((item) => item.productoId !== productoId)
+
+  const actual = items.find((item) => item.productoId === productoId)
+  if (desactivados?.has(productoId) && actual && cantidad > actual.cantidad) {
+    return items
+  }
 
   return items.map((item) =>
     item.productoId === productoId ? { ...item, cantidad } : item,

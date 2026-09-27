@@ -2,7 +2,7 @@ import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from 'react'
 import { cn } from '../../lib/cn'
 import { Tooltip } from './Tooltip'
 
-type IconButtonVariant = 'ghost' | 'danger' | 'solid'
+type IconButtonVariant = 'ghost' | 'danger' | 'solid' | 'bloqueado'
 type IconButtonSize = 'xs' | 'sm' | 'md'
 type IconButtonShape = 'circle' | 'square'
 
@@ -30,6 +30,15 @@ const variants: Record<IconButtonVariant, string> = {
   danger:
     'text-slate-500 hover:bg-red-500/10 hover:text-red-600 dark:text-slate-400 dark:hover:text-red-400',
   solid: 'bg-emerald-500 text-white hover:bg-emerald-600',
+  /**
+   * Botón inerte: sin cursor de puntero y SIN NINGÚN `hover:`. Las otras
+   * variantes iluminan al pasar el mouse porque invitar a apretar es correcto;
+   * acá no lo es, porque no hace nada.
+   *
+   * Es una variante y no unas clases que anulen los `hover:` de `ghost`: si
+   * `ghost` gana un hover nuevo, esta sigue limpia sin tocar nada.
+   */
+  bloqueado: 'cursor-default opacity-40 text-slate-400 dark:text-slate-500',
 }
 
 const sizes: Record<IconButtonSize, string> = {

@@ -13,6 +13,17 @@ type QuantityStepperProps = {
   onRemove?: () => void
   /** Nombre del item: solo va al nombre accesible, no a los tooltips. */
   itemLabel?: string
+  /**
+   * Motivo por el que el `+` no puede usarse, o `undefined` si puede.
+   *
+   * El bloqueo va con `aria-disabled` y NO con `disabled` a propósito:
+   * `IconButton` pone `disabled:pointer-events-none`, y si el botón no recibe
+   * eventos de puntero el tooltip —que referencia justamente al botón— no
+   * aparecería nunca. Con `aria-disabled` el control sigue siendo alcanzable con
+   * el mouse y el foco, el tooltip explica la causa, y un lector de pantalla
+   * lo anuncia como deshabilitado igual.
+   */
+  motivoSinIncremento?: string
   min?: number
   max?: number
   size?: 'xs' | 'sm'
@@ -30,6 +41,7 @@ export function QuantityStepper({
   onChange,
   onRemove,
   itemLabel,
+  motivoSinIncremento,
   min = 1,
   max = 9999,
   size = 'xs',
@@ -73,9 +85,15 @@ export function QuantityStepper({
         icon={<Plus size={sinIcono} strokeWidth={2.5} />}
         size={size}
         aria-label={`Agregar una unidad de ${nombre}`}
-        tooltip="Agregar 1"
+        tooltip={motivoSinIncremento ?? 'Agregar 1'}
+        aria-disabled={motivoSinIncremento ? true : undefined}
+        data-bloqueado={motivoSinIncremento ? true : undefined}
+        variant={motivoSinIncremento ? 'bloqueado' : 'ghost'}
         disabled={enMaximo}
-        onClick={() => onChange(value + 1)}
+        onClick={() => {
+          if (motivoSinIncremento) return
+          onChange(value + 1)
+        }}
       />
     </div>
   )
