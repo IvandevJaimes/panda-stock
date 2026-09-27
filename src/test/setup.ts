@@ -3,6 +3,7 @@ import { cleanup } from '@testing-library/react'
 import { barcodeScannerService } from '../services/barcode-scanner.service'
 import { usePosTicketsStore } from '../stores/pos-tickets.store'
 import { useScannerStore } from '../stores/scanner.store'
+import { useCajaStore } from '../stores/caja.store'
 
 // jsdom no implementa layout, así que scrollIntoView no existe. Componentes que
 // lo usan para traer un elemento a la vista (ej. CustomSelect al abrir el
@@ -42,4 +43,8 @@ afterEach(() => {
   // las líneas del anterior y falla por estado ajeno.
   localStorage.clear()
   usePosTicketsStore.getState().vaciarPersistencia()
+  // La caja abierta se lee de la base y vive en el store: un test que abra una
+  // caja dejaría al siguiente creyendo que puede cobrar, que es justo el estado
+  // que los tests del cobro necesitan controlar.
+  useCajaStore.setState({ caja: null, cargado: true })
 })

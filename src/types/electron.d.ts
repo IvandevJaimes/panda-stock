@@ -2,6 +2,7 @@ import type {
   AjusteStockInput,
   AperturaCajaInput,
   Caja,
+  CajaConResponsable,
   CajaSummary,
   Categoria,
   CierreCajaInput,
@@ -82,8 +83,8 @@ declare global {
         delete: (id: number) => Promise<void>
       }
       cajas: {
-        getActive: () => Promise<Caja | null>
-        open: (data: AperturaCajaInput) => Promise<Caja>
+        getActive: () => Promise<CajaConResponsable | null>
+        open: (data: AperturaCajaInput) => Promise<CajaConResponsable>
         getSummary: (cajaId: number) => Promise<CajaSummary>
         close: (data: CierreCajaInput) => Promise<Caja>
       }

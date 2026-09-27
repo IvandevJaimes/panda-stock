@@ -31,6 +31,8 @@ import { NoVendiblesBadge } from './NoVendiblesBadge'
 import { useAtajosPOS } from './useAtajosPOS'
 import { useBarcodeScanner } from '../../hooks/useBarcodeScanner'
 import { usePosTicketsStore } from '../../stores/pos-tickets.store'
+import { useCajaStore } from '../../stores/caja.store'
+import { ventasService } from '../../services/ventas.service'
 import {
   siguienteMetodoPago,
   construirCategorias,
@@ -41,6 +43,7 @@ import {
   formatearMoneda,
   idsDesactivados as idsDesactivadosDeCatalogo,
   mapearProductosPOS,
+  metodoPagoARegistro,
   resumirTicket,
   separarPorDisponibilidad,
   ticketActivo,
@@ -86,6 +89,13 @@ export function PosPage() {
   const tickets = usePosTicketsStore((estado) => estado.tickets)
   const activeTicketId = usePosTicketsStore((estado) => estado.activeTicketId)
   const rehidratar = usePosTicketsStore((estado) => estado.rehidratar)
+
+  // Sin caja abierta no hay venta: la fila de `ventas` exige `caja_id` y
+  // `empleado_id`, y sin esa fila una venta cobrada no se puede imputar a nadie
+  // ni contarla en ningún cierre. Por eso el cobro se bloquea, no se "avisa".
+  const caja = useCajaStore((estado) => estado.caja)
+  const cajaCargada = useCajaStore((estado) => estado.cargado)
+  const [cobrando, setCobrando] = useState(false)
 
   /**
    * Los ids se generan acá y no en `posQuery.ts` a propósito: `crearTicket` es
@@ -266,10 +276,10 @@ export function PosPage() {
     irAlTicket,
   } = usePosTicketsStore()
 
-  // La lectora se apaga mientras se carga el catálogo (haría falta mapear
-  // categorías y marcas) y mientras hay algo modal en pantalla: escanear con un
-  // confirm abierto agregaría una línea detrás del diálogo.
-  const scannerHabilitado = !cargando && !confirmandoVaciar && !(ticketColapsable && ticketAbierto)
+  // La lectora se apaga con algo modal en pantalla (agregaría una línea detrás
+  // del diálogo) y mientras se guarda una venta: el ticket se está por cerrar.
+  const scannerHabilitado =
+    !cargando && !confirmandoVaciar && !cobrando && !(ticketColapsable && ticketAbierto)
 
   const handleAgregar = useCallback(
     (producto: ProductoPOS) => agregarAlTicketActivo(producto),
@@ -382,15 +392,86 @@ export function PosPage() {
 
   const handleIrAlTicket = irAlTicket
 
-  const handleCobrar = useCallback(() => {
-    // Sin este guarda, un cobro sobre un ticket vacío anunciaría una venta que
-    // no ocurrió. Hoy el botón llega deshabilitado en ese caso, pero el handler
-    // no debería depender de que eso siga siendo cierto.
+  const motivoCobroBloqueado = !cajaCargada
+    ? 'Verificando la caja…'
+    : caja
+      ? null
+      : 'Abrí la caja desde el encabezado para poder cobrar'
+
+  /**
+   * Candado del cobro en un ref y no en el estado: dos Enters en el mismo tick
+   * llaman al MISMO closure, que todavía ve `cobrando` en `false` porque React no
+   * re-renderizó, y se guardarían dos ventas.
+   */
+  const cobroEnVuelo = useRef(false)
+
+  const handleCobrar = useCallback(async () => {
+    // El handler no confía en que el botón siga deshabilitado para el ticket vacío.
     if (ticket.items.length === 0) return
 
-    cerrarTicketDelStore(activeTicketId, siguienteIdTicket())
-    toast.success('Venta completada')
-  }, [ticket.items.length, activeTicketId, cerrarTicketDelStore, siguienteIdTicket])
+    // Los guards van acá y no solo en el botón porque `Enter` es un atajo: no
+    // pasa por el `onClick` del `Cobrar`.
+    if (cobroEnVuelo.current) return
+
+    if (!caja) {
+      if (cajaCargada) toast.error('Abrí la caja desde el encabezado para poder cobrar')
+      return
+    }
+
+    cobroEnVuelo.current = true
+    setCobrando(true)
+    try {
+      // El monto de cada línea es el precio YA MAYOREO: `resumirTicket` calcula
+      // el 10% de descuento por cantidad. Mandar `precioVenta` y dejar que la
+      // base lo recalcule duplicaría la regla del mayoreo en dos lugares.
+      const venta = await ventasService.process({
+        cajaId: caja.id,
+        empleadoId: caja.empleadoId,
+        subtotal: resumen.subtotal,
+        descuento: resumen.descuento,
+        impuesto: resumen.impuesto,
+        total: resumen.total,
+        items: resumen.lineas.map((linea) => ({
+          productoId: linea.productoId,
+          tipoTarifa: linea.tipoTarifa,
+          descripcionItem: linea.nombre,
+          cantidad: linea.cantidad,
+          precioUnitario: linea.precioUnitario,
+          costoUnitario: linea.costo,
+        })),
+        pagos: [{ metodo: metodoPagoARegistro(ticket.metodoPago), monto: resumen.total }],
+      })
+
+      cerrarTicketDelStore(activeTicketId, siguienteIdTicket())
+      toast.success(`Venta #${venta.ventaId} · ${formatearMoneda(resumen.total)}`)
+
+      // Sin releer el catálogo la grilla muestra el stock anterior y el cajero
+      // puede volver a agregar un producto que ya no queda.
+      try {
+        setProductosCrudos(await productosService.getAll())
+      } catch {
+        // La venta quedó guardada; lo viejo es el stock en pantalla. Avisar el
+        // desfase es mejor que dejar vender de nuevo algo que ya no queda.
+        toast.warning('La venta se guardó, pero no se pudo actualizar el stock en pantalla')
+      }
+    } catch (error) {
+      // El ticket NO se toca: si la base rechazó la venta hay que poder
+      // reintentar sin volver a armarla.
+      toast.error(error instanceof Error ? error.message : 'No se pudo registrar la venta')
+    } finally {
+      cobroEnVuelo.current = false
+      setCobrando(false)
+    }
+  }, [
+    ticket.items.length,
+    ticket.metodoPago,
+    caja,
+    cajaCargada,
+    resumen,
+    activeTicketId,
+    cerrarTicketDelStore,
+    siguienteIdTicket,
+  ])
 
   const {
     lineaSeleccionada,
@@ -627,6 +708,8 @@ export function PosPage() {
             onSolicitarVaciar={() => setConfirmandoVaciar(true)}
             onCancelarVaciar={() => setConfirmandoVaciar(false)}
             onCobrar={handleCobrar}
+            motivoCobroBloqueado={motivoCobroBloqueado}
+            cobrando={cobrando}
           />
         </aside>
       </div>

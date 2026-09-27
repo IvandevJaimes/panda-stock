@@ -57,6 +57,8 @@ function montarCart(over: { resumen?: ResumenTicket; activeTicketId?: string; nu
     onSolicitarVaciar: vi.fn(),
     onCancelarVaciar: vi.fn(),
     onCobrar: vi.fn(),
+    motivoCobroBloqueado: null,
+    cobrando: false,
   };
   const utils = render(<Cart {...props} />);
   return { container: utils.container, props, rerender: utils.rerender };
@@ -260,6 +262,8 @@ describe("Cart: totales", () => {
         onSolicitarVaciar={vi.fn()}
         onCancelarVaciar={vi.fn()}
         onCobrar={vi.fn()}
+        motivoCobroBloqueado={null}
+        cobrando={false}
       />,
     );
 

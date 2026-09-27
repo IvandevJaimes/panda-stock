@@ -34,6 +34,7 @@ import type {
   AjusteStockInput,
   AperturaCajaInput,
   Caja,
+  CajaConResponsable,
   CajaSummary,
   Categoria,
   CierreCajaInput,
@@ -701,31 +702,119 @@ export function getLotesPorVencer(diasLimite: number): Lote[] {
     .all()
 }
 
-export function getActiveCaja(): Caja | null {
+export function getActiveCaja(): CajaConResponsable | null {
   return getDb()
-    .select()
+    .select({
+      id: cajas.id,
+      empleadoId: cajas.empleadoId,
+      empleadoNombre: empleados.nombre,
+      montoInicial: cajas.montoInicial,
+      montoEsperado: cajas.montoEsperado,
+      montoReal: cajas.montoReal,
+      diferencia: cajas.diferencia,
+      estado: cajas.estado,
+      fechaApertura: cajas.fechaApertura,
+      fechaCierre: cajas.fechaCierre,
+      observaciones: cajas.observaciones,
+    })
     .from(cajas)
+    .innerJoin(empleados, eq(empleados.id, cajas.empleadoId))
     .where(eq(cajas.estado, 'abierta'))
     .orderBy(desc(cajas.id))
     .get() ?? null
 }
 
-export function openCaja(data: AperturaCajaInput): Caja {
-  const db = getDb()
-  const activa = getActiveCaja()
-  if (activa) throw new Error('Ya existe una caja abierta')
+/**
+ * La comparación va en JS y no con `lower()` de SQLite porque ese no le saca los
+ * acentos: "José" y "jose" darían empleados distintos y la caja quedaría partida
+ * en dos.
+ */
+function normalizarNombre(nombre: string): string {
+  return nombre
+    .trim()
+    .replace(/\s+/g, ' ')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+}
 
-  return db
-    .insert(cajas)
-    .values({
-      empleadoId: data.empleadoId,
-      montoInicial: data.montoInicial ?? 0,
-      estado: 'abierta',
-      fechaApertura: new Date().toISOString(),
-      observaciones: data.observaciones ?? null,
-    })
-    .returning()
+export function openCaja(data: AperturaCajaInput): CajaConResponsable {
+  const db = getDb()
+  const nombre = data.responsable.trim().replace(/\s+/g, ' ')
+  if (!nombre) throw new Error('El nombre del responsable es obligatorio')
+
+  // El chequeo de "ya hay una caja abierta" va adentro y no antes: leer afuera es
+  // una carrera, y dos cajas abiertas romperían el reparto de la venta.
+  return db.transaction((tx) => {
+    const activa = tx
+      .select({ id: cajas.id })
+      .from(cajas)
+      .where(eq(cajas.estado, 'abierta'))
+      .get()
+    if (activa) throw new Error('Ya existe una caja abierta')
+
+    const clave = normalizarNombre(nombre)
+    const existente = tx
+      .select()
+      .from(empleados)
+      .all()
+      .find((empleado) => normalizarNombre(empleado.nombre) === clave)
+
+    const empleadoId =
+      existente?.id ??
+      tx
+        .insert(empleados)
+        .values({ nombre, creadoEn: new Date().toISOString() })
+        .returning({ id: empleados.id })
+        .get().id
+
+    // Un empleado desactivado que vuelve a abrir caja tiene que reactivarse: si
+    // se reutilizara el registro tal cual, sus ventas quedarían marcadas como de
+    // alguien dado de baja.
+    if (existente && !existente.activo) {
+      tx.update(empleados).set({ activo: true }).where(eq(empleados.id, existente.id)).run()
+    }
+
+    const caja = tx
+      .insert(cajas)
+      .values({
+        empleadoId,
+        montoInicial: data.montoInicial ?? 0,
+        estado: 'abierta',
+        fechaApertura: new Date().toISOString(),
+        observaciones: data.observaciones?.trim() || null,
+      })
+      .returning()
+      .get()
+
+    return { ...caja, empleadoNombre: nombre }
+  })
+}
+
+/**
+ * Fondo inicial + efectivo cobrado. Vive acá porque `closeCaja` necesita el mismo
+ * número que muestra el modal: duplicar la fórmula garantiza que dejen de
+ * coincidir.
+ */
+function montoEsperadoDeCaja(
+  db: Pick<ReturnType<typeof getDb>, 'select'>,
+  cajaId: number,
+  montoInicial: number,
+): number {
+  const fila = db
+    .select({ efectivo: sql<number>`coalesce(sum(${pagos.monto}), 0)` })
+    .from(pagos)
+    .innerJoin(ventas, eq(pagos.ventaId, ventas.id))
+    .where(
+      and(
+        eq(ventas.cajaId, cajaId),
+        eq(ventas.estado, 'completada'),
+        eq(pagos.metodo, 'efectivo'),
+      ),
+    )
     .get()
+
+  return montoInicial + (fila?.efectivo ?? 0)
 }
 
 export function getCajaSummary(cajaId: number): CajaSummary {
@@ -733,9 +822,16 @@ export function getCajaSummary(cajaId: number): CajaSummary {
   const resumenVentas = db
     .select({
       totalVentas: sql<number>`coalesce(sum(${ventas.total}), 0)`,
+      cantidadVentas: sql<number>`count(*)`,
     })
     .from(ventas)
     .where(and(eq(ventas.cajaId, cajaId), eq(ventas.estado, 'completada')))
+    .get()
+
+  const filaCaja = db
+    .select({ montoInicial: cajas.montoInicial })
+    .from(cajas)
+    .where(eq(cajas.id, cajaId))
     .get()
 
   const filasMetodo = db
@@ -761,9 +857,11 @@ export function getCajaSummary(cajaId: number): CajaSummary {
 
   return {
     totalVentas: resumenVentas?.totalVentas ?? 0,
+    cantidadVentas: resumenVentas?.cantidadVentas ?? 0,
     totalEfectivo,
     totalTransferencia,
     totalTarjeta,
+    montoEsperado: montoEsperadoDeCaja(db, cajaId, filaCaja?.montoInicial ?? 0),
   }
 }
 
@@ -775,15 +873,7 @@ export function closeCaja(data: CierreCajaInput): Caja {
     if (!filaCaja) throw new Error('Caja no encontrada')
     if (filaCaja.estado === 'cerrada') throw new Error('La caja ya está cerrada')
 
-    const resumen = tx
-      .select({
-        total: sql<number>`coalesce(sum(${ventas.total}), 0)`,
-      })
-      .from(ventas)
-      .where(and(eq(ventas.cajaId, data.cajaId), eq(ventas.estado, 'completada')))
-      .get()
-
-    const montoEsperado = filaCaja.montoInicial + (resumen?.total ?? 0)
+    const montoEsperado = montoEsperadoDeCaja(tx, data.cajaId, filaCaja.montoInicial)
 
     return tx
       .update(cajas)
@@ -883,21 +973,12 @@ export function processSale(venta: VentaCompletaInput): VentaResult {
       }
 
       if (restante > 0) {
-        tx.insert(movimientosStock)
-          .values({
-            productoId: item.productoId,
-            loteId: null,
-            ventaId: idVenta,
-            tipo: 'venta',
-            cantidad: restante,
-            stockAnterior: stock,
-            stockPosterior: stock - restante,
-            motivo: null,
-            fechaHora: ahora,
-          })
-          .run()
-
-        stock -= restante
+        // Throw y no stock negativo: un lote en negativo rompe el FEFO de las
+        // ventas siguientes. Estamos en la transacción, así que se revierte
+        // entera, venta y movimientos.
+        throw new Error(
+          `Stock insuficiente de "${item.descripcionItem}": quedan ${stock} unidades y la venta pide ${item.cantidad}`,
+        )
       }
 
       tx.update(productos)

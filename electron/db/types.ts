@@ -159,8 +159,12 @@ export type Caja = {
   observaciones: string | null
 }
 
+/**
+ * La caja se abre por NOMBRE y no por `empleadoId`: no hay login ni catálogo de
+ * empleados al que elegir, así que el nombre escrito es la identidad.
+ */
 export type AperturaCajaInput = {
-  empleadoId: number
+  responsable: string
   montoInicial?: number
   observaciones?: string | null
 }
@@ -171,11 +175,23 @@ export type CierreCajaInput = {
   observaciones?: string | null
 }
 
+/**
+ * El nombre del empleado viaja con la caja y no solo en el estado de pantalla: si
+ * viviera ahí, al reabrir la app la caja seguiría abierta sin responsable que
+ * mostrar.
+ */
+export type CajaConResponsable = Caja & {
+  empleadoNombre: string
+}
+
 export type CajaSummary = {
   totalVentas: number
+  cantidadVentas: number
   totalEfectivo: number
   totalTransferencia: number
   totalTarjeta: number
+  /** Fondo inicial + efectivo cobrado. Mismo número con el que `closeCaja` calcula la diferencia. */
+  montoEsperado: number
 }
 
 export type Venta = {

@@ -12,6 +12,7 @@ import {
   contarBloqueados,
   crearTicket,
   puedeAbrirTicket,
+  resumenTicketsPendientes,
   ticketActivo,
   aplicarValorVista,
   aplicarVistaCatalogo,
@@ -880,6 +881,27 @@ describe("sesiones de ticket", () => {
 
     it("permite abrir de nuevo después de cerrar una", () => {
       expect(puedeAbrirTicket(sesiones(MAX_TICKETS - 1))).toBe(true);
+    });
+  });
+
+  describe("resumenTicketsPendientes", () => {
+    it("cuenta solo los tickets con productos", () => {
+      // Los tickets vacíos sobran todo el día y no son un problema: bloquear el
+      // cierre de caja por uno en blanco obligaría al cajero a limpiar algo que
+      // no importa.
+      const tickets = [conItems("t1", 1, 2), crearTicket("t2", 2), conItems("t3", 3, 1)];
+
+      expect(resumenTicketsPendientes(tickets)).toEqual({ tickets: 2, unidades: 3 });
+    });
+
+    it("no bloquea cuando todos están vacíos", () => {
+      expect(resumenTicketsPendientes(sesiones(3))).toEqual({ tickets: 0, unidades: 0 });
+    });
+
+    it("no cuenta líneas, cuenta tickets", () => {
+      // El aviso dice "2 tickets tienen productos", no "3 ítems": al cajero le
+      // importa cuántos tickets tiene que resolver, no cuántas líneas hay.
+      expect(resumenTicketsPendientes([conItems("t1", 1, 5)]).tickets).toBe(1);
     });
   });
 

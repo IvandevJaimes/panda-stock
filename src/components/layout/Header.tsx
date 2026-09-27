@@ -25,6 +25,7 @@ import {
   DropdownMenuTrigger,
 } from "../ui/DropdownMenu";
 import { BusinessSetupModal } from "../../features/onboarding/BusinessSetupModal";
+import { CajaControl } from "../../features/caja/CajaControl";
 import { ImageLightbox } from "../ui/ImageLightbox";
 import pandaStockLogo from "../../assets/panda-stock-logo.svg";
 import { toast } from "sonner";
@@ -94,7 +95,7 @@ export function Header() {
                 )}
               >
                 <Icon size={17} className="shrink-0" />
-                <span className="hidden md:inline">{label}</span>
+                <span className="hidden lg:inline">{label}</span>
               </span>
             </Tooltip>
           ) : (
@@ -112,7 +113,7 @@ export function Header() {
                 }
               >
                 <Icon size={17} className="shrink-0" />
-                <span className="hidden md:inline">{label}</span>
+                <span className="hidden lg:inline">{label}</span>
               </NavLink>
             </Tooltip>
           ),
@@ -121,7 +122,7 @@ export function Header() {
 
       {/* ── Acciones ── */}
       <div className="flex shrink-0 items-center gap-2">
- 
+        <CajaControl />
 
         <ImageLightbox
           open={verLogoAbierto && negocioLogoUrl !== null}

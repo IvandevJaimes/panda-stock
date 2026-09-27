@@ -253,6 +253,8 @@ describe("PosTabs: encaje con el panel", () => {
           onSolicitarVaciar={vi.fn()}
           onCancelarVaciar={vi.fn()}
           onCobrar={vi.fn()}
+          motivoCobroBloqueado={null}
+          cobrando={false}
         />
       </div>,
     );

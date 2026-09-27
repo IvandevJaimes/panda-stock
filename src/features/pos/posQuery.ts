@@ -1,6 +1,7 @@
 import type {
   Categoria,
   Marca,
+  MetodoPago,
   ProductoConLoteActivo,
   TipoTarifa,
 } from '../../../electron/db/types'
@@ -444,6 +445,15 @@ export function siguienteMetodoPago(actual: MetodoPagoPOS): MetodoPagoPOS {
   return METODOS_PAGO[(i + 1) % METODOS_PAGO.length]
 }
 
+/**
+ * La base distingue `debito` de `credito` y el selector del ticket no llega a esa
+ * granularidad, así que "tarjeta" se guarda como `debito`.
+ */
+export function metodoPagoARegistro(metodo: MetodoPagoPOS): MetodoPago {
+  if (metodo === 'tarjeta') return 'debito'
+  return metodo
+}
+
 export type ItemTicket = {
   productoId: number
   nombre: string
@@ -603,6 +613,21 @@ export function crearTicket(id: string, numero: number): TicketSession {
 
 export function puedeAbrirTicket(tickets: TicketSession[]): boolean {
   return tickets.length < MAX_TICKETS
+}
+
+/**
+ * Guard del cierre de caja: cerrar con ventas a medio cobrar las deja fuera de
+ * la sesión. Un ticket vacío no bloquea: sobran tickets en blanco todo el día.
+ */
+export function resumenTicketsPendientes(tickets: TicketSession[]): {
+  tickets: number
+  unidades: number
+} {
+  const conItems = tickets.filter((ticket) => ticket.items.length > 0)
+  return {
+    tickets: conItems.length,
+    unidades: conItems.reduce((acc, ticket) => acc + ticket.items.length, 0),
+  }
 }
 
 /**

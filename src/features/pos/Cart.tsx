@@ -3,6 +3,7 @@ import { ShoppingBag, Ticket, Trash2 } from 'lucide-react'
 import { cn } from '../../lib/cn'
 import { Button } from '../../components/ui/Button'
 import { ConfirmModal } from '../../components/ui/ConfirmModal'
+import { Tooltip } from '../../components/ui/Tooltip'
 import { CartItem } from './CartItem'
 import { PaymentMethodSelector } from './PaymentMethodSelector'
 import { formatearMoneda, type MetodoPagoPOS, type ResumenTicket } from './posQuery'
@@ -41,6 +42,14 @@ type CartProps = {
   onSolicitarVaciar: () => void
   onCancelarVaciar: () => void
   onCobrar: () => void
+  /**
+   * Por qué no se puede cobrar ahora, o `null` si se puede. Vive acá y no dentro
+   * de `Cart` para que el texto sea uno solo: el botón y el handler de
+   * `PosPage` bloquean por la misma razón y no pueden drifting uno del otro.
+   */
+  motivoCobroBloqueado: string | null
+  /** La venta se está guardando: el botón se bloquea para no cobrar dos veces. */
+  cobrando: boolean
 }
 
 export function Cart({
@@ -60,8 +69,11 @@ export function Cart({
   onSolicitarVaciar,
   onCancelarVaciar,
   onCobrar,
+  motivoCobroBloqueado,
+  cobrando,
 }: CartProps) {
   const vacio = resumen.unidades === 0
+  const cobroBloqueado = motivoCobroBloqueado !== null
 
   return (
     // `min-h-0 flex-1` en vez de `sticky`: el alto lo reparte el flex de la
@@ -195,16 +207,32 @@ export function Cart({
           con el verde del catálogo. Además deja de ser un <button> con clases a
           mano: focus-visible, disabled y cursor salen de la primitiva.
         */}
-        <Button
-          variant="primary"
-          icon={<ShoppingBag size={19} />}
-          onClick={onCobrar}
-          disabled={vacio}
-          aria-keyshortcuts="Enter"
-          className="min-h-[44px] px-[18px] py-2 font-display text-[15px] font-semibold tracking-wide shadow-sm hover:shadow-md"
-        >
-          Cobrar
-        </Button>
+        {/*
+          Bloqueado va `aria-disabled` y no `disabled` porque `Button` aplica
+          `disabled:pointer-events-none` y el tooltip —que es lo que explica el
+          bloqueo— necesita hover. El `<span>` es el wrapper del Tooltip: sin
+          `w-full` el botón queda al tamaño del texto y no llena la columna.
+        */}
+        <Tooltip content={motivoCobroBloqueado ?? ''} disabled={!cobroBloqueado}>
+          <span className="flex w-full">
+            <Button
+              variant="primary"
+              icon={<ShoppingBag size={19} />}
+              onClick={() => {
+                if (!cobroBloqueado && !cobrando) onCobrar()
+              }}
+              aria-disabled={cobroBloqueado || cobrando}
+              aria-busy={cobrando}
+              aria-keyshortcuts="Enter"
+              className={cn(
+                'min-h-[44px] w-full px-[18px] py-2 font-display text-[15px] font-semibold tracking-wide shadow-sm hover:shadow-md',
+                (cobroBloqueado || cobrando) && 'pointer-events-none opacity-50',
+              )}
+            >
+              {cobrando ? 'Guardando…' : 'Cobrar'}
+            </Button>
+          </span>
+        </Tooltip>
       </div>
 
       {/* Vaciar el ticket tira trabajo de armado: si el cajero lo pulsa sin
