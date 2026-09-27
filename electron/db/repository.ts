@@ -289,10 +289,39 @@ export function deleteMarca(id: number): void {
     .run()
 }
 
-export function scanProductByCode(codigo: string): Producto | null {
+/**
+ * Proyección de `productos` con el vencimiento del lote activo: el lote con
+ * stock que vence primero (FEFO). Es el que determina si el producto hoy tiene
+ * mercadería vencida; los lotes sin fecha no pueden decidir el vencimiento.
+ *
+ * Las columnas van calificadas con alias: si no, drizzle las emite sin calificar
+ * y SQLite resuelve "id" contra el lote interno, rompiendo la correlación (todas
+ * las cards mostraban el mismo vencimiento).
+ *
+ * La comparten el listado y el escaneo por código: el POS necesita el vencimiento
+ * para decidir si puede cobrar, igual que la card.
+ */
+function seleccionConLoteActivo() {
+  return {
+    ...getTableColumns(productos),
+    loteActivoVencimiento: sql<string | null>`
+      (
+        select l.fecha_vence
+        from lotes l
+        where l.producto_id = productos.id
+          and l.cantidad_actual > 0
+          and l.fecha_vence is not null
+        order by l.fecha_vence asc
+        limit 1
+      )
+    `,
+  }
+}
+
+export function scanProductByCode(codigo: string): ProductoConLoteActivo | null {
   const db = getDb()
   const fila = db
-    .select()
+    .select(seleccionConLoteActivo())
     .from(productos)
     .where(
       or(
@@ -303,7 +332,7 @@ export function scanProductByCode(codigo: string): Producto | null {
     .limit(1)
     .get()
 
-  return fila ?? null
+  return (fila as ProductoConLoteActivo | undefined) ?? null
 }
 
 /** Separa una lista CSV de códigos de barra en tokens únicos y recortados. */
@@ -389,28 +418,7 @@ export function getProductos(filtros?: FiltrosProducto): ProductoConLoteActivo[]
 
   const condicion = and(...condiciones)
 
-  // Vencimiento del lote activo: el lote con stock que vence primero (FEFO).
-  // Es el que determina si el producto hoy tiene mercadería vencida; los lotes
-  // sin fecha no pueden decidir el vencimiento de la card.
-  // Las columnas van calificadas con alias: si no, drizzle las emite sin
-  // calificar y SQLite resuelve "id" contra el lote interno, rompiendo la
-  // correlación (todas las cards mostraban el mismo vencimiento).
-  const loteActivoSubquery = sql<string | null>`
-    (
-      select l.fecha_vence
-      from lotes l
-      where l.producto_id = productos.id
-        and l.cantidad_actual > 0
-        and l.fecha_vence is not null
-      order by l.fecha_vence asc
-      limit 1
-    )
-  `
-
-  const selectProductos = {
-    ...getTableColumns(productos),
-    loteActivoVencimiento: loteActivoSubquery,
-  }
+  const selectProductos = seleccionConLoteActivo()
 
   const consulta = condicion
     ? db.select(selectProductos).from(productos).where(condicion)

@@ -19,7 +19,7 @@ function limpiarBarras(codigosBarra: string | null | undefined): string | null {
 }
 
 export const productosService = {
-  async scan(codigo: string): Promise<Producto | null> {
+  async scan(codigo: string): Promise<ProductoConLoteActivo | null> {
     const codigoLimpio = codigo.trim()
     if (!codigoLimpio) return null
 

@@ -147,4 +147,38 @@ describe('barcodeScannerService', () => {
     expect(enter.defaultPrevented).toBe(false)
     expect(onScan).not.toHaveBeenCalled()
   })
+
+  it("en contexto estricto el input con foco no se toca NI DURANTE la ráfaga", async () => {
+    // Es el caso del POS: la pantalla tiene buscador y escanea para agregar al
+    // ticket. En modo bloqueo los caracteres se escriben en vivo y después se
+    // revierten al confirmar, así que el cajero ve el código aparecer y
+    // desaparecer del buscador. Lo que se asserta es el estado INTERMEDIO, que
+    // es donde los dos modos difieren; después del Enter ambos terminan con el
+    // input limpio y la aserción no probaría nada.
+    const input = document.createElement('input')
+    document.body.appendChild(input)
+    input.focus()
+
+    await scanBurst([...BARCODE.slice(0, 6)])
+    expect(input.value).toBe('')
+
+    await scanBurst([...BARCODE.slice(6)])
+    const enter = press('Enter')
+    await sleep(0)
+
+    expect(enter.defaultPrevented).toBe(true)
+    expect(onScan).toHaveBeenCalledWith(BARCODE)
+    expect(input.value).toBe('')
+  })
+
+  it('en contexto estricto un tecleo humano sale igual, sin perderse', async () => {
+    const input = document.createElement('input')
+    document.body.appendChild(input)
+    input.focus()
+
+    await scanBurst(['a', 'b', 'c'], 30)
+    await sleep(200) // vence el silencio: se entrega como tecleo humano
+
+    expect(input.value).toBe('abc')
+  })
 })

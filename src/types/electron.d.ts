@@ -62,7 +62,7 @@ declare global {
         delete: (id: number) => Promise<void>
       }
       productos: {
-        scan: (codigo: string) => Promise<Producto | null>
+        scan: (codigo: string) => Promise<ProductoConLoteActivo | null>
         verificarCodigos: (codigos: string[], excluirProductoId?: number | null) => Promise<ConflictoCodigo[]>
         getAll: (filtros?: FiltrosProducto) => Promise<ProductoConLoteActivo[]>
         getById: (id: number) => Promise<Producto | null>

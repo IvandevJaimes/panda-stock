@@ -29,6 +29,7 @@ import { PosTabs } from './PosTabs'
 import { ProductGrid } from './ProductGrid'
 import { NoVendiblesBadge } from './NoVendiblesBadge'
 import { useAtajosPOS } from './useAtajosPOS'
+import { useBarcodeScanner } from '../../hooks/useBarcodeScanner'
 import { usePosTicketsStore } from '../../stores/pos-tickets.store'
 import {
   siguienteMetodoPago,
@@ -38,6 +39,7 @@ import {
   esVisibleEnPOS,
   filtrarCatalogoPOS,
   formatearMoneda,
+  idsDesactivados as idsDesactivadosDeCatalogo,
   mapearProductosPOS,
   resumirTicket,
   separarPorDisponibilidad,
@@ -156,6 +158,14 @@ export function PosPage() {
     [marcas],
   )
 
+  // Sobre los CRUDOS, no sobre `catalogo`: `catalogo` ya filtró los
+  // desactivados, así que no hay forma de saber que una línea ya armada
+  // corresponde a un producto que después se desactivó.
+  const idsDesactivados = useMemo(
+    () => idsDesactivadosDeCatalogo(productosCrudos),
+    [productosCrudos],
+  )
+
   const catalogo = useMemo(
     () =>
       mapearProductosPOS(
@@ -256,15 +266,63 @@ export function PosPage() {
     irAlTicket,
   } = usePosTicketsStore()
 
+  // La lectora se apaga mientras se carga el catálogo (haría falta mapear
+  // categorías y marcas) y mientras hay algo modal en pantalla: escanear con un
+  // confirm abierto agregaría una línea detrás del diálogo.
+  const scannerHabilitado = !cargando && !confirmandoVaciar && !(ticketColapsable && ticketAbierto)
+
   const handleAgregar = useCallback(
     (producto: ProductoPOS) => agregarAlTicketActivo(producto),
     [agregarAlTicketActivo],
   )
 
+  // ── Lectora de código de barras ──
+  //
+  // Misma resolución que Inventario (`productosService.scan`), pero en vez de
+  // filtrar la grilla agrega el producto al ticket activo. El escaneo se
+  // consulta a la base y no al catálogo en memoria a propósito: el catálogo solo
+  // tiene los productos activos, así que un código de uno desactivado se
+  // reportaría como inexistente en vez de como desactivado.
+  const agregarPorEscaneo = useCallback(
+    async (barcode: string) => {
+      const productoCrudo = await productosService.scan(barcode)
+      if (!productoCrudo) {
+        toast.error(`No existe ningún producto con el código "${barcode}"`)
+        return
+      }
+      if (!productoCrudo.activo) {
+        toast.error(
+          `El producto "${productoCrudo.nombre}" está desactivado: no se puede agregar al ticket`,
+        )
+        return
+      }
+
+      const [producto] = mapearProductosPOS(
+        [productoCrudo],
+        categoriasPorId,
+        marcasPorId,
+      )
+      // El store descarta en silencio lo que no es vendible (vencido o sin
+      // stock). Acá se avisa antes: escanear y que no pase nada sería el peor
+      // resultado posible para el cajero.
+      if (!esVendible(producto)) {
+        toast.error(
+          `"${producto.nombre}" no se puede vender: ${producto.estado === 'vencido' ? 'está vencido' : 'no tiene stock'}`,
+        )
+        return
+      }
+
+      agregarAlTicketActivo(producto)
+    },
+    [agregarAlTicketActivo, categoriasPorId, marcasPorId],
+  )
+
+  useBarcodeScanner('sales', (barcode) => void agregarPorEscaneo(barcode), scannerHabilitado)
+
   const handleCambiarCantidad = useCallback(
     (productoId: number, cantidad: number) =>
-      cambiarCantidadTicketActivo(productoId, cantidad),
-    [cambiarCantidadTicketActivo],
+      cambiarCantidadTicketActivo(productoId, cantidad, idsDesactivados),
+    [cambiarCantidadTicketActivo, idsDesactivados],
   )
 
   const handleQuitar = useCallback(
@@ -564,6 +622,7 @@ export function PosPage() {
             onCambiarCantidad={handleCambiarCantidad}
             onQuitar={handleQuitar}
             onVaciar={handleVaciar}
+            idsDesactivados={idsDesactivados}
             confirmandoVaciar={confirmandoVaciar}
             onSolicitarVaciar={() => setConfirmandoVaciar(true)}
             onCancelarVaciar={() => setConfirmandoVaciar(false)}

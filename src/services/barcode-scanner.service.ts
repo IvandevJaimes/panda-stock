@@ -1,4 +1,4 @@
-import { useScannerStore } from '../stores/scanner.store'
+import { useScannerStore, type BarcodeScannerContext } from '../stores/scanner.store'
 
 // ---------------------------------------------------------------------------
 // Barcode Scanner Service — Captura global en fase CAPTURE (fuente de verdad).
@@ -223,6 +223,21 @@ function revertBurst(pending: PendingBurst): void {
   element.dispatchEvent(new Event('input', { bubbles: true }))
 }
 
+/**
+ * Contextos donde la ráfaga se resuelve SOLO como escaneo: el buffer se queda
+ * retenido y no se escribe nada en el input.
+ *
+ * Hace falta en toda pantalla que tenga buscador junto con la acción del
+ * escaneo: si el código se escribiera en el input, el usuario vería el código
+ * aparecer y desaparecer en el buscador. El POS entra acá porque escanea para
+ * agregar al ticket, no para filtrar la grilla.
+ */
+const CONTEXTOS_ESTRICTOS = new Set<BarcodeScannerContext>([
+  'inventory',
+  'inventory-action',
+  'sales',
+])
+
 /** Crea una ráfaga.
  *  • Modo estricto: NO entrega nada aún (el scanner no escribe); el buffer se
  *    liberará como tecleo humano recién al vencer el silencio (ventana amplia
@@ -230,9 +245,7 @@ function revertBurst(pending: PendingBurst): void {
  *  • Modo bloqueo: entrega el primer carácter en vivo y agenda la espera de
  *    confirmación por silencio. */
 function startBurst(event: KeyboardEvent, now: number): void {
-  const strict =
-    useScannerStore.getState().context === 'inventory' ||
-    useScannerStore.getState().context === 'inventory-action'
+  const strict = CONTEXTOS_ESTRICTOS.has(useScannerStore.getState().context)
   // En modo estricto el elemento se captura igualmente: hay que liberarle el
   // buffer al descartar el tecleo humano.
   const element = focusedEditable()

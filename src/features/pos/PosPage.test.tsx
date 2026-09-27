@@ -7,6 +7,8 @@ import type {
   ProductoConLoteActivo,
 } from "../../../electron/db/types";
 import { PosPage } from "./PosPage";
+import { usePosTicketsStore } from "../../stores/pos-tickets.store";
+import { useScannerStore } from "../../stores/scanner.store";
 import { useUIStore } from "../../stores/ui.store";
 
 const categorias: Categoria[] = [{ id: 1, nombre: "Bebidas", activo: true }];
@@ -43,7 +45,12 @@ function producto(
 
 beforeEach(() => {
   window.electronAPI = {
-    productos: { getAll: vi.fn().mockResolvedValue([producto()]) },
+    productos: {
+      getAll: vi.fn().mockResolvedValue([producto()]),
+      scan: vi.fn(async (codigo: string) =>
+        codigo === producto().codigosBarras ? producto() : null,
+      ),
+    },
     categorias: { getAll: vi.fn().mockResolvedValue(categorias) },
     marcas: { getAll: vi.fn().mockResolvedValue(marcas) },
   } as unknown as Window["electronAPI"];
@@ -1244,5 +1251,220 @@ describe("PosPage · ticket colapsable en mobile", () => {
     await user.click(botonAbrir()!);
 
     expect(useUIStore.getState().isRightSidebarOpen).toBe(false);
+  });
+});
+
+describe("PosPage · escaneo de código de barras", () => {
+  /** Dispara el handler como lo haría el servicio al cerrar el Enter del lector. */
+  async function escanear(codigo: string) {
+    const handler = useScannerStore.getState()._handler;
+    if (!handler) throw new Error("el POS no registró handler de escaneo");
+    await act(async () => {
+      handler(codigo);
+    });
+  }
+
+  function ticketActivo() {
+    return usePosTicketsStore.getState().tickets.find(
+      (t) => t.id === usePosTicketsStore.getState().activeTicketId,
+    )!;
+  }
+
+  it("registra el contexto 'sales' mientras la pantalla está libre", async () => {
+    render(<PosPage />);
+    await esperarCatalogo();
+
+    expect(useScannerStore.getState().context).toBe("sales");
+  });
+
+  it("agrega al ticket activo el producto escaneado", async () => {
+    render(<PosPage />);
+    await esperarCatalogo();
+
+    await escanear("779001");
+
+    const items = ticketActivo().items;
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ productoId: 1, cantidad: 1, nombre: "Gaseosa Cola" });
+  });
+
+  it("repite cantidad si el producto ya estaba en el ticket", async () => {
+    render(<PosPage />);
+    await esperarCatalogo();
+
+    await escanear("779001");
+    await escanear("779001");
+
+    expect(ticketActivo().items).toHaveLength(1);
+    expect(ticketActivo().items[0].cantidad).toBe(2);
+  });
+
+  it("no agrega nada si el código no existe", async () => {
+    render(<PosPage />);
+    await esperarCatalogo();
+
+    await escanear("000000");
+
+    expect(ticketActivo().items).toHaveLength(0);
+  });
+
+  it("no agrega nada si el producto está desactivado", async () => {
+    const desactivado = producto({ activo: false });
+    window.electronAPI = {
+      productos: {
+        getAll: vi.fn().mockResolvedValue([]),
+        scan: vi.fn().mockResolvedValue(desactivado),
+      },
+      categorias: { getAll: vi.fn().mockResolvedValue(categorias) },
+      marcas: { getAll: vi.fn().mockResolvedValue(marcas) },
+    } as unknown as Window["electronAPI"];
+
+    render(<PosPage />);
+    await waitFor(() => expect(useScannerStore.getState().context).toBe("sales"));
+
+    await escanear("779001");
+
+    expect(ticketActivo().items).toHaveLength(0);
+  });
+
+  it("no agrega nada si el producto está sin stock", async () => {
+    const sinStock = producto({ stockActual: 0, stockMinimo: 5 });
+    window.electronAPI = {
+      productos: {
+        getAll: vi.fn().mockResolvedValue([sinStock]),
+        scan: vi.fn().mockResolvedValue(sinStock),
+      },
+      categorias: { getAll: vi.fn().mockResolvedValue(categorias) },
+      marcas: { getAll: vi.fn().mockResolvedValue(marcas) },
+    } as unknown as Window["electronAPI"];
+
+    render(<PosPage />);
+    await waitFor(() => expect(useScannerStore.getState().context).toBe("sales"));
+
+    await escanear("779001");
+
+    expect(ticketActivo().items).toHaveLength(0);
+  });
+
+  it("el escaneo no pisa el buscador: el código no aparece en la búsqueda", async () => {
+    render(<PosPage />);
+    const card = await esperarCatalogo();
+
+    await escanear("779001");
+
+    expect(card).toBeTruthy();
+    expect(screen.queryByDisplayValue("779001")).toBeNull();
+  });
+});
+
+describe("PosPage · producto desactivado en el ticket", () => {
+  const user = userEvent.setup();
+
+  /**
+   * Es la situación real: la línea quedó armada y después el producto se
+   * desactivó en la base. La línea sobrevive (se cobra igual) pero no puede
+   * seguir creciendo. Se siembra el store porque el catálogo solo muestra
+   * productos activos: no hay card desde la que agregar un desactivado.
+   */
+  beforeEach(() => {
+    window.electronAPI = {
+      productos: { getAll: vi.fn().mockResolvedValue([producto({ activo: false })]) },
+      categorias: { getAll: vi.fn().mockResolvedValue(categorias) },
+      marcas: { getAll: vi.fn().mockResolvedValue(marcas) },
+    } as unknown as Window["electronAPI"];
+
+    usePosTicketsStore.setState({
+      tickets: [
+        {
+          id: "t1",
+          numero: 1,
+          metodoPago: "efectivo",
+          items: [
+            {
+              productoId: 1,
+              nombre: "Gaseosa Cola",
+              precioVenta: 200,
+              costo: 100,
+              cantidad: 1,
+              imgPath: null,
+            },
+          ],
+        },
+      ],
+      activeTicketId: "t1",
+    });
+  });
+
+  function lineaActual() {
+    return usePosTicketsStore.getState().tickets[0].items[0];
+  }
+
+  function botonMas() {
+    return screen.getByRole("button", { name: /agregar una unidad de gaseosa cola/i });
+  }
+
+  it("el botón + queda deshabilitado para lectores de pantalla", async () => {
+    render(<PosPage />);
+    await waitFor(() => expect(botonMas()).toBeTruthy());
+
+    expect(botonMas().getAttribute("aria-disabled")).toBe("true");
+    expect(botonMas().getAttribute("data-bloqueado")).toBe("true");
+  });
+
+  it("el + bloqueado no tiene NINGÚN hover en sus clases", async () => {
+    render(<PosPage />);
+    await waitFor(() => expect(botonMas()).toBeTruthy());
+
+    // Se chequea la clase final, no la intención: un `hover:` que se cuele por
+    // el variant haría que el botón se ilumine sin hacer nada.
+    const clases = botonMas().getAttribute("class") ?? "";
+    expect(clases).not.toContain("hover:");
+    expect(clases).toContain("cursor-default");
+    expect(clases).toContain("opacity-40");
+  });
+
+  it("el motivo del bloqueo queda en el tooltip del +", async () => {
+    render(<PosPage />);
+    await waitFor(() => expect(botonMas()).toBeTruthy());
+
+    // El tooltip de Tippy solo aparece on-hover; lo que se verifica aquí es que
+    // el nodo que lo lleva existe y no quedó el texto por defecto.
+    expect(document.body.textContent).toContain("Desactivado");
+  });
+
+  it("la línea avisa que el producto está desactivado", async () => {
+    render(<PosPage />);
+
+    await waitFor(() => expect(screen.getByText("Desactivado")).toBeTruthy());
+  });
+
+  it("el + no suma unidades aunque se lo cliquee", async () => {
+    render(<PosPage />);
+    await waitFor(() => expect(botonMas()).toBeTruthy());
+
+    await user.click(botonMas());
+
+    expect(lineaActual().cantidad).toBe(1);
+  });
+
+  it("el atajo de teclado + tampoco suma unidades", async () => {
+    render(<PosPage />);
+    await waitFor(() => expect(botonMas()).toBeTruthy());
+
+    await user.keyboard("+");
+
+    expect(lineaActual().cantidad).toBe(1);
+  });
+
+  it("igual se puede RESTAR y quitar la línea", async () => {
+    render(<PosPage />);
+    await waitFor(() => expect(botonMas()).toBeTruthy());
+
+    const menos = screen.getByRole("button", { name: /quitar una unidad de gaseosa cola/i });
+    expect(menos.getAttribute("aria-disabled")).toBeNull();
+
+    await user.click(menos);
+
+    expect(usePosTicketsStore.getState().tickets[0].items).toHaveLength(0);
   });
 });
