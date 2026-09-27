@@ -105,6 +105,7 @@ Todos los commits deben seguir el estándar de **Conventional Commits traducido 
 - **TypeScript estricto:** No uses `any` salvo excepciones inevitables en contratos nativos IPC; escribe interfaces explícitas en `src/types/`.
 - **No romper funcionalidades existentes:** Verifica las rutas configuradas en `src/app/router.tsx` antes de alterar componentes compartidos.
 - **Confirmación antes de cambios destructivos:** No elimines archivos de migración ni limpies bases de datos de prueba sin confirmación explícita.
+- **Tests solo cuando el cambio los justifique:** No corras la suite ni subsets de tests por un cambio chico (copy, estilos, un texto, un prop, un ajuste de tipos). Cada corrida cuesta tiempo y tokens y no aporta nada cuando la lógica no cambió. Corré tests cuando agregues o modifiques lógica de negocio, un hook con estado, o cuando el usuario los pida. Con un cambio chico alcanza con `tsc --noEmit` y `lint`.
 
 ### Reglas de Ejecución de Terminal y Ahorro de Tokens:
 
