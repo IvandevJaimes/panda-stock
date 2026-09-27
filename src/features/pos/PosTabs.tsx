@@ -236,12 +236,15 @@ export function PosTabs({
             <button
               type="button"
               onClick={onNew}
+              // Sin foco: el click también lo sacaría del tab order, y `Ctrl+N`
+              // ya cubre la acción por teclado.
+              tabIndex={-1}
+              onMouseDown={(e) => e.preventDefault()}
               aria-label="Abrir un ticket nuevo"
               className={cn(
                 "grid h-9 w-9 shrink-0 cursor-pointer place-items-center transition-colors duration-150",
                 REDONDEO_PESTANA,
                 "text-slate-400 hover:text-emerald-600 dark:text-slate-500 dark:hover:text-emerald-400",
-                "focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 focus-visible:outline-none dark:focus-visible:ring-offset-slate-900",
               )}
             >
               <Plus size={15} aria-hidden="true" />

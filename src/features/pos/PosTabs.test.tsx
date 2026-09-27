@@ -230,6 +230,9 @@ describe("PosTabs: encaje con el panel", () => {
           onClose={vi.fn()}
         />
         <Cart
+          lineaSeleccionada={-1}
+          onSeleccionarLinea={vi.fn()}
+          refLista={{ current: null }}
           resumen={{
             lineas: [],
             unidades: 0,
@@ -245,6 +248,9 @@ describe("PosTabs: encaje con el panel", () => {
           onCambiarCantidad={vi.fn()}
           onQuitar={vi.fn()}
           onVaciar={vi.fn()}
+          confirmandoVaciar={false}
+          onSolicitarVaciar={vi.fn()}
+          onCancelarVaciar={vi.fn()}
           onCobrar={vi.fn()}
         />
       </div>,

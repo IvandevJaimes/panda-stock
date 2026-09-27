@@ -14,6 +14,8 @@ export type PillProps = {
   className?: string;
   /** Cantidad de productos asociados. Si se define, se muestra un badge numérico. */
   count?: number;
+  /** Si es false el chip saca el tab order y no muestra anillo de foco. */
+  focusable?: boolean;
 };
 
 export function Pill({
@@ -26,6 +28,7 @@ export function Pill({
   canDelete = true,
   className,
   count,
+  focusable = true,
 }: PillProps) {
   return (
     <div
@@ -46,6 +49,9 @@ export function Pill({
       <button
         type="button"
         onClick={onSelect}
+        // En el POS el filtro se maneja con las flechas del ticket, así que el
+        // chip no debe robarle el foco al control que lo tiene.
+        tabIndex={focusable ? undefined : -1}
         onMouseEnter={(e) => {
           e.currentTarget.scrollIntoView({
             behavior: "smooth",

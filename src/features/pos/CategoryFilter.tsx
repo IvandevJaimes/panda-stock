@@ -33,6 +33,7 @@ export function CategoryFilter({
     >
       <Pill
         label="Todas"
+        focusable={false}
         active={valor === 'all'}
         showActions={false}
         count={total}
@@ -45,6 +46,7 @@ export function CategoryFilter({
           <Pill
             key={categoria.id}
             label={categoria.nombre}
+            focusable={false}
             active={activo}
             showActions={false}
             count={categoria.conteo}

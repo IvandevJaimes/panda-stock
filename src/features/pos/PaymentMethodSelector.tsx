@@ -1,17 +1,25 @@
 import { ArrowRightLeft, Banknote, CreditCard, type LucideIcon } from 'lucide-react'
 import { cn } from '../../lib/cn'
-import type { MetodoPagoPOS } from './posQuery'
+import { METODOS_PAGO, type MetodoPagoPOS } from './posQuery'
+
+const PRESENTACION: Record<MetodoPagoPOS, { etiqueta: string; icon: LucideIcon }> = {
+  efectivo: { etiqueta: 'Efectivo', icon: Banknote },
+  transferencia: { etiqueta: 'Transferencia', icon: ArrowRightLeft },
+  tarjeta: { etiqueta: 'Tarjeta', icon: CreditCard },
+}
 
 type PaymentMethodSelectorProps = {
   valor: MetodoPagoPOS
   onChange: (metodo: MetodoPagoPOS) => void
 }
 
-const METODOS: { valor: MetodoPagoPOS; etiqueta: string; icon: LucideIcon }[] = [
-  { valor: 'efectivo', etiqueta: 'Efectivo', icon: Banknote },
-  { valor: 'transferencia', etiqueta: 'Transferencia', icon: ArrowRightLeft },
-  { valor: 'tarjeta', etiqueta: 'Tarjeta', icon: CreditCard },
-]
+// El orden sale de `posQuery` y no de acá: si `F4` rotara sobre otra lista, el
+// selector y el atajo mostrarían un orden distinto al que recorre el teclado.
+const METODOS: { valor: MetodoPagoPOS; etiqueta: string; icon: LucideIcon }[] =
+  METODOS_PAGO.map((valor) => {
+    const { etiqueta, icon } = PRESENTACION[valor]
+    return { valor, etiqueta, icon }
+  })
 
 export function PaymentMethodSelector({ valor, onChange }: PaymentMethodSelectorProps) {
   return (

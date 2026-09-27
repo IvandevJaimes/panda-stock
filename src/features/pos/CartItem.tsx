@@ -18,12 +18,18 @@ const EXIT_MS = 180;
 
 type CartItemProps = {
   linea: LineaTicket;
+  indice: number;
+  seleccionada: boolean;
+  onSeleccionar: (indice: number) => void;
   onCambiarCantidad: (productoId: number, cantidad: number) => void;
   onQuitar: (productoId: number) => void;
 };
 
 export function CartItem({
   linea,
+  indice,
+  seleccionada,
+  onSeleccionar,
   onCambiarCantidad,
   onQuitar,
 }: CartItemProps) {
@@ -59,10 +65,18 @@ export function CartItem({
 
   return (
     <div
+      // El click enfoque la fila para que el control que queda con el foco sea
+      // el que el cajero está mirando. Se anula con preventDefault porque el
+      // default haría focus native y saltaría la fila entera.
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={() => onSeleccionar(indice)}
+      data-linea-ticket=""
+      data-seleccionada={seleccionada || undefined}
+      aria-current={seleccionada ? 'true' : undefined}
       className={cn(
-        "flex items-center gap-2 border-b border-dashed border-slate-200 py-3 last:border-b-0 dark:border-slate-800",
-        // El cambio de animation-name es lo que dispara la salida: la entrada
-        // queda en el historial del elemento y no vuelve a correr.
+        "-mx-2.5 flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-slate-200 px-2.5 py-3 transition-colors last:border-b-0 dark:border-slate-800",
+        seleccionada &&
+          "border-emerald-500 bg-emerald-500/8",
         saliendo ? "animate-exit-up pointer-events-none" : "animate-entry-up",
       )}
     >

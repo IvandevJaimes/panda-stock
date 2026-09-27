@@ -68,8 +68,29 @@ export function derivarEstadoStock(
   return 'disponible'
 }
 
+function esEstadoVendible(estado: EstadoStock): boolean {
+  return estado !== 'agotado' && estado !== 'vencido'
+}
+
 export function esVendible(producto: ProductoPOS): boolean {
-  return producto.estado !== 'agotado' && producto.estado !== 'vencido'
+  return esEstadoVendible(producto.estado)
+}
+
+/**
+ * Si el POS muestra este producto crudo en el catálogo.
+ *
+ * `esVendible` no alcanza porque ya recibe el estado calculado y no mira
+ * `activo`, que el POS filtra antes de mapear.
+ */
+export function esVisibleEnPOS(producto: ProductoConLoteActivo): boolean {
+  if (!producto.activo) return false
+  return esEstadoVendible(
+    derivarEstadoStock(
+      producto.stockActual,
+      producto.stockMinimo,
+      esVencido(producto.loteActivoVencimiento),
+    ),
+  )
 }
 
 export function estaPorVencer(producto: ProductoPOS): boolean {
@@ -410,6 +431,18 @@ export function contarBloqueados(productos: ProductoPOS[]): ConteoBloqueados {
 }
 
 export type MetodoPagoPOS = 'efectivo' | 'transferencia' | 'tarjeta'
+
+/** El orden es de la app, no del enum: `F4` rota sobre esta lista. */
+export const METODOS_PAGO: readonly MetodoPagoPOS[] = [
+  'efectivo',
+  'transferencia',
+  'tarjeta',
+]
+
+export function siguienteMetodoPago(actual: MetodoPagoPOS): MetodoPagoPOS {
+  const i = METODOS_PAGO.indexOf(actual)
+  return METODOS_PAGO[(i + 1) % METODOS_PAGO.length]
+}
 
 export type ItemTicket = {
   productoId: number

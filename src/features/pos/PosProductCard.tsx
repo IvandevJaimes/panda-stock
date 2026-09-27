@@ -16,6 +16,7 @@ type PosProductCardProps = {
   producto: ProductoPOS
   onAgregar: (producto: ProductoPOS) => void
   terminoConsulta: string
+  /** La card está bajo el cursor virtual de los atajos. */
 }
 
 function PosProductCardComponent({
@@ -34,7 +35,12 @@ function PosProductCardComponent({
   return (
     <button
       type="button"
-      onClick={() => onAgregar(producto)}
+      onClick={(event) => {
+        // Sin este blur el Enter siguiente activa la card por foco nativo y
+        // "Enter Enter para cobrar" suma dos unidades en vez de cobrar.
+        event.currentTarget.blur()
+        onAgregar(producto)
+      }}
       aria-label={
         aviso
           ? `Agregar ${producto.nombre} al ticket. ${aviso}`
@@ -50,11 +56,20 @@ function PosProductCardComponent({
         // prop, cambiar el orden del catálogo re-renderizaría todas las cards y
         // el `memo` de abajo dejaría de evitar trabajo.
         'animate-card-in',
-        // El hover es solo contorno + la luz de arriba. Sin `translate` ni
-        // `shadow`: en una grilla de cientos de cards, cada sombra proyectada es
-        // una capa de composición y el desplazamiento hace que la fila de abajo
-        // "salte" al pasar el mouse. La card no se mueve del lugar.
-        'active:scale-[0.99]',
+        // El hover levanta 2px, sin escalado. El salto de tamaño en una grilla
+        // densa se lee como zoom y empuja al texto; un desplazamiento de 2px
+        // apenas lo insinúa. El hueco que queda abajo entra en el `gap-2`/`gap-3`
+        // de la grilla, así que la fila siguiente no se mueve.
+        //
+        // `translate` y `scale` son propiedades DISTINTAS en v4 (una la emite
+        // `translate`, la otra `scale`), así que el lift y el `active` de abajo
+        // se componen sin pisarse. Y el `transition` pelado de arriba ya trae
+        // `translate` en su `transition-property`: por eso no hace falta un
+        // `transition-transform` explícito.
+        //
+        // Sin `shadow`: en una grilla de cientos de cards cada sombra proyectada
+        // es una capa de composición, y el lift ya da la señal sin ella.
+        'hover:-translate-y-0.5 active:scale-[0.99]',
         // Contenedor para que el nombre y el precio se achiquen con la CARD, no
         // con la ventana. No son lo mismo: el ancho de la card es una función
         // del nº de columnas, y al cruzar 1280px aparece la quinta, así que la
@@ -73,6 +88,10 @@ function PosProductCardComponent({
               'hover:border-emerald-500/30',
               'dark:border-slate-800 dark:bg-[#111827] dark:hover:border-emerald-500/30',
             ),
+        // `ring-inset` y no `ring-offset`: el offset necesita adivinar el color
+        // del fondo que rodea la grilla en cada modo, y un acierto en claro
+        // equivoca en oscuro. adentro del borde no hay nada que adivinar y no
+        // desplaza el layout.
       )}
     >
       <span

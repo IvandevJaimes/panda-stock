@@ -1,5 +1,12 @@
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight, FilterX, Search, ShoppingCart, TrendingUp } from 'lucide-react'
+import {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
+import { ChevronLeft, ChevronRight, FilterX, Search, Ticket, TrendingUp } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '../../lib/cn'
 import { CustomSelect } from '../../components/ui/CustomSelect'
@@ -7,30 +14,34 @@ import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { LoadingState } from '../../components/ui/LoadingState'
 import { Tooltip } from '../../components/ui/Tooltip'
-import { MarcasModal } from '../../components/inventory/MarcasModal'
-import { useHotkey } from '../../hooks/useHotkey'
+import { MarcasModal, type ConteoMarca } from '../../components/inventory/MarcasModal'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
 import { MOD_IS_META } from '../../lib/hotkeys'
+import type { LineaTicket } from './posQuery'
 import type { Categoria, Marca, ProductoConLoteActivo } from '../../../electron/db/types'
 import { categoriasService } from '../../services/categorias.service'
 import { marcasService } from '../../services/marcas.service'
 import { productosService } from '../../services/productos.service'
+import { AyudaAtajos } from './AyudaAtajos'
 import { Cart } from './Cart'
 import { CategoryFilter } from './CategoryFilter'
 import { PosTabs } from './PosTabs'
 import { ProductGrid } from './ProductGrid'
 import { NoVendiblesBadge } from './NoVendiblesBadge'
+import { useAtajosPOS } from './useAtajosPOS'
 import {
   actualizarTicketActivo,
   agregarAlTicket,
   agregarTicket,
   cambiarCantidadTicket,
   cambiarMetodoPagoTicket,
+  siguienteMetodoPago,
   cerrarTicket,
   construirCategorias,
   contarBloqueados,
   crearTicket,
   esVendible,
+  esVisibleEnPOS,
   filtrarCatalogoPOS,
   formatearMoneda,
   mapearProductosPOS,
@@ -70,6 +81,7 @@ export function PosPage() {
   const [cargando, setCargando] = useState(true)
   const [errorProductos, setErrorProductos] = useState<string | null>(null)
   const [marcasAbiertas, setMarcasAbiertas] = useState(false)
+  const [confirmandoVaciar, setConfirmandoVaciar] = useState(false)
 
   const [busqueda, setBusqueda] = useState('')
   const [categoriaId, setCategoriaId] = useState('all')
@@ -92,14 +104,25 @@ export function PosPage() {
 
   const busquedaDiferida = useDeferredValue(busqueda)
 
-  const marcasActivas = useMemo(() => marcas.filter((m) => m.activo).length, [marcas])
+  // Conteo por marca para el selector: el número que el cajero necesita es el de
+  // los productos que se pueden cobrar, no el de todos los asignados. Se cuenta
+  // sobre los crudos porque ahí está `activo`, que `mapearProductosPOS` ya no
+  // mira.
+  const conteoPorMarca = useMemo(() => {
+    const conteos = new Map<number, ConteoMarca>()
 
-  // Ctrl+M → marcas, igual que en Inventario. Se deshabilita con el modal
-  // abierto para no reabrirlo encima del que ya está.
-  useHotkey('mod+m', () => setMarcasAbiertas(true), {
-    enabled: !marcasAbiertas,
-    ignoreInputs: false,
-  })
+    for (const producto of productosCrudos) {
+      if (producto.marcaId === null) continue
+      const conteo = conteos.get(producto.marcaId) ?? { vendibles: 0, total: 0 }
+      conteo.total += 1
+      if (esVisibleEnPOS(producto)) conteo.vendibles += 1
+      conteos.set(producto.marcaId, conteo)
+    }
+
+    return conteos
+  }, [productosCrudos])
+
+  const marcasActivas = useMemo(() => marcas.filter((m) => m.activo).length, [marcas])
 
   useEffect(() => {
     let activo = true
@@ -300,6 +323,51 @@ export function PosPage() {
     setVista(VISTA_POR_DEFECTO)
   }, [])
 
+  // ── Atajos de teclado ──
+  //
+  // El cursor es un índice sobre `vendibles`, no el foco del DOM: cada card es
+  // un `<button>` y si las flechas movieran el foco real, un Enter la activaría
+  // de forma nativa y "Enter Enter para cobrar" no se distinguiría de "Enter
+  // Enter para agregar dos unidades".
+  const busquedaRef = useRef<HTMLInputElement>(null)
+
+  // `+`, `-` y `Delete` reciben la línea seleccionada, así que no buscan el
+  // producto: viene del ticket y por definición está en él.
+  const handleAumentarUno = useCallback(
+    (linea: LineaTicket) => handleCambiarCantidad(linea.productoId, linea.cantidad + 1),
+    [handleCambiarCantidad],
+  )
+
+  const handleRestarUno = useCallback(
+    (linea: LineaTicket) => handleCambiarCantidad(linea.productoId, linea.cantidad - 1),
+    [handleCambiarCantidad],
+  )
+
+  const handleQuitarLineaSeleccionada = useCallback(
+    (linea: LineaTicket) => handleQuitar(linea.productoId),
+    [handleQuitar],
+  )
+
+  const handleCambiarTicket = useCallback(
+    (delta: number) => {
+      setActiveTicketId((actual) => {
+        const indice = tickets.findIndex((t) => t.id === actual)
+        const destino = indice + delta
+        if (indice < 0 || destino < 0 || destino >= tickets.length) return actual
+        return tickets[destino].id
+      })
+    },
+    [tickets],
+  )
+
+  const handleIrAlTicket = useCallback(
+    (numero: number) => {
+      const destino = tickets.find((t) => t.numero === numero)
+      if (destino) setActiveTicketId(destino.id)
+    },
+    [tickets],
+  )
+
   const handleCobrar = useCallback(() => {
     // Sin este guarda, un cobro sobre un ticket vacío anunciaría una venta que
     // no ocurrió. Hoy el botón llega deshabilitado en ese caso, pero el handler
@@ -314,6 +382,30 @@ export function PosPage() {
     setActiveTicketId(resultado.activeTicketId)
     toast.success('Venta completada')
   }, [ticket.items.length, tickets, activeTicketId, siguienteIdTicket])
+
+  const {
+    lineaSeleccionada,
+    setLineaSeleccionada,
+    refLista,
+    ayudaAbierta,
+    cerrarAyuda,
+  } = useAtajosPOS({
+    lineas: resumen.lineas,
+    busquedaRef,
+    onAumentarUno: handleAumentarUno,
+    onRestarUno: handleRestarUno,
+    onQuitarLinea: handleQuitarLineaSeleccionada,
+    onSolicitarVaciar: () => setConfirmandoVaciar(true),
+    onCobrar: handleCobrar,
+    onNuevoTicket: handleNuevoTicket,
+    onCambiarTicket: handleCambiarTicket,
+    onIrAlTicket: handleIrAlTicket,
+    onAbrirMarcas: () => setMarcasAbiertas(true),
+    onCambiarMetodoPago: () =>
+      handleCambiarMetodoPago(siguienteMetodoPago(ticket.metodoPago)),
+    onSalirDeBusqueda: () => setBusqueda(''),
+    onSinEfecto: (mensaje) => toast.warning(mensaje),
+  })
 
   // La carga reemplaza la página entera, no solo la grilla: renderizar el
   // buscador y el carrito vacíos mientras se cargan los datos se lee como una
@@ -395,6 +487,7 @@ export function PosPage() {
 
             <div className="flex min-w-0 flex-1 items-center gap-1.5">
               <Input
+                ref={busquedaRef}
                 value={busqueda}
                 onChange={(event) => setBusqueda(event.target.value)}
                 placeholder="Buscar por producto, marca, variante o código..."
@@ -443,13 +536,14 @@ export function PosPage() {
           </div>
 
           <ProductGrid
+        
             productos={vendibles}
             sinStock={noVendibles}
             onAgregar={handleAgregar}
             error={errorProductos}
             terminoConsulta={busquedaDiferida}
             onLimpiarFiltros={hayFiltrosActivos ? handleLimpiarFiltros : undefined}
-          />
+                  />
 
           {!errorProductos && <NoVendiblesBadge conteo={bloqueo} />}
         </section>
@@ -512,10 +606,16 @@ export function PosPage() {
             metodoPago={ticket.metodoPago}
             activeTicketId={ticket.id}
             numeroTicket={ticket.numero}
+            lineaSeleccionada={lineaSeleccionada}
+            onSeleccionarLinea={setLineaSeleccionada}
+            refLista={refLista}
             onCambiarMetodoPago={handleCambiarMetodoPago}
             onCambiarCantidad={handleCambiarCantidad}
             onQuitar={handleQuitar}
             onVaciar={handleVaciar}
+            confirmandoVaciar={confirmandoVaciar}
+            onSolicitarVaciar={() => setConfirmandoVaciar(true)}
+            onCancelarVaciar={() => setConfirmandoVaciar(false)}
             onCobrar={handleCobrar}
           />
         </aside>
@@ -547,7 +647,10 @@ export function PosPage() {
           }
           className="animate-stock-fab-in fixed right-0 bottom-4 z-30 flex cursor-pointer items-center gap-2.5 rounded-l-2xl border border-r-0 border-slate-200 bg-white py-3 pr-2.5 pl-3.5 text-left shadow-lg shadow-slate-900/10 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-secondary dark:hover:bg-slate-800"
         >
-          <ShoppingCart
+          {/* `Ticket` y no `ShoppingCart`: el carrito es el ícono del botón
+              Cobrar del panel, y este no cobra — abre la venta en curso. El
+              ícono tiene que nombrar la acción, no el dominio. */}
+          <Ticket
             size={18}
             className="shrink-0 text-emerald-500 dark:text-emerald-400"
             aria-hidden="true"
@@ -590,11 +693,14 @@ export function PosPage() {
           alta ni se borran. Por eso tampoco hace falta `onChanged`: si el
           modal no puede modificar marcas, el catálogo no puede quedar
           desactualizado. */}
+      <AyudaAtajos isOpen={ayudaAbierta} onClose={cerrarAyuda} />
+
       <MarcasModal
         isOpen={marcasAbiertas}
         onClose={() => setMarcasAbiertas(false)}
         marcas={marcas}
         productos={productosCrudos}
+        conteoPOS={conteoPorMarca}
         gestion={false}
         onSelectMarca={(nombre) => {
           setBusqueda(nombre)

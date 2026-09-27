@@ -39,16 +39,22 @@ function resumen(over: Partial<ResumenTicket> = {}): ResumenTicket {
   };
 }
 
-function montarCart(over: { resumen?: ResumenTicket; activeTicketId?: string; numeroTicket?: number } = {}) {
+function montarCart(over: { resumen?: ResumenTicket; activeTicketId?: string; numeroTicket?: number; confirmandoVaciar?: boolean } = {}) {
   const props = {
     resumen: over.resumen ?? resumen(),
     metodoPago: "efectivo" as MetodoPagoPOS,
+    lineaSeleccionada: -1,
+    onSeleccionarLinea: vi.fn(),
+    refLista: { current: null } as React.RefObject<HTMLDivElement | null>,
     activeTicketId: over.activeTicketId ?? "t1",
     numeroTicket: over.numeroTicket ?? 1,
     onCambiarMetodoPago: vi.fn(),
     onCambiarCantidad: vi.fn(),
     onQuitar: vi.fn(),
     onVaciar: vi.fn(),
+    confirmandoVaciar: over.confirmandoVaciar ?? false,
+    onSolicitarVaciar: vi.fn(),
+    onCancelarVaciar: vi.fn(),
     onCobrar: vi.fn(),
   };
   const utils = render(<Cart {...props} />);
@@ -237,6 +243,9 @@ describe("Cart: totales", () => {
     const nuevoResumen = resumen({ descuento: 150, total: 850 });
     rerender(
       <Cart
+      lineaSeleccionada={-1}
+      onSeleccionarLinea={vi.fn()}
+      refLista={{ current: null }}
         resumen={nuevoResumen}
         metodoPago="efectivo"
         activeTicketId="t1"
@@ -245,6 +254,9 @@ describe("Cart: totales", () => {
         onCambiarCantidad={vi.fn()}
         onQuitar={vi.fn()}
         onVaciar={vi.fn()}
+        confirmandoVaciar={false}
+        onSolicitarVaciar={vi.fn()}
+        onCancelarVaciar={vi.fn()}
         onCobrar={vi.fn()}
       />,
     );
@@ -262,6 +274,9 @@ describe("Cart: animación de salida de un item", () => {
   function filaMontada() {
     const props = {
       linea: linea(),
+      indice: 0,
+      seleccionada: false,
+      onSeleccionar: vi.fn(),
       onCambiarCantidad: vi.fn(),
       onQuitar: vi.fn(),
     };
@@ -360,27 +375,33 @@ describe("Cart: vaciar el ticket", () => {
       total: 1000,
     });
 
-  it("pide confirmación y no vacía al primer click", async () => {
+  // El estado del confirm vive en `PosPage` para que `Ctrl+D` abra el mismo
+  // diálogo: acá solo se comprueba que el click lo pida, no que se abra solo.
+  it("el click pide el confirm y no vacía", async () => {
     const user = userEvent.setup();
     const { props } = montarCart({ resumen: resumenConItems() });
 
     await user.click(screen.getByRole("button", { name: /^vaciar$/i }));
 
-    // Abrir el modal no es vaciar: el click solo pide permiso.
+    expect(props.onSolicitarVaciar).toHaveBeenCalledTimes(1);
     expect(props.onVaciar).not.toHaveBeenCalled();
-    expect(
-      screen.getByRole("heading", { name: /vaciar ticket/i }),
-    ).toBeTruthy();
+  });
+
+  it("muestra el diálogo con su texto cuando le piden confirmar", () => {
+    montarCart({ resumen: resumenConItems(), confirmandoVaciar: true });
+
+    expect(screen.getByRole("heading", { name: /vaciar ticket/i })).toBeTruthy();
     expect(
       screen.getByText(/se van a quitar todos los productos del ticket/i),
     ).toBeTruthy();
   });
 
-  it("vacía recién cuando se confirma", async () => {
+  it("confirmar vacía y cierra", async () => {
     const user = userEvent.setup();
-    const { props } = montarCart({ resumen: resumenConItems() });
-
-    await user.click(screen.getByRole("button", { name: /^vaciar$/i }));
+    const { props } = montarCart({
+      resumen: resumenConItems(),
+      confirmandoVaciar: true,
+    });
 
     // Con el modal abierto hay dos botones "Vaciar": el del ticket y el de
     // confirmar. Hay que preguntar adentro del diálogo.
@@ -388,15 +409,20 @@ describe("Cart: vaciar el ticket", () => {
     await user.click(within(dialogo).getByRole("button", { name: /^vaciar$/i }));
 
     expect(props.onVaciar).toHaveBeenCalledTimes(1);
+    expect(props.onCancelarVaciar).toHaveBeenCalledTimes(1);
   });
 
-  it("cancelar no vacía", async () => {
+  it("cancelar cierra sin vaciar", async () => {
     const user = userEvent.setup();
-    const { props } = montarCart({ resumen: resumenConItems() });
+    const { props } = montarCart({
+      resumen: resumenConItems(),
+      confirmandoVaciar: true,
+    });
 
-    await user.click(screen.getByRole("button", { name: /^vaciar$/i }));
-    await user.click(screen.getByRole("button", { name: /cancelar/i }));
+    const dialogo = await screen.findByRole("dialog");
+    await user.click(within(dialogo).getByRole("button", { name: /cancelar/i }));
 
+    expect(props.onCancelarVaciar).toHaveBeenCalledTimes(1);
     expect(props.onVaciar).not.toHaveBeenCalled();
   });
 

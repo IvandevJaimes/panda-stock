@@ -20,11 +20,14 @@ import {
   OPCIONES_ORDEN,
   OPCIONES_VISTA,
   type OrdenCatalogo,
+  type MetodoPagoPOS,
   cantidadAvisos,
   derivarEstadoStock,
   descripcionAviso,
   esVendible,
   esVencido,
+  esVisibleEnPOS,
+  siguienteMetodoPago,
   estaPorVencer,
   filtrarCatalogoPOS,
   formatearMoneda,
@@ -146,6 +149,38 @@ describe("esVendible", () => {
     expect(
       esVendible(
         productoPOS({ id: 4, loteActivoVencimiento: parsearFecha(1) }),
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("esVisibleEnPOS", () => {
+  it("coincide con esVendible para lo que el POS muestra", () => {
+    expect(esVisibleEnPOS(crudo({ stockActual: 10 }))).toBe(true);
+    expect(esVisibleEnPOS(crudo({ stockActual: 2, stockMinimo: 5 }))).toBe(true);
+    expect(esVisibleEnPOS(crudo({ stockActual: 0 }))).toBe(false);
+    expect(esVisibleEnPOS(crudo({ loteActivoVencimiento: parsearFecha(1) }))).toBe(
+      false,
+    );
+  });
+
+  it("excluye los dados de baja, que el POS filtra antes de mapear", () => {
+    // `esVendible` no puede detectar esto: ya recibe el estado calculado.
+    expect(esVisibleEnPOS(crudo({ activo: false, stockActual: 50 }))).toBe(false);
+  });
+
+  it("stock bajo con vencimiento futuro sigue vendible", () => {
+    expect(
+      esVisibleEnPOS(
+        crudo({ stockActual: 1, stockMinimo: 9, loteActivoVencimiento: parsearFecha(-20) }),
+      ),
+    ).toBe(true);
+  });
+
+  it("vencido gana aunque tenga stock de sobra", () => {
+    expect(
+      esVisibleEnPOS(
+        crudo({ stockActual: 99, loteActivoVencimiento: parsearFecha(1) }),
       ),
     ).toBe(false);
   });
@@ -916,3 +951,15 @@ describe("sesiones de ticket", () => {
     });
   });
 });
+
+describe('siguienteMetodoPago', () => {
+  it('rota por los tres métodos y vuelve al primero', () => {
+    expect(siguienteMetodoPago('efectivo')).toBe('transferencia')
+    expect(siguienteMetodoPago('transferencia')).toBe('tarjeta')
+    expect(siguienteMetodoPago('tarjeta')).toBe('efectivo')
+  })
+
+  it('un método desconocido arranca por el primero', () => {
+    expect(siguienteMetodoPago('bitcoin' as MetodoPagoPOS)).toBe('efectivo')
+  })
+})

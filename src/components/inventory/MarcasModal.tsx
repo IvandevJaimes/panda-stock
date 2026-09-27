@@ -16,6 +16,13 @@ import type { Marca, ProductoConLoteActivo } from "../../../electron/db/types";
 // ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
+
+/** Productos de una marca: los que el POS puede vender y los que tiene asignados. */
+export type ConteoMarca = {
+  vendibles: number;
+  total: number;
+};
+
 export interface MarcasModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -32,6 +39,14 @@ export interface MarcasModalProps {
    * marcas. Por defecto true para no cambiar el comportamiento de Inventario.
    */
   gestion?: boolean;
+  /**
+   * Conteo por marcaId que decide qué números muestra la lista. El POS lo pasa
+   * porque una marca puede tener productos que no se venden (agotados, vencidos
+   * o dados de baja) y desde el mostrador el número que importa es el de los que
+   * sí. Sin esta prop —o sea en Inventario— se cuenta todo lo asignado, que es
+   * lo que corresponde al mantener el maestro de datos.
+   */
+  conteoPOS?: Map<number, ConteoMarca>;
 }
 
 const MARCAS_POR_PAGINA = 20;
@@ -49,7 +64,7 @@ const ORDENES_MARCA: { value: OrdenMarca; label: string }[] = [
 // ---------------------------------------------------------------------------
 // Componente
 // ---------------------------------------------------------------------------
-export function MarcasModal({ isOpen, onClose, marcas, productos, onChanged, onSelectMarca, gestion = true }: MarcasModalProps) {
+export function MarcasModal({ isOpen, onClose, marcas, productos, onChanged, onSelectMarca, gestion = true, conteoPOS }: MarcasModalProps) {
   const [busquedaMarca, setBusquedaMarca] = useState("");
   const [orden, setOrden] = useState<OrdenMarca>("defecto");
   const [creandoMarca, setCreandoMarca] = useState(false);
@@ -71,13 +86,29 @@ export function MarcasModal({ isOpen, onClose, marcas, productos, onChanged, onS
   const productosDeMarca = (marcaId: number) =>
     productos.filter((p) => p.marcaId === marcaId);
 
-  const totalProductos = marcasActivas.reduce(
-    (suma, marca) => suma + productosDeMarca(marca.id).length,
+  const conteoDeMarca = (marcaId: number): ConteoMarca => {
+    const precomputado = conteoPOS?.get(marcaId);
+    if (precomputado) return precomputado;
+    const total = productosDeMarca(marcaId).length;
+    return { vendibles: total, total };
+  };
+
+  const totalVendibles = marcasActivas.reduce(
+    (suma, marca) => suma + conteoDeMarca(marca.id).vendibles,
     0,
   );
 
-  const cantidadDeMarca = (marcaId: number) =>
-    productosDeMarca(marcaId).length;
+  const totalProductos = marcasActivas.reduce(
+    (suma, marca) => suma + conteoDeMarca(marca.id).total,
+    0,
+  );
+
+  const resumenDeMarca = (marcaId: number) => {
+    const { vendibles, total } = conteoDeMarca(marcaId);
+    if (total === 0) return "Sin productos asignados";
+    if (vendibles === 0) return "Sin stock para vender";
+    return `${vendibles} ${vendibles === 1 ? "producto para vender" : "productos para vender"}`;
+  };
 
   const comparadorNombre = (a: Marca, b: Marca) =>
     a.nombre.localeCompare(b.nombre, "es");
@@ -90,12 +121,12 @@ export function MarcasModal({ isOpen, onClose, marcas, productos, onChanged, onS
         return comparadorNombre(b, a);
       case "mas_productos":
         return (
-          cantidadDeMarca(b.id) - cantidadDeMarca(a.id) ||
+          conteoDeMarca(b.id).vendibles - conteoDeMarca(a.id).vendibles ||
           comparadorNombre(a, b)
         );
       case "menos_productos":
         return (
-          cantidadDeMarca(a.id) - cantidadDeMarca(b.id) ||
+          conteoDeMarca(a.id).vendibles - conteoDeMarca(b.id).vendibles ||
           comparadorNombre(a, b)
         );
       default:
@@ -143,8 +174,15 @@ export function MarcasModal({ isOpen, onClose, marcas, productos, onChanged, onS
             </p>
             <p className="mt-0.5 text-xs font-medium text-slate-400 dark:text-slate-500">
               {marcasActivas.length}{" "}
-              {marcasActivas.length === 1 ? "marca" : "marcas"} · {totalProductos}{" "}
-              {totalProductos === 1 ? "producto asignado" : "productos asignados"}
+              {marcasActivas.length === 1 ? "marca" : "marcas"} ·{" "}
+              {conteoPOS ? totalVendibles : totalProductos}{" "}
+              {conteoPOS
+                ? totalVendibles === 1
+                  ? "producto para vender"
+                  : "productos para vender"
+                : totalProductos === 1
+                  ? "producto asignado"
+                  : "productos asignados"}
             </p>
           </div>
           {gestion && (
@@ -243,7 +281,7 @@ export function MarcasModal({ isOpen, onClose, marcas, productos, onChanged, onS
           <>
             <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pr-1 custom-scrollbar">
               {marcasPagina.map((marca) => {
-                const cantidad = productosDeMarca(marca.id).length;
+                const { total } = conteoDeMarca(marca.id);
                 return (
                   <div
                     key={marca.id}
@@ -265,9 +303,7 @@ export function MarcasModal({ isOpen, onClose, marcas, productos, onChanged, onS
                           {marca.nombre}
                         </span>
                         <span className="text-xs font-medium text-slate-400 dark:text-slate-500">
-                          {cantidad === 0
-                            ? "Sin productos asignados"
-                            : `${cantidad} ${cantidad === 1 ? "producto asignado" : "productos asignados"}`}
+                          {resumenDeMarca(marca.id)}
                         </span>
                       </span>
                     </button>
@@ -284,7 +320,7 @@ export function MarcasModal({ isOpen, onClose, marcas, productos, onChanged, onS
                             <Pencil className="h-3.5 w-3.5" aria-hidden />
                           </button>
                         </Tooltip>
-                        {cantidad === 0 && (
+                        {total === 0 && (
                           <Tooltip content="Eliminar marca" placement="top">
                             <button
                               type="button"

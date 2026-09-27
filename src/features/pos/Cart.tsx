@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import type { RefObject } from 'react'
 import { ShoppingBag, Ticket, Trash2 } from 'lucide-react'
 import { cn } from '../../lib/cn'
 import { Button } from '../../components/ui/Button'
@@ -10,6 +10,9 @@ import { formatearMoneda, type MetodoPagoPOS, type ResumenTicket } from './posQu
 type CartProps = {
   resumen: ResumenTicket
   metodoPago: MetodoPagoPOS
+  lineaSeleccionada: number
+  onSeleccionarLinea: (indice: number) => void
+  refLista: RefObject<HTMLDivElement | null>
   /**
    * Solo se usa como `key` del contenido. Al cambiar, React desmonta y vuelve a
    * montar el nodo, y eso es lo que dispara la animación de entrada: no hace
@@ -31,21 +34,30 @@ type CartProps = {
   onCambiarCantidad: (productoId: number, cantidad: number) => void
   onQuitar: (productoId: number) => void
   onVaciar: () => void
+  /** El estado vive en `PosPage` para que `Ctrl+D` abra el mismo confirm. */
+  confirmandoVaciar: boolean
+  onSolicitarVaciar: () => void
+  onCancelarVaciar: () => void
   onCobrar: () => void
 }
 
 export function Cart({
   resumen,
   metodoPago,
+  lineaSeleccionada,
+  onSeleccionarLinea,
+  refLista,
   activeTicketId,
   numeroTicket,
   onCambiarMetodoPago,
   onCambiarCantidad,
   onQuitar,
   onVaciar,
+  confirmandoVaciar,
+  onSolicitarVaciar,
+  onCancelarVaciar,
   onCobrar,
 }: CartProps) {
-  const [confirmandoVaciar, setConfirmandoVaciar] = useState(false)
   const vacio = resumen.unidades === 0
 
   return (
@@ -87,7 +99,10 @@ export function Cart({
             crecer sin límites. `min-h-0` es obligatorio — sin él, el `flex-1`
             no baja de su altura de contenido y el flexbox le roba espacio a las
             secciones de abajo en vez de dejar que esta se desplace. */}
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-[22px] py-2.5">
+        <div
+          ref={refLista}
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-[22px] py-2.5"
+        >
           {vacio ? (
             <div className="flex flex-col items-center justify-center gap-1.5 px-4 py-12 text-center">
               <ShoppingBag
@@ -104,10 +119,13 @@ export function Cart({
               </span>
             </div>
           ) : (
-            resumen.lineas.map((linea) => (
+            resumen.lineas.map((linea, indice) => (
               <CartItem
                 key={linea.productoId}
                 linea={linea}
+                indice={indice}
+                seleccionada={indice === lineaSeleccionada}
+                onSeleccionar={onSeleccionarLinea}
                 onCambiarCantidad={onCambiarCantidad}
                 onQuitar={onQuitar}
               />
@@ -154,7 +172,7 @@ export function Cart({
       <div className="grid shrink-0 grid-cols-[auto_1fr] gap-3 border-t border-slate-200 px-[22px] pt-3 pb-3.5 max-[600px]:grid-cols-1 dark:border-slate-800">
         <button
           type="button"
-          onClick={() => setConfirmandoVaciar(true)}
+          onClick={onSolicitarVaciar}
           disabled={vacio}
           className={cn(
             'inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-slate-200 bg-transparent px-[18px] py-2.5 font-display text-sm font-semibold text-slate-600 transition-colors duration-150',
@@ -178,6 +196,7 @@ export function Cart({
           icon={<ShoppingBag size={19} />}
           onClick={onCobrar}
           disabled={vacio}
+          aria-keyshortcuts="Enter"
           className="min-h-[44px] px-[18px] py-2 font-display text-[15px] font-semibold tracking-wide shadow-sm hover:shadow-md"
         >
           Cobrar
@@ -189,10 +208,8 @@ export function Cart({
           eso pide confirmación. */}
       <ConfirmModal
         isOpen={confirmandoVaciar}
-        onClose={() => setConfirmandoVaciar(false)}
-        onConfirm={() => {
-          onVaciar()
-        }}
+        onClose={onCancelarVaciar}
+        onConfirm={onVaciar}
         title="Vaciar ticket"
         description="Se van a quitar todos los productos del ticket. No se puede deshacer."
         confirmText="Vaciar"

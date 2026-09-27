@@ -8,6 +8,7 @@ import type { ProductoPOS } from './posQuery'
 type ProductGridProps = {
   productos: ProductoPOS[]
   sinStock: ProductoPOS[]
+  /** Recibe el índice para que el click mueva el cursor de los atajos. */
   onAgregar: (producto: ProductoPOS) => void
   error: string | null
   terminoConsulta: string
