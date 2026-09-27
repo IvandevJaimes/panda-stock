@@ -1,6 +1,7 @@
 import { afterEach, beforeAll } from 'vitest'
 import { cleanup } from '@testing-library/react'
 import { barcodeScannerService } from '../services/barcode-scanner.service'
+import { usePosTicketsStore } from '../stores/pos-tickets.store'
 import { useScannerStore } from '../stores/scanner.store'
 
 // jsdom no implementa layout, así que scrollIntoView no existe. Componentes que
@@ -37,4 +38,8 @@ afterEach(() => {
   barcodeScannerService.destroy()
   useScannerStore.getState().setContext(null, null)
   useScannerStore.getState().setAttached(false)
+  // Los tickets persisten en localStorage, así que sin esto cada test hereda
+  // las líneas del anterior y falla por estado ajeno.
+  localStorage.clear()
+  usePosTicketsStore.getState().vaciarPersistencia()
 })

@@ -29,24 +29,16 @@ import { PosTabs } from './PosTabs'
 import { ProductGrid } from './ProductGrid'
 import { NoVendiblesBadge } from './NoVendiblesBadge'
 import { useAtajosPOS } from './useAtajosPOS'
+import { usePosTicketsStore } from '../../stores/pos-tickets.store'
 import {
-  actualizarTicketActivo,
-  agregarAlTicket,
-  agregarTicket,
-  cambiarCantidadTicket,
-  cambiarMetodoPagoTicket,
   siguienteMetodoPago,
-  cerrarTicket,
   construirCategorias,
   contarBloqueados,
-  crearTicket,
   esVendible,
   esVisibleEnPOS,
   filtrarCatalogoPOS,
   formatearMoneda,
   mapearProductosPOS,
-  puedeAbrirTicket,
-  quitarDelTicket,
   resumirTicket,
   separarPorDisponibilidad,
   ticketActivo,
@@ -56,9 +48,7 @@ import {
   valorVistaActiva,
   OPCIONES_VISTA,
   VISTA_POR_DEFECTO,
-  type MetodoPagoPOS,
   type ProductoPOS,
-  type TicketSession,
   type VistaCatalogo,
 } from './posQuery'
 
@@ -91,8 +81,9 @@ export function PosPage() {
   // método de pago. Siempre hay al menos una: `crearTicket` la abre y
   // `cerrarTicket` la reabre si era la última, así que la pantalla de venta
   // nunca queda sin dónde armar la venta siguiente.
-  const [tickets, setTickets] = useState<TicketSession[]>(() => [crearTicket('t1', 1)])
-  const [activeTicketId, setActiveTicketId] = useState('t1')
+  const tickets = usePosTicketsStore((estado) => estado.tickets)
+  const activeTicketId = usePosTicketsStore((estado) => estado.activeTicketId)
+  const rehidratar = usePosTicketsStore((estado) => estado.rehidratar)
 
   /**
    * Los ids se generan acá y no en `posQuery.ts` a propósito: `crearTicket` es
@@ -137,6 +128,9 @@ export function PosPage() {
         setProductosCrudos(productos)
         setCategorias(categoriasData)
         setMarcas(marcasData)
+        // Recién con el catálogo en memoria se pueden reponer los nombres y los
+        // precios de las líneas que venían de localStorage.
+        rehidratar(productos)
         setCargando(false)
       })
       .catch((err) => {
@@ -150,7 +144,7 @@ export function PosPage() {
     return () => {
       activo = false
     }
-  }, [])
+  }, [rehidratar])
 
   const categoriasPorId = useMemo(
     () => new Map(categorias.map((categoria) => [categoria.id, categoria])),
@@ -249,72 +243,50 @@ export function PosPage() {
     return () => window.removeEventListener('keydown', alPresionar)
   }, [ticketColapsable, ticketAbierto, cerrarPanelTicket])
 
+  const {
+    agregar: agregarAlTicketActivo,
+    cambiarCantidad: cambiarCantidadTicketActivo,
+    quitar: quitarDelTicketActivo,
+    vaciarActivo,
+    cambiarMetodoPago: cambiarMetodoPagoTicketActivo,
+    seleccionarTicket,
+    nuevoTicket: abrirTicket,
+    cerrar: cerrarTicketDelStore,
+    moverTicket,
+    irAlTicket,
+  } = usePosTicketsStore()
+
   const handleAgregar = useCallback(
-    (producto: ProductoPOS) => {
-      setTickets((previos) =>
-        actualizarTicketActivo(previos, activeTicketId, (items) =>
-          agregarAlTicket(items, producto),
-        ),
-      )
-    },
-    [activeTicketId],
+    (producto: ProductoPOS) => agregarAlTicketActivo(producto),
+    [agregarAlTicketActivo],
   )
 
   const handleCambiarCantidad = useCallback(
-    (productoId: number, cantidad: number) => {
-      setTickets((previos) =>
-        actualizarTicketActivo(previos, activeTicketId, (items) =>
-          cambiarCantidadTicket(items, productoId, cantidad),
-        ),
-      )
-    },
-    [activeTicketId],
+    (productoId: number, cantidad: number) =>
+      cambiarCantidadTicketActivo(productoId, cantidad),
+    [cambiarCantidadTicketActivo],
   )
 
   const handleQuitar = useCallback(
-    (productoId: number) => {
-      setTickets((previos) =>
-        actualizarTicketActivo(previos, activeTicketId, (items) =>
-          quitarDelTicket(items, productoId),
-        ),
-      )
-    },
-    [activeTicketId],
+    (productoId: number) => quitarDelTicketActivo(productoId),
+    [quitarDelTicketActivo],
   )
 
   // Vaciar es por sesión, no global: vaciar el ticket que se está mirando no
   // puede borrar las otras ventas abiertas.
-  const handleVaciar = useCallback(() => {
-    setTickets((previos) => actualizarTicketActivo(previos, activeTicketId, () => []))
-  }, [activeTicketId])
+  const handleVaciar = vaciarActivo
 
-  const handleCambiarMetodoPago = useCallback(
-    (metodo: MetodoPagoPOS) => {
-      setTickets((previos) =>
-        cambiarMetodoPagoTicket(previos, activeTicketId, metodo),
-      )
-    },
-    [activeTicketId],
-  )
+  const handleCambiarMetodoPago = cambiarMetodoPagoTicketActivo
 
-  const handleSelectTicket = useCallback((id: string) => {
-    setActiveTicketId(id)
-  }, [])
+  const handleSelectTicket = seleccionarTicket
 
   const handleNuevoTicket = useCallback(() => {
-    if (!puedeAbrirTicket(tickets)) return
-    const id = siguienteIdTicket()
-    setTickets((previos) => agregarTicket(previos, id))
-    setActiveTicketId(id)
-  }, [tickets, siguienteIdTicket])
+    abrirTicket(siguienteIdTicket())
+  }, [abrirTicket, siguienteIdTicket])
 
   const handleCloseTicket = useCallback(
-    (id: string) => {
-      const resultado = cerrarTicket(tickets, id, activeTicketId, siguienteIdTicket())
-      setTickets(resultado.tickets)
-      setActiveTicketId(resultado.activeTicketId)
-    },
-    [tickets, activeTicketId, siguienteIdTicket],
+    (id: string) => cerrarTicketDelStore(id, siguienteIdTicket()),
+    [cerrarTicketDelStore, siguienteIdTicket],
   )
 
   const handleLimpiarFiltros = useCallback(() => {
@@ -348,25 +320,9 @@ export function PosPage() {
     [handleQuitar],
   )
 
-  const handleCambiarTicket = useCallback(
-    (delta: number) => {
-      setActiveTicketId((actual) => {
-        const indice = tickets.findIndex((t) => t.id === actual)
-        const destino = indice + delta
-        if (indice < 0 || destino < 0 || destino >= tickets.length) return actual
-        return tickets[destino].id
-      })
-    },
-    [tickets],
-  )
+  const handleCambiarTicket = moverTicket
 
-  const handleIrAlTicket = useCallback(
-    (numero: number) => {
-      const destino = tickets.find((t) => t.numero === numero)
-      if (destino) setActiveTicketId(destino.id)
-    },
-    [tickets],
-  )
+  const handleIrAlTicket = irAlTicket
 
   const handleCobrar = useCallback(() => {
     // Sin este guarda, un cobro sobre un ticket vacío anunciaría una venta que
@@ -374,14 +330,9 @@ export function PosPage() {
     // no debería depender de que eso siga siendo cierto.
     if (ticket.items.length === 0) return
 
-    // `cerrarTicket` se calcula por fuera del updater a propósito: meter un
-    // `setActiveTicketId` adentro de un `setTickets` es un efecto dentro de un
-    // updater, que React puede ejecutar dos veces en StrictMode.
-    const resultado = cerrarTicket(tickets, activeTicketId, activeTicketId, siguienteIdTicket())
-    setTickets(resultado.tickets)
-    setActiveTicketId(resultado.activeTicketId)
+    cerrarTicketDelStore(activeTicketId, siguienteIdTicket())
     toast.success('Venta completada')
-  }, [ticket.items.length, tickets, activeTicketId, siguienteIdTicket])
+  }, [ticket.items.length, activeTicketId, cerrarTicketDelStore, siguienteIdTicket])
 
   const {
     lineaSeleccionada,
