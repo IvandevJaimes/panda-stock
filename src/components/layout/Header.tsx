@@ -38,7 +38,7 @@ interface MainNavItem {
 }
 
 const mainNavItems: MainNavItem[] = [
-  { to: "/pos", label: "Ventas", icon: ShoppingBag },
+  { to: "/pos", label: "Vender", icon: ShoppingBag },
   { to: "/inventory", label: "Inventario", icon: Package },
   { to: "/reports", label: "Reportes", icon: TrendingUp, bloqueado: true },
 ];

@@ -31,9 +31,9 @@ export function AyudaAtajos({ isOpen, onClose }: AyudaAtajosProps) {
       isOpen={isOpen}
       onClose={onClose}
       title="Atajos de teclado"
-      subtitle="El cursor se mueve con las flechas y todo lo que hay bajo él se agrega con Enter."
       headerIcon={<Keyboard className="h-5 w-5" aria-hidden />}
-      maxWidth="lg"
+      maxWidth="xl"
+  
     >
       <div className="grid gap-x-8 gap-y-6 sm:grid-cols-2">
         {ORDEN_GRUPOS.map((grupo) => (

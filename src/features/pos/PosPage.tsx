@@ -12,6 +12,7 @@ import {
   ChevronLeft,
   ChevronRight,
   FilterX,
+  Info,
   Loader2,
   Search,
   Ticket,
@@ -571,6 +572,7 @@ export function PosPage() {
     setLineaSeleccionada,
     refLista,
     ayudaAbierta,
+    alternarAyuda,
     cerrarAyuda,
   } = useAtajosPOS({
     lineas: resumen.lineas,
@@ -647,6 +649,21 @@ export function PosPage() {
                   <h2 className="truncate font-display font-semibold text-2xl tracking-tight text-slate-900 dark:text-white">
                     {viendoMasVendidos ? 'Más vendidos' : 'Vender'}
                   </h2>
+
+                  {/* Icono solo, al lado del título. `alternarAyuda` y no un
+                      estado propio: el atajo F1 ya abre y cierra este mismo
+                      modal, y con dos fuentes de verdad el botón podía quedar
+                      desincronizado del teclado. */}
+                  <Tooltip content="Atajos de teclado · F1" placement="bottom">
+                    <button
+                      type="button"
+                      onClick={alternarAyuda}
+                      aria-label="Ver los atajos de teclado"
+                      className="grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-xl text-slate-400 transition-colors duration-150 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                    >
+                      <Info size={18} aria-hidden="true" />
+                    </button>
+                  </Tooltip>
                 </div>
 
               <div className="flex items-center gap-2">

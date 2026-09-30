@@ -229,11 +229,6 @@ export function tablaAtajos(modEsMeta: boolean): EntradaAyuda[] {
     { accion: 'moverAbajo', teclas: 'ArrowDown', rotulo: 'Línea de abajo', grupo: 'Navegación' },
     { accion: 'irAlPrimero', teclas: 'Home', rotulo: 'Primera línea', grupo: 'Navegación' },
     { accion: 'irAlUltimo', teclas: 'End', rotulo: 'Última línea', grupo: 'Navegación' },
-    { accion: 'paginaArriba', teclas: 'PageUp', rotulo: 'Subir una página', grupo: 'Navegación' },
-    { accion: 'paginaAbajo', teclas: 'PageDown', rotulo: 'Bajar una página', grupo: 'Navegación' },
-    { accion: 'agregarUno', teclas: '+', rotulo: 'Sumar una unidad', grupo: 'Ticket' },
-    { accion: 'quitarUno', teclas: '-', rotulo: 'Restar una unidad', grupo: 'Ticket' },
-    { accion: 'quitarLinea', teclas: 'Delete', rotulo: 'Quitar la línea', grupo: 'Ticket' },
     { accion: 'vaciarTicket', teclas: `${mod}+D`, rotulo: 'Vaciar el ticket', grupo: 'Ticket' },
     { accion: 'cobrar', teclas: 'Enter Enter', rotulo: 'Cobrar (dos veces Enter)', grupo: 'Ticket' },
     { accion: 'nuevoTicket', teclas: `${mod}+N`, rotulo: 'Abrir un ticket nuevo', grupo: 'Ticket' },
@@ -245,6 +240,6 @@ export function tablaAtajos(modEsMeta: boolean): EntradaAyuda[] {
     { accion: 'enfocarCatalogo', teclas: 'F3', rotulo: 'Volver al catálogo', grupo: 'Búsqueda' },
     { accion: 'salirDeBusqueda', teclas: 'Escape', rotulo: 'Salir de la búsqueda', grupo: 'Búsqueda' },
     { accion: 'abrirMarcas', teclas: `${mod}+M`, rotulo: 'Marcas', grupo: 'General' },
-    { accion: 'ayuda', teclas: 'F1', rotulo: 'Atajos de teclado', grupo: 'General' },
+   
   ]
 }

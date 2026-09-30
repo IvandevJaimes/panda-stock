@@ -271,16 +271,23 @@ describe("tablaAtajos", () => {
       // `Escape` solo resuelve con el foco en el buscador.
       salirDeBusqueda: tecla({ key: "Escape", editable: true }),
       ayuda: tecla({ key: "F1" }),
+      // `Alt+dígito` se lee del `code`, no del `key`: con Alt el `key` depende
+      // del layout y en varios teclado devuelve el símbolo en vez del número.
+      irAlTicket: tecla({ key: "1", code: "Digit1", alt: true }),
     };
 
-    const cubiertos = new Set<string>();
+    const cubierta = new Set<string>();
     for (const entrada of tablaAtajos(false)) {
       const evento = ejemplos[entrada.accion];
       if (!evento) continue;
-      cubiertos.add(entrada.accion);
+      cubierta.add(entrada.accion);
       expect(resolverAtajo(evento, false)?.accion).toBe(entrada.accion);
     }
 
-    expect(cubiertos.size).toBe(20);
+    // Contra el largo de la tabla, no contra un numero fijo: cada entrada
+    // necesita su ejemplo. Con un conteo hardcodeado, sacar un atajo de la ayuda
+    // rompe el test aunque la tecla siga funcionando, y esovfuerza a dejar
+    // documentado lo que justamente se quiso sacar.
+    expect(cubierta.size).toBe(tablaAtajos(false).length);
   });
 });

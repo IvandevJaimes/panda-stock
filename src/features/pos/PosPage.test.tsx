@@ -959,6 +959,46 @@ describe("PosPage", () => {
       });
     });
 
+    describe("ayuda de atajos", () => {
+      it("el botón de info al lado del título abre el modal de atajos", async () => {
+        const user = userEvent.setup();
+        render(<PosPage />);
+        await esperarCatalogo();
+
+        // Icono solo, así que el nombre accesible es lo único que lo identifica.
+        const info = screen.getByRole("button", { name: /ver los atajos/i });
+        const titulo = screen.getByRole("heading", { name: /^vender$/i });
+
+        // Va pegado al título, no en el grupo de botones de la derecha.
+        expect(info.parentElement).toBe(titulo.parentElement);
+
+        await user.click(info);
+        expect(
+          await screen.findByRole("heading", { name: /atajos de teclado/i }),
+        ).toBeTruthy();
+      });
+
+      it("el atajo F1 y el botón comparten el mismo estado", async () => {
+        const user = userEvent.setup();
+        render(<PosPage />);
+        await esperarCatalogo();
+
+        await user.click(
+          screen.getByRole("button", { name: /ver los atajos/i }),
+        );
+        await screen.findByRole("heading", { name: /atajos de teclado/i });
+
+        // Con dos fuentes de verdad el botón podía quedar abierto mientras F1
+        // lo cerraba.
+        await user.keyboard("{F1}");
+        await waitFor(() =>
+          expect(
+            screen.queryByRole("heading", { name: /atajos de teclado/i }),
+          ).toBeNull(),
+        );
+      });
+    });
+
     it("el botón está en la fila del título, sobre el buscador", async () => {
       render(<PosPage />);
       await esperarCatalogo();
