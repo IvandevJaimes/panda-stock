@@ -263,6 +263,35 @@ export type FiltrosVentas = {
   desde?: string
   hasta?: string
   cajaId?: number
+  /** Tope de filas. Sin tope, `getVentas` devuelve el histórico completo. */
+  limit?: number
+}
+
+/**
+ * Ítem del historial: la foto y el precio del producto, con la descripción
+ * congelada al momento de la venta.
+ */
+export type VentaHistorialItem = {
+  id: number
+  productoId: number | null
+  descripcionItem: string
+  cantidad: number
+  precioUnitario: number
+  subtotal: number
+  /** Del producto ACTUAL, no del histórico: la foto se puede haber cambiado. */
+  imgPath: string | null
+}
+
+/**
+ * Venta con lo que el cajero necesita para reconocerla de un vistazo: qué se
+ * llevó, cuántas unidades y cómo se pagó. Sin esto el historial obliga a abrir
+ * cada venta una por una solo para descubrir qué contenía.
+ */
+export type VentaHistorial = Venta & {
+  unidades: number
+  /** Métodos usados, sin repetir. Una venta con pago mixto trae más de uno. */
+  metodos: MetodoPago[]
+  items: VentaHistorialItem[]
 }
 
 export type VentaDetalle = {

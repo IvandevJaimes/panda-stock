@@ -1,5 +1,5 @@
 import type { RefObject } from 'react'
-import { ShoppingBag, Ticket, Trash2 } from 'lucide-react'
+import { History, ShoppingBag, Ticket, Trash2 } from 'lucide-react'
 import { cn } from '../../lib/cn'
 import { Button } from '../../components/ui/Button'
 import { ConfirmModal } from '../../components/ui/ConfirmModal'
@@ -37,10 +37,18 @@ type CartProps = {
   onVaciar: () => void
   /** Ids de productos desactivados: bloquean el `+` de sus líneas. */
   idsDesactivados: Set<number>
+  /**
+   * Stock disponible por producto, leído del catálogo. Vive acá y no en el
+   * ticket porque es dato de la base: el ticket solo guarda lo que decidió el
+   * cajero y se persiste en localStorage.
+   */
+  stockPorId: Map<number, number>
   /** El estado vive en `PosPage` para que `Ctrl+D` abra el mismo confirm. */
   confirmandoVaciar: boolean
   onSolicitarVaciar: () => void
   onCancelarVaciar: () => void
+  /** Abre el modal de historial. El estado vive en `PosPage`, junto al resto. */
+  onAbrirHistorial: () => void
   onCobrar: () => void
   /**
    * Por qué no se puede cobrar ahora, o `null` si se puede. Vive acá y no dentro
@@ -65,9 +73,11 @@ export function Cart({
   onQuitar,
   onVaciar,
   idsDesactivados,
+  stockPorId,
   confirmandoVaciar,
   onSolicitarVaciar,
   onCancelarVaciar,
+  onAbrirHistorial,
   onCobrar,
   motivoCobroBloqueado,
   cobrando,
@@ -90,9 +100,27 @@ export function Cart({
           </h2>
         </div>
 
-        <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-[3px] font-display text-xs font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
-          {resumen.unidades} {resumen.unidades === 1 ? 'ítem' : 'ítems'}
-        </span>
+        {/* El badge cuenta lo que hay EN el ticket y el botón mira lo que ya se
+            COBRÓ. Son dos números distintos que conviven en la misma esquina: el
+            primero es el ticket en curso, el segundo es el historial. Por eso el
+            botón queda al lado y no en el footer con "Vaciar" y "Cobrar": esos
+            son acciones sobre el ticket, este es una consulta. */}
+        <div className="flex shrink-0 items-center gap-1.5">
+          <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-[3px] font-display text-xs font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+            {resumen.unidades} {resumen.unidades === 1 ? 'ítem' : 'ítems'}
+          </span>
+
+          <Tooltip content="Ver historial de ventas" placement="bottom">
+            <button
+              type="button"
+              onClick={onAbrirHistorial}
+              aria-label="Ver historial de ventas"
+              className="grid h-7 w-7 shrink-0 cursor-pointer place-items-center rounded-lg text-slate-400 transition-colors duration-150 hover:bg-slate-100 hover:text-emerald-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-emerald-400"
+            >
+              <History size={16} aria-hidden="true" />
+            </button>
+          </Tooltip>
+        </div>
       </div>
 
       {/* Todo lo que cambia al cambiar de pestaña va dentro de este nodo con
@@ -144,6 +172,7 @@ export function Cart({
                 onCambiarCantidad={onCambiarCantidad}
                 onQuitar={onQuitar}
                 desactivado={idsDesactivados.has(linea.productoId)}
+                stockDisponible={stockPorId.get(linea.productoId) ?? null}
               />
             ))
           )}

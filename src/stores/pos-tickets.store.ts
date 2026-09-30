@@ -39,11 +39,11 @@ export type EstadoTickets = {
   quitar: (productoId: number) => void
   vaciarActivo: () => void
   cambiarMetodoPago: (metodo: MetodoPagoPOS) => void
-  nuevoTicket: (id: string) => void
+  nuevoTicket: () => void
   seleccionarTicket: (id: string) => void
   moverTicket: (delta: number) => void
   irAlTicket: (numero: number) => void
-  cerrar: (id: string, idNuevo: string) => void
+  cerrar: (id: string) => void
   /**
    * Reescribe nombre, precio, costo e imagen de cada línea con lo que dice el
    * catálogo recién cargado. Se llama una vez, después de cargar los productos:
@@ -73,6 +73,29 @@ const CLAVE = 'panda-pos-tickets'
 
 /** Bump cuando cambie la forma de `TicketPersistido`: la versión vieja se ignora. */
 const VERSION = 1
+
+let contadorId = 0
+
+/**
+ * El id se genera acá y no en `PosPage`, que es donde estaba: un `useRef` de
+ * componente se reinicia en cada montaje, pero los tickets viven en este store y
+ * sobreviven a la navegación. Ir a Inventario y volver al POS alcanzaba para que
+ * el contador arrancara en 1 con `t2` y `t3` ya abiertos, y el `+` siguiente
+ * creara un id repetido. Con ids duplicados, `PosTabs` marca las dos pestañas
+ * como activas (miran `id === activeTicketId`) y `cerrarTicket` borra la primera
+ * coincidencia, o sea una distinta de la que se quiso cerrar. El salto sobre los
+ * ids en uso cubre el reinicio de la app, que rehidrata tickets con ids que este
+ * contador todavía no generó.
+ */
+function idLibre(tickets: TicketSession[]): string {
+  const usados = new Set(tickets.map((ticket) => ticket.id))
+  let id: string
+  do {
+    contadorId += 1
+    id = `t${contadorId}`
+  } while (usados.has(id))
+  return id
+}
 
 function primerTicket(): { tickets: TicketSession[]; activeTicketId: string } {
   const ticket = crearTicket('t1', 1)
@@ -179,12 +202,12 @@ export const usePosTicketsStore = create<EstadoTickets>()(
           tickets: cambiarMetodoPagoTicket(estado.tickets, estado.activeTicketId, metodoPago),
         })),
 
-      nuevoTicket: (id) =>
-        set((estado) =>
-          puedeAbrirTicket(estado.tickets)
-            ? { tickets: agregarTicket(estado.tickets, id), activeTicketId: id }
-            : estado,
-        ),
+      nuevoTicket: () =>
+        set((estado) => {
+          if (!puedeAbrirTicket(estado.tickets)) return estado
+          const id = idLibre(estado.tickets)
+          return { tickets: agregarTicket(estado.tickets, id), activeTicketId: id }
+        }),
 
       seleccionarTicket: (id) => set({ activeTicketId: id }),
 
@@ -201,8 +224,10 @@ export const usePosTicketsStore = create<EstadoTickets>()(
           return destino ? { activeTicketId: destino.id } : {}
         }),
 
-      cerrar: (id, idNuevo) =>
-        set((estado) => cerrarTicket(estado.tickets, id, estado.activeTicketId, idNuevo)),
+      cerrar: (id) =>
+        set((estado) =>
+          cerrarTicket(estado.tickets, id, estado.activeTicketId, idLibre(estado.tickets)),
+        ),
 
       rehidratar: (productos) =>
         set((estado) => {

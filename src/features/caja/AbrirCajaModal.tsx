@@ -13,13 +13,11 @@ import { useCajaStore } from '../../stores/caja.store'
 type AbrirCajaValues = {
   responsable: string
   montoInicial: string
-  observaciones: string
 }
 
 const VALORES_INICIALES: AbrirCajaValues = {
   responsable: '',
   montoInicial: '0',
-  observaciones: '',
 }
 
 const FORM_ID = 'form-abrir-caja'
@@ -49,7 +47,6 @@ export function AbrirCajaModal({ isOpen, onClose }: AbrirCajaModalProps) {
       const caja = await cajasService.open({
         responsable: data.responsable,
         montoInicial: Number(data.montoInicial),
-        observaciones: data.observaciones,
       })
       setCaja(caja)
       toast.success(`Caja abierta · ${caja.empleadoNombre}`)
@@ -126,20 +123,11 @@ export function AbrirCajaModal({ isOpen, onClose }: AbrirCajaModalProps) {
           Al cerrar la caja vas a poder contar el efectivo y ver la diferencia contra este monto.
         </p>
 
-        <div className="flex flex-col gap-1.5">
-          <label
-            htmlFor="observaciones"
-            className="text-sm font-medium text-slate-700 dark:text-slate-200"
-          >
-            Observaciones (opcional)
-          </label>
-          <CapitalizedInput
-            id="observaciones"
-            placeholder="Ej: Turno mañana"
-            disabled={isSubmitting}
-            {...register('observaciones')}
-          />
-        </div>
+        {/*
+          Las observaciones solo importan al cerrar el turno, no al abrirlo: la
+          primera lectura útil es la del arqueo. Quitar el campo acá baja ruido
+          y deja el flujo más corto para el cajero.
+        */}
       </form>
     </Modal>
   )

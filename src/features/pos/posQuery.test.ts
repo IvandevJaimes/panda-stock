@@ -639,6 +639,14 @@ describe("operaciones del ticket", () => {
     expect(items[0].cantidad).toBe(2);
   });
 
+  it("no acumula más allá del stock disponible", () => {
+    const scarce = productoPOS({ stockActual: 2 });
+    const dos = agregarAlTicket(agregarAlTicket([], scarce), scarce);
+    expect(dos[0].cantidad).toBe(2);
+
+    expect(agregarAlTicket(dos, scarce)).toEqual(dos);
+  });
+
   describe("orden: más nuevo agregado primero", () => {
     it("cada línea nueva entra al frente", () => {
       const a = productoPOS({ id: 1, nombre: "A" });

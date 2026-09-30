@@ -66,49 +66,68 @@ describe('store de tickets del POS', () => {
 
   it('agrega al ticket activo y no a los demás', () => {
     estado().agregar(pos())
-    estado().nuevoTicket('t2') // el nuevo queda activo
+    estado().nuevoTicket() // el nuevo queda activo
+    const segundo = estado().activeTicketId
     estado().agregar(pos({ id: 2, nombre: 'Lorenz' }))
     estado().seleccionarTicket('t1')
     estado().agregar(pos({ id: 3, nombre: 'Agua' }))
 
     const porId = Object.fromEntries(estado().tickets.map((t) => [t.id, t.items.length]))
-    expect(porId).toEqual({ t1: 2, t2: 1 })
+    expect(porId).toEqual({ t1: 2, [segundo]: 1 })
     expect(estado().tickets[1].items[0].nombre).toBe('Lorenz')
   })
 
   it('ignora el sexto ticket', () => {
-    for (const id of ['t2', 't3', 't4', 't5']) estado().nuevoTicket(id)
-    estado().nuevoTicket('t6')
+    for (let i = 0; i < 5; i += 1) estado().nuevoTicket()
 
     expect(estado().tickets).toHaveLength(5)
-    expect(estado().tickets.some((t) => t.id === 't6')).toBe(false)
+  })
+
+  // La identidad del ticket es su `id`: `PosTabs` marca activo por
+  // `id === activeTicketId` y `cerrarTicket` borra la primera coincidencia. Un
+  // id repetido rompe las dos cosas a la vez, así que la unicidad es invariante.
+  it('mantiene los ids únicos al abrir y cerrar tickets', () => {
+    for (let i = 0; i < 20; i += 1) {
+      estado().nuevoTicket()
+      estado().cerrar(estado().activeTicketId)
+    }
+
+    const ids = estado().tickets.map((t) => t.id)
+    expect(new Set(ids).size).toBe(ids.length)
   })
 
   it('cerrar un ticket que no es el activo renumera sin mover la vista', () => {
-    for (const id of ['t2', 't3']) estado().nuevoTicket(id) // activo: t3
-    estado().cerrar('t2', 't4')
+    estado().nuevoTicket()
+    const segundo = estado().activeTicketId
+    estado().nuevoTicket()
+    const tercero = estado().activeTicketId
+    estado().cerrar(segundo)
 
-    expect(estado().tickets.map((t) => t.id)).toEqual(['t1', 't3'])
+    expect(estado().tickets.map((t) => t.id)).toEqual(['t1', tercero])
     expect(estado().tickets.map((t) => t.numero)).toEqual([1, 2])
-    expect(estado().activeTicketId).toBe('t3')
+    expect(estado().activeTicketId).toBe(tercero)
   })
 
   it('cerrar el ticket activo deja en pantalla el contiguo anterior', () => {
-    for (const id of ['t2', 't3']) estado().nuevoTicket(id) // activo: t3
-    estado().cerrar('t3', 't4')
+    estado().nuevoTicket()
+    const segundo = estado().activeTicketId
+    estado().nuevoTicket()
+    estado().cerrar(estado().activeTicketId)
 
-    expect(estado().tickets.map((t) => t.id)).toEqual(['t1', 't2'])
+    expect(estado().tickets.map((t) => t.id)).toEqual(['t1', segundo])
     expect(estado().tickets.map((t) => t.numero)).toEqual([1, 2])
-    expect(estado().activeTicketId).toBe('t2')
+    expect(estado().activeTicketId).toBe(segundo)
   })
 
   it('cerrar el último ticket abre uno nuevo en blanco', () => {
     estado().agregar(pos())
-    estado().cerrar('t1', 't2')
+    estado().cerrar('t1')
 
     expect(estado().tickets).toHaveLength(1)
-    expect(estado().activeTicketId).toBe('t2')
-    expect(estado().tickets[0].items).toEqual([])
+    const [reemplazo] = estado().tickets
+    expect(estado().activeTicketId).toBe(reemplazo.id)
+    expect(reemplazo.id).not.toBe('t1')
+    expect(reemplazo.items).toEqual([])
   })
 
   it('persiste solo decisiones del cajero: nunca precio, nombre ni imagen', () => {
@@ -182,8 +201,7 @@ describe('guard de borrado de productos', () => {
   })
 
   it('detecta un producto en un ticket que NO es el activo', () => {
-    estado().nuevoTicket('t2')
-    estado().seleccionarTicket('t2')
+    estado().nuevoTicket()
     estado().agregar(pos())
     estado().seleccionarTicket('t1')
 
@@ -194,7 +212,7 @@ describe('guard de borrado de productos', () => {
     estado().agregar(pos())
     expect(productoEnTicketAbierto(1)).toBe(true)
 
-    estado().cerrar('t1', 't9')
+    estado().cerrar('t1')
     expect(productoEnTicketAbierto(1)).toBe(false)
   })
 
@@ -235,6 +253,27 @@ describe('rehidratación desde localStorage', () => {
 
     expect(rehidratado.tickets).toHaveLength(1)
     expect(rehidratado.tickets[0].items).toEqual([])
+  })
+
+  // El contador de ids arranca en cero con cada arranque de la app, así que el
+  // primero que genera puede ser un id que ya está rehidratado. Cuando eso
+  // pasaba, las dos pestañas homónimas quedaban activas a la vez y cerrar una
+  // cerraba la otra, porque `cerrarTicket` borra la primera coincidencia.
+  it('no repite un id rehidratado al abrir un ticket nuevo', async () => {
+    sembrar({
+      activeTicketId: 't2',
+      tickets: [
+        { id: 't1', numero: 1, metodoPago: 'efectivo', items: [] },
+        { id: 't2', numero: 2, metodoPago: 'efectivo', items: [] },
+      ],
+    })
+
+    const store = await storeRecienCargado()
+    store.getState().nuevoTicket()
+
+    const ids = store.getState().tickets.map((t) => t.id)
+    expect(ids).toHaveLength(3)
+    expect(new Set(ids).size).toBe(3)
   })
 
   it('descarta líneas sin cantidad positiva y tickets sin id', async () => {
@@ -290,10 +329,13 @@ describe('rehidratación desde localStorage', () => {
 
 /** Simula un reinicio de la app: lee el store de cero contra el disco. */
 function recargarDesdeDisco() {
+  return storeRecienCargado().then((store) => store.getState())
+}
+
+/** Igual que `recargarDesdeDisco`, pero devuelve el store para poder operar. */
+function storeRecienCargado() {
   vi.resetModules()
-  return import('./pos-tickets.store').then(({ usePosTicketsStore: store }) =>
-    store.getState(),
-  )
+  return import('./pos-tickets.store').then((mod) => mod.usePosTicketsStore)
 }
 
 function crearTicketInicial() {

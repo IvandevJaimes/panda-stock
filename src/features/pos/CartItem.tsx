@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useForm } from "react-hook-form";
 import { CircleSlash, X } from "lucide-react";
 import { cn } from "../../lib/cn";
 import { IconButton } from "../../components/ui/IconButton";
@@ -6,7 +7,12 @@ import { QuantityStepper } from "../../components/ui/QuantityStepper";
 import { TruncatedText } from "../../components/ui/TruncatedText";
 import { buildAssetUrl } from "../../lib/assets";
 import { getProductPlaceholder } from "../../lib/productPlaceholder";
-import { formatearMoneda, MOTIVO_SIN_INCREMENTO, type LineaTicket } from "./posQuery";
+import {
+  formatearMoneda,
+  motivoStockInsuficiente,
+  MOTIVO_SIN_INCREMENTO,
+  type LineaTicket,
+} from "./posQuery";
 import { Tooltip } from "../../components/ui/Tooltip";
 
 /**
@@ -25,6 +31,8 @@ type CartItemProps = {
   onQuitar: (productoId: number) => void;
   /** El producto se desactivó después de armar la línea: no se puede sumar más. */
   desactivado?: boolean;
+  /** Stock disponible en la base, o `null` si el producto ya no está en el catálogo. */
+  stockDisponible?: number | null;
 };
 
 export function CartItem({
@@ -35,10 +43,33 @@ export function CartItem({
   onCambiarCantidad,
   onQuitar,
   desactivado = false,
+  stockDisponible = null,
 }: CartItemProps) {
   const [saliendo, setSaliendo] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const imgUrl = linea.imgPath ? buildAssetUrl(linea.imgPath) : null;
+
+  const sinStock = stockDisponible !== null && linea.cantidad >= stockDisponible;
+  const {
+    setError,
+    clearErrors,
+    formState: { errors },
+  } = useForm<{ cantidad: number }>({
+    defaultValues: { cantidad: linea.cantidad },
+  });
+
+  // La cantidad vive en el store del ticket, no en el form: el form solo
+  // arbitra el mensaje de error.
+  useEffect(() => {
+    if (sinStock && stockDisponible !== null) {
+      setError("cantidad", {
+        type: "validate",
+        message: motivoStockInsuficiente(linea.nombre, stockDisponible),
+      });
+    } else {
+      clearErrors("cantidad");
+    }
+  }, [sinStock, stockDisponible, linea.nombre, setError, clearErrors]);
 
   // Si el componente se desmonta con la salida en vuelo (vaciar el ticket,
   // recargar el catálogo) se cancela el onQuitar pendiente: ya no hay fila que
@@ -116,7 +147,10 @@ export function CartItem({
       <QuantityStepper
         value={linea.cantidad}
         onChange={(cantidad) => onCambiarCantidad(linea.productoId, cantidad)}
-        motivoSinIncremento={desactivado ? MOTIVO_SIN_INCREMENTO : undefined}
+        motivoSinIncremento={
+          desactivado ? MOTIVO_SIN_INCREMENTO : (errors.cantidad?.message ?? undefined)
+        }
+        motivoEsError={Boolean(errors.cantidad)}
         // quantity 0 hace que la línea se elimine sola (ver cambiarCantidadTicket):
         // en el ticket, restar desde 1 equivale a quitar el producto.
         onRemove={() => onCambiarCantidad(linea.productoId, 0)}

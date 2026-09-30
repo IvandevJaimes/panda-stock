@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { Outlet } from 'react-router-dom'
 import { Header } from './Header'
 import { SettingsDrawer } from './SettingsDrawer'
+import { AvisoCajaAbierta } from '../../features/caja/AvisoCajaAbierta'
 import { useCajaStore } from '../../stores/caja.store'
 import { toast } from 'sonner'
 
@@ -44,6 +45,7 @@ export function AppLayout() {
         <Outlet />
       </main>
       <SettingsDrawer />
+      <AvisoCajaAbierta />
     </div>
   )
 }

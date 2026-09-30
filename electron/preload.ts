@@ -101,6 +101,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.invoke("ventas:get-all", filtros),
     getDetail: (idVenta: number) =>
       ipcRenderer.invoke("ventas:get-detail", idVenta),
+    getRecientes: (limite: number) =>
+      ipcRenderer.invoke("ventas:get-recientes", limite),
   },
   movimientos: {
     getAll: (filtros?: FiltrosMovimientos) =>
@@ -113,5 +115,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
   reportes: {
     getSummary: (filtros?: FiltrosReportes) =>
       ipcRenderer.invoke("reportes:summary", filtros),
+  },
+  app: {
+    /** El main avisa que intentó cerrarse la app con la caja abierta. */
+    onPedirCierre: (callback: () => void) => {
+      ipcRenderer.on("app:pedir-cierre-caja", () => callback());
+    },
+    salir: () => ipcRenderer.invoke("app:salir"),
   },
 });

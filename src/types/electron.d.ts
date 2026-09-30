@@ -27,6 +27,7 @@ import type {
   Venta,
   VentaCompletaInput,
   VentaDetalle,
+  VentaHistorial,
   VentaResult,
 } from '../../electron/db/types'
 
@@ -92,6 +93,7 @@ declare global {
         process: (venta: VentaCompletaInput) => Promise<VentaResult>
         getAll: (filtros?: FiltrosVentas) => Promise<Venta[]>
         getDetail: (idVenta: number) => Promise<VentaDetalle | null>
+        getRecientes: (limite: number) => Promise<VentaHistorial[]>
       }
       movimientos: {
         getAll: (filtros?: FiltrosMovimientos) => Promise<MovimientoStock[]>
@@ -100,6 +102,12 @@ declare global {
       }
       reportes: {
         getSummary: (filtros?: FiltrosReportes) => Promise<ReportesSummary>
+      }
+      app: {
+        /** Llega cuando se intentó cerrar la app con una caja abierta. */
+        onPedirCierre: (callback: () => void) => void
+        /** Confirma que la caja ya se cerró y deja salir. */
+        salir: () => Promise<void>
       }
     }
   }

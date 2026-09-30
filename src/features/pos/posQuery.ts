@@ -502,6 +502,7 @@ export function agregarAlTicket(
   const existente = items.find((item) => item.productoId === producto.id)
 
   if (existente) {
+    if (!puedeSumarUno(existente, producto)) return items
     // Incrementar NO reordena: la línea sigue ocupando la posición en la que
     // entró. "Más nuevo primero" habla de cuándo se agregó la línea, no de
     // cuándo se le tocó por última vez. Si se moviera, agregar una segunda
@@ -538,6 +539,21 @@ export function agregarAlTicket(
  * uno dice "desactivado" y el otro "inactivo" y nadie sabe cuál es el bueno.
  */
 export const MOTIVO_SIN_INCREMENTO = 'Producto desactivado: reactivalo para agregar más unidades'
+
+/**
+ * `stock` es el disponible total, no el que resta el ticket: si otro cajero
+ * vendió mientras este ticket estaba abierto, la base es la única que sabe.
+ */
+export function puedeSumarUno(
+  linea: ItemTicket,
+  producto: Pick<ProductoPOS, 'stock'>,
+): boolean {
+  return linea.cantidad + 1 <= producto.stock
+}
+
+export function motivoStockInsuficiente(nombre: string, disponible: number): string {
+  return `Stock insuficiente: quedan ${disponible} de "${nombre}"`
+}
 
 /**
  * Ids de los productos que están en la base pero desactivados.

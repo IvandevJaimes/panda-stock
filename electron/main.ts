@@ -44,6 +44,7 @@ import {
   getReportesSummary,
   getVentaDetalle,
   getVentas,
+  getVentasRecientes,
   openCaja,
   processSale,
   scanProductByCode,
@@ -76,6 +77,38 @@ import type {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const isDev = !app.isPackaged;
+
+/**
+ * La app no sale con la caja abierta. El arqueo es lo único que deja constancia
+ * de cuánto efectivo había y cuánto quedó, así que dejarlo abierto al cerrar es
+ * perder el cierre de ese turno para siempre: la fila queda `abierta`, sin
+ * responsable de conteo y sin diferencia, y la próxima sesión abre una caja
+ * nueva sin que nadie sepa que esta quedó sin cerrar.
+ *
+ * El flag existe para el segundo intento: cuando el renderer ya cerró la caja y
+ * pide salir, `getActiveCaja()` puede seguir devolviendo la fila por un tick de
+ * lectura, y sin este flag el cierre volvería a interceptarse a sí mismo.
+ */
+let salidaPermitida = false;
+
+/**
+ * Interrumpe el cierre y le pide al renderer que muestre el aviso. Si no queda
+ * ninguna ventana no hay a quién avisar y, mucho peor, nadie para resolverlo: en
+ * ese caso se deja salir, que es preferible a una app que no cierra nunca.
+ */
+function interceptarCierreSiHayCaja(
+  evento: Electron.Event,
+  ventana: BrowserWindow | null,
+) {
+  if (salidaPermitida) return;
+
+  if (!ventana || ventana.isDestroyed()) return;
+  if (BrowserWindow.getAllWindows().length === 0) return;
+  if (!getActiveCaja()) return;
+
+  evento.preventDefault();
+  ventana.webContents.send("app:pedir-cierre-caja");
+}
 
 // Log de diagnóstico tipo "mejor esfuerzo" en userData. Nunca rompe el main.
 function escribirLog(tag: string, mensaje: string): void {
@@ -121,6 +154,12 @@ function createWindow() {
 
   // Sin barra de menú nativa (solo menú de aplicación en macOS si aplica).
   win.setMenu(null);
+
+  // Cerrar la ventana dispara `close`; el `before-quit` de más abajo cubre el
+  // `app.quit()` que dispara `window-all-closed` en Linux y Windows. Hacen falta
+  // los dos: `close` alcanza cuando el cajero aprieta la X, y `before-quit` cuando
+  // el SO le pide salir a la app entera.
+  win.on("close", (evento) => interceptarCierreSiHayCaja(evento, win));
 
   // Volcado de errores del renderer a userData/panda-stock.log para diagnosticar
   // desde la VM sin DevTools.
@@ -284,6 +323,9 @@ function registerIpcHandlers() {
   ipcMain.handle("ventas:get-detail", (_event, idVenta: number) =>
     getVentaDetalle(idVenta),
   );
+  ipcMain.handle("ventas:get-recientes", (_event, limite: number) =>
+    getVentasRecientes(limite),
+  );
 
   ipcMain.handle(
     "movimientos:get-all",
@@ -300,6 +342,13 @@ function registerIpcHandlers() {
   ipcMain.handle("reportes:summary", (_event, filtros?: FiltrosReportes) =>
     getReportesSummary(filtros),
   );
+
+  // El renderer confirma que ya no hay caja abierta y pide salir. `app.quit()`
+  // vuelve a pasar por `before-quit`, así que el flag tiene que estar puesto antes.
+  ipcMain.handle("app:salir", () => {
+    salidaPermitida = true;
+    app.quit();
+  });
 }
 
 app.whenReady().then(() => {
@@ -318,6 +367,10 @@ app.whenReady().then(() => {
       createWindow();
     }
   });
+});
+
+app.on("before-quit", (evento) => {
+  interceptarCierreSiHayCaja(evento, BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null);
 });
 
 app.on("window-all-closed", () => {

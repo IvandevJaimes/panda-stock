@@ -24,6 +24,8 @@ type QuantityStepperProps = {
    * lo anuncia como deshabilitado igual.
    */
   motivoSinIncremento?: string
+  /** El bloqueo es una regla de negocio incumplida (no hay stock), no un aviso neutro. */
+  motivoEsError?: boolean
   min?: number
   max?: number
   size?: 'xs' | 'sm'
@@ -42,6 +44,7 @@ export function QuantityStepper({
   onRemove,
   itemLabel,
   motivoSinIncremento,
+  motivoEsError = false,
   min = 1,
   max = 9999,
   size = 'xs',
@@ -88,7 +91,7 @@ export function QuantityStepper({
         tooltip={motivoSinIncremento ?? 'Agregar 1'}
         aria-disabled={motivoSinIncremento ? true : undefined}
         data-bloqueado={motivoSinIncremento ? true : undefined}
-        variant={motivoSinIncremento ? 'bloqueado' : 'ghost'}
+        variant={motivoSinIncremento ? (motivoEsError ? 'bloqueado-rojo' : 'bloqueado') : 'ghost'}
         disabled={enMaximo}
         onClick={() => {
           if (motivoSinIncremento) return

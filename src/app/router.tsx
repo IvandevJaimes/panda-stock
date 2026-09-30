@@ -10,7 +10,7 @@ export const router = createHashRouter([
     path: '/',
     element: <AppLayout />,
     children: [
-      { index: true, element: <Navigate to="/inventory" replace /> },
+      { index: true, element: <Navigate to="/pos" replace /> },
       { path: '/pos', element: <PosPage /> },
       { path: '/inventory', element: <InventoryPage /> },
       { path: '/settings', element: <SettingsPage /> },

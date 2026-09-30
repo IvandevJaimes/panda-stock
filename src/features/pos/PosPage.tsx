@@ -28,6 +28,7 @@ import { CategoryFilter } from './CategoryFilter'
 import { PosTabs } from './PosTabs'
 import { ProductGrid } from './ProductGrid'
 import { NoVendiblesBadge } from './NoVendiblesBadge'
+import { HistorialVentasModal } from './HistorialVentasModal'
 import { useAtajosPOS } from './useAtajosPOS'
 import { useBarcodeScanner } from '../../hooks/useBarcodeScanner'
 import { usePosTicketsStore } from '../../stores/pos-tickets.store'
@@ -44,6 +45,8 @@ import {
   idsDesactivados as idsDesactivadosDeCatalogo,
   mapearProductosPOS,
   metodoPagoARegistro,
+  motivoStockInsuficiente,
+  puedeSumarUno,
   resumirTicket,
   separarPorDisponibilidad,
   ticketActivo,
@@ -76,6 +79,7 @@ export function PosPage() {
   const [cargando, setCargando] = useState(true)
   const [errorProductos, setErrorProductos] = useState<string | null>(null)
   const [marcasAbiertas, setMarcasAbiertas] = useState(false)
+  const [historialAbierto, setHistorialAbierto] = useState(false)
   const [confirmandoVaciar, setConfirmandoVaciar] = useState(false)
 
   const [busqueda, setBusqueda] = useState('')
@@ -96,14 +100,6 @@ export function PosPage() {
   const caja = useCajaStore((estado) => estado.caja)
   const cajaCargada = useCajaStore((estado) => estado.cargado)
   const [cobrando, setCobrando] = useState(false)
-
-  /**
-   * Los ids se generan acá y no en `posQuery.ts` a propósito: `crearTicket` es
-   * pura y no puede inventar aleatoriedad. Un contador además deja el id legible
-   * en los tests y en el devtools, cosa que un `randomUUID` no.
-   */
-  const contadorTicket = useRef(1)
-  const siguienteIdTicket = useCallback(() => `t${++contadorTicket.current}`, [])
 
   const busquedaDiferida = useDeferredValue(busqueda)
 
@@ -186,6 +182,10 @@ export function PosPage() {
     [productosCrudos, categoriasPorId, marcasPorId],
   )
 
+  const stockPorId = useMemo(
+    () => new Map(catalogo.map((p) => [p.id, p.stock])),
+    [catalogo],
+  )
   const porBusqueda = useMemo(
     () => filtrarCatalogoPOS(catalogo, busquedaDiferida, 'all'),
     [catalogo, busquedaDiferida],
@@ -322,9 +322,15 @@ export function PosPage() {
         return
       }
 
+      const enTicket = ticket.items.find((i) => i.productoId === producto.id)
+      if (enTicket && !puedeSumarUno(enTicket, producto)) {
+        toast.error(motivoStockInsuficiente(producto.nombre, producto.stock))
+        return
+      }
+
       agregarAlTicketActivo(producto)
     },
-    [agregarAlTicketActivo, categoriasPorId, marcasPorId],
+    [agregarAlTicketActivo, categoriasPorId, marcasPorId, ticket.items],
   )
 
   useBarcodeScanner('sales', (barcode) => void agregarPorEscaneo(barcode), scannerHabilitado)
@@ -349,12 +355,12 @@ export function PosPage() {
   const handleSelectTicket = seleccionarTicket
 
   const handleNuevoTicket = useCallback(() => {
-    abrirTicket(siguienteIdTicket())
-  }, [abrirTicket, siguienteIdTicket])
+    abrirTicket()
+  }, [abrirTicket])
 
   const handleCloseTicket = useCallback(
-    (id: string) => cerrarTicketDelStore(id, siguienteIdTicket()),
-    [cerrarTicketDelStore, siguienteIdTicket],
+    (id: string) => cerrarTicketDelStore(id),
+    [cerrarTicketDelStore],
   )
 
   const handleLimpiarFiltros = useCallback(() => {
@@ -392,11 +398,15 @@ export function PosPage() {
 
   const handleIrAlTicket = irAlTicket
 
+  // El orden importa: sin caja el motivo es la caja aunque el ticket también
+  // esté vacío, porque es la causa raíz. La caja manda.
   const motivoCobroBloqueado = !cajaCargada
     ? 'Verificando la caja…'
-    : caja
-      ? null
-      : 'Abrí la caja desde el encabezado para poder cobrar'
+    : !caja
+      ? 'Abrí la caja desde el encabezado para poder cobrar'
+      : ticket.items.length === 0
+        ? 'Cargá al menos un producto al ticket para cobrar'
+        : null
 
   /**
    * Candado del cobro en un ref y no en el estado: dos Enters en el mismo tick
@@ -442,7 +452,7 @@ export function PosPage() {
         pagos: [{ metodo: metodoPagoARegistro(ticket.metodoPago), monto: resumen.total }],
       })
 
-      cerrarTicketDelStore(activeTicketId, siguienteIdTicket())
+      cerrarTicketDelStore(activeTicketId)
       toast.success(`Venta #${venta.ventaId} · ${formatearMoneda(resumen.total)}`)
 
       // Sin releer el catálogo la grilla muestra el stock anterior y el cajero
@@ -470,7 +480,6 @@ export function PosPage() {
     resumen,
     activeTicketId,
     cerrarTicketDelStore,
-    siguienteIdTicket,
   ])
 
   const {
@@ -704,9 +713,11 @@ export function PosPage() {
             onQuitar={handleQuitar}
             onVaciar={handleVaciar}
             idsDesactivados={idsDesactivados}
+            stockPorId={stockPorId}
             confirmandoVaciar={confirmandoVaciar}
             onSolicitarVaciar={() => setConfirmandoVaciar(true)}
             onCancelarVaciar={() => setConfirmandoVaciar(false)}
+            onAbrirHistorial={() => setHistorialAbierto(true)}
             onCobrar={handleCobrar}
             motivoCobroBloqueado={motivoCobroBloqueado}
             cobrando={cobrando}
@@ -799,6 +810,11 @@ export function PosPage() {
           setBusqueda(nombre)
           setMarcasAbiertas(false)
         }}
+      />
+
+      <HistorialVentasModal
+        isOpen={historialAbierto}
+        onClose={() => setHistorialAbierto(false)}
       />
     </div>
   )

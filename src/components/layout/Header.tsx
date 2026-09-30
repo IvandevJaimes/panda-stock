@@ -124,6 +124,12 @@ export function Header() {
       <div className="flex shrink-0 items-center gap-2">
         <CajaControl />
 
+        {/* Separa el estado de la caja del resto de las acciones de la app. */}
+        <div
+          aria-hidden="true"
+          className="h-8 w-px shrink-0 bg-slate-200 dark:bg-slate-700/60"
+        />
+
         <ImageLightbox
           open={verLogoAbierto && negocioLogoUrl !== null}
           onClose={() => setVerLogoAbierto(false)}

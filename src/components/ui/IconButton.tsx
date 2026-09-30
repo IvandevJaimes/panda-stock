@@ -2,7 +2,7 @@ import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from 'react'
 import { cn } from '../../lib/cn'
 import { Tooltip } from './Tooltip'
 
-type IconButtonVariant = 'ghost' | 'danger' | 'solid' | 'bloqueado'
+type IconButtonVariant = 'ghost' | 'danger' | 'solid' | 'bloqueado' | 'bloqueado-rojo'
 type IconButtonSize = 'xs' | 'sm' | 'md'
 type IconButtonShape = 'circle' | 'square'
 
@@ -39,6 +39,13 @@ const variants: Record<IconButtonVariant, string> = {
    * `ghost` gana un hover nuevo, esta sigue limpia sin tocar nada.
    */
   bloqueado: 'cursor-default opacity-40 text-slate-400 dark:text-slate-500',
+
+  /**
+   * Igual que `bloqueado`, pero en rojo: el bloqueo por una regla de negocio
+   * (no hay stock) es un error del cajero, no una condición neutra como
+   * "producto desactivado". El gris se reserva para los casos informativos.
+   */
+  'bloqueado-rojo': 'cursor-default opacity-40 text-red-500 dark:text-red-400',
 }
 
 const sizes: Record<IconButtonSize, string> = {

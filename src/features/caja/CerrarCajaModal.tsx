@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
-import { AlertTriangle, LockOpen } from 'lucide-react'
+import { AlertTriangle, LockOpen, Timer } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '../../components/ui/Button'
 import { CapitalizedInput } from '../../components/ui/CapitalizedInput'
 import { Input } from '../../components/ui/Input'
 import { Modal } from '../../components/ui/Modal'
 import { cajasService } from '../../services/cajas.service'
+import { useTiempoTranscurrido } from '../../hooks/useTiempoTranscurrido'
 import { noSpinnersClass } from '../inventory/quick-actions/types'
 import { formatearMoneda, resumenTicketsPendientes } from '../pos/posQuery'
 import { formatearFechaHoraCorta } from './fechas'
@@ -25,14 +26,27 @@ interface CerrarCajaModalProps {
   isOpen: boolean
   caja: CajaConResponsable
   onClose: () => void
+  /**
+   * Se dispara cuando el cierre arranca, antes que `onClose`. Existe para el
+   * flujo de salida de la app: el main bloqueó el cierre porque había caja
+   * abierta, así que recién cuando el arqueo terminó se le deja salir. Va
+   * antes de `onClose` porque salir mata el renderer y un `onClose` posterior
+   * ya no llegaría a ejecutarse.
+   */
+  alCerrar?: () => void
 }
 
-export function CerrarCajaModal({ isOpen, caja, onClose }: CerrarCajaModalProps) {
+export function CerrarCajaModal({ isOpen, caja, onClose, alCerrar }: CerrarCajaModalProps) {
   const limpiarCaja = useCajaStore((state) => state.limpiar)
   const tickets = usePosTicketsStore((state) => state.tickets)
   const pendientes = resumenTicketsPendientes(tickets)
 
   const [resumen, setResumen] = useState<CajaSummary | null>(null)
+
+  // El reloj corre solo con el modal abierto. Además, el componente no se monta
+  // sin caja (`CajaControl` corta el render antes), así que no hay forma de que
+  // el timer exista con la caja cerrada.
+  const transcurrido = useTiempoTranscurrido(caja.fechaApertura, isOpen)
 
   const {
     register,
@@ -83,6 +97,7 @@ export function CerrarCajaModal({ isOpen, caja, onClose }: CerrarCajaModalProps)
           ? 'Caja cerrada · sin diferencia'
           : `Caja cerrada · diferencia ${formatearDiferencia(diferencia)}`,
       )
+      alCerrar?.()
       onClose()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'No se pudo cerrar la caja')
@@ -151,21 +166,41 @@ export function CerrarCajaModal({ isOpen, caja, onClose }: CerrarCajaModalProps)
         )}
 
         {resumen ? (
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-2 rounded-xl bg-slate-50 p-4 text-sm dark:bg-slate-800/50">
-            <ResumenFila termino="Fondo inicial" valor={formatearMoneda(caja.montoInicial)} />
-            <ResumenFila termino="Ventas" valor={resumen.cantidadVentas.toString()} />
-            <ResumenFila termino="Efectivo cobrado" valor={formatearMoneda(resumen.totalEfectivo)} />
-            <ResumenFila
-              termino="Tarjeta + transf."
-              valor={formatearMoneda(resumen.totalTarjeta + resumen.totalTransferencia)}
-            />
-            <ResumenFila
-              termino="Esperado en gaveta"
-              valor={formatearMoneda(resumen.montoEsperado)}
-              destacado
-            />
-            <ResumenFila termino="Abierta" valor={formatearFechaHoraCorta(caja.fechaApertura)} />
-          </dl>
+          <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-800/50">
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+              <ResumenFila termino="Fondo inicial" valor={formatearMoneda(caja.montoInicial)} />
+              <ResumenFila termino="Ventas" valor={resumen.cantidadVentas.toString()} />
+              <ResumenFila termino="Efectivo cobrado" valor={formatearMoneda(resumen.totalEfectivo)} />
+              <ResumenFila
+                termino="Tarjeta + transf."
+                valor={formatearMoneda(resumen.totalTarjeta + resumen.totalTransferencia)}
+              />
+              <ResumenFila
+                termino="Esperado en gaveta"
+                valor={formatearMoneda(resumen.montoEsperado)}
+                destacado
+              />
+              <ResumenFila termino="Abierta" valor={formatearFechaHoraCorta(caja.fechaApertura)} />
+            </dl>
+
+            {/*
+              El reloj va aparte y a todo el ancho, no como una fila más del `dl`:
+              es el único dato que cambia solo, y mezclarlo con las cifras fijas
+              haría que el ojo lo lea como otro monto de la arqueo.
+            */}
+            {transcurrido !== null && (
+              <div className="mt-3 flex items-center justify-between border-t border-slate-200 pt-3 dark:border-slate-700/60">
+                <span className="flex items-center gap-1.5 text-sm text-slate-500 dark:text-slate-400">
+                  <Timer size={15} className="shrink-0" aria-hidden="true" />
+                  Abierta hace
+                </span>
+                {/* `tabular-nums`: sin esto los dígitos cambian de ancho cada tick y el número se mueve. */}
+                <span className="font-display text-sm font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
+                  {transcurrido}
+                </span>
+              </div>
+            )}
+          </div>
         ) : (
           <p className="text-sm text-slate-500 dark:text-slate-400">Leyendo el resumen de la caja…</p>
         )}

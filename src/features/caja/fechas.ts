@@ -11,6 +11,11 @@ export function formatearFechaHoraCorta(iso?: string | null): string {
   return fecha.toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })
 }
 
-export function cajaAbiertaDesde(caja: CajaConResponsable): string {
-  return `Caja abierta desde ${formatearFechaHoraCorta(caja.fechaApertura)} · ${caja.empleadoNombre}`
+/**
+ * La fecha de apertura no va acá: vive en el modal de arqueo, junto al timer en
+ * vivo. Si el botón la mostrara, el header volvería a cargar con un dato que el
+ * cajero solo necesita mientras está contando la gaveta.
+ */
+export function cajaAbiertaPor(caja: CajaConResponsable): string {
+  return `Caja abierta · ${caja.empleadoNombre}`
 }

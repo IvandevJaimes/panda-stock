@@ -14,6 +14,7 @@ import {
   ne,
   or,
   sql,
+  inArray,
 } from 'drizzle-orm'
 import { getDb, sha256 } from './index.ts'
 import {
@@ -57,7 +58,10 @@ import type {
   Venta,
   VentaCompletaInput,
   VentaDetalle,
+  VentaHistorial,
+  VentaHistorialItem,
   VentaResult,
+  MetodoPago,
   CrearMovimientoInput,
 } from './types.ts'
 
@@ -1018,7 +1022,84 @@ export function getVentas(filtros?: FiltrosVentas): Venta[] {
     ? db.select().from(ventas).where(condicion)
     : db.select().from(ventas)
 
-  return consulta.orderBy(desc(ventas.fechaHora)).all()
+  const ordenadas = consulta.orderBy(desc(ventas.fechaHora))
+  return (filtros?.limit != null ? ordenadas.limit(filtros.limit) : ordenadas).all()
+}
+
+/**
+ * Últimas ventas con sus ítems, unidades y métodos de pago.
+ *
+ * Se resuelve en TRES consultas y el cruce se arma en JS, a propósito.
+ *
+ * La versión de una sola consulta usaba subqueries correlacionados dentro de un
+ * `sql` crudo, y Drizzle renderiza las columnas SIN calificar ahí: sale
+ * `where "venta_id" = "id"` en vez de `where "detalle_ventas"."venta_id" =
+ * "ventas"."id"`. SQLite resuelve el `"id"` contra la tabla del propio subquery,
+ * la condición se cumple siempre, y cada venta recibía el agregado de la tabla
+ * completa (mismo total de unidades y los tres métodos de pago en todas). El
+ * síntoma era indistinguible de un dato inventado.
+ *
+ * Tampoco sirve unir `detalle_ventas` y `pagos` en un solo `from`: son las dos
+ * hijas de la misma venta, y unem-blas multiplica filas entre sí (2 ítems × 2
+ * pagos = 4 filas) así que el `sum(cantidad)` sale duplicado. Tres consultas
+ * sobre índices, sin multiplicación ni correlación que pueda romperse en
+ * silencio.
+ */
+export function getVentasRecientes(limite: number): VentaHistorial[] {
+  const db = getDb()
+
+  const filas = db.select().from(ventas).orderBy(desc(ventas.fechaHora)).limit(limite).all()
+
+  if (filas.length === 0) return []
+
+  const ids = filas.map((fila) => fila.id)
+
+  // `leftJoin` y no `innerJoin`: `detalle_ventas.producto_id` es nullable (un ítem
+  // de combo no apunta a un producto), y con `innerJoin` esa fila desaparecería
+  // del historial junto con la venta.
+  const itemsPorVenta = new Map<number, VentaHistorialItem[]>()
+  for (const item of db
+    .select({
+      id: detalleVentas.id,
+      ventaId: detalleVentas.ventaId,
+      productoId: detalleVentas.productoId,
+      descripcionItem: detalleVentas.descripcionItem,
+      cantidad: detalleVentas.cantidad,
+      precioUnitario: detalleVentas.precioUnitario,
+      subtotal: detalleVentas.subtotal,
+      imgPath: productos.imgPath,
+    })
+    .from(detalleVentas)
+    .leftJoin(productos, eq(detalleVentas.productoId, productos.id))
+    .where(inArray(detalleVentas.ventaId, ids))
+    .orderBy(asc(detalleVentas.id))
+    .all()) {
+    itemsPorVenta.set(item.ventaId, [...(itemsPorVenta.get(item.ventaId) ?? []), item])
+  }
+
+  const metodosPorVenta = new Map<number, MetodoPago[]>()
+  for (const pago of db
+    .select({ ventaId: pagos.ventaId, metodo: pagos.metodo })
+    .from(pagos)
+    .where(inArray(pagos.ventaId, ids))
+    .all()) {
+    const yaAnotados = metodosPorVenta.get(pago.ventaId) ?? []
+    // Sin `includes`, una venta pagada mitad en efectivo y mitad en efectivo otra
+    // vez (o dos pagos del mismo método) salía "Efectivo + Efectivo".
+    if (!yaAnotados.includes(pago.metodo)) {
+      metodosPorVenta.set(pago.ventaId, [...yaAnotados, pago.metodo])
+    }
+  }
+
+  return filas.map((fila) => ({
+    ...fila,
+    unidades: (itemsPorVenta.get(fila.id) ?? []).reduce(
+      (total, item) => total + item.cantidad,
+      0,
+    ),
+    metodos: metodosPorVenta.get(fila.id) ?? [],
+    items: itemsPorVenta.get(fila.id) ?? [],
+  }))
 }
 
 export function getVentaDetalle(idVenta: number): VentaDetalle | null {

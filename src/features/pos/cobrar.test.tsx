@@ -79,6 +79,19 @@ describe('cobro de la venta real', () => {
     expect(process).not.toHaveBeenCalled()
   })
 
+  it('bloquea el cobro con el ticket vacío aunque la caja esté abierta', async () => {
+    useCajaStore.setState({ caja: caja(), cargado: true })
+    render(<PosPage />)
+
+    // Sin caja el bloqueo es obvio; lo que no puede pasar es que con la caja
+    // abierta y el ticket sin nada el botón quede habilitado.
+    const boton = await screen.findByRole('button', { name: /cobrar/i })
+    expect(boton.getAttribute('aria-disabled')).toBe('true')
+
+    await userEvent.setup().click(boton)
+    expect(process).not.toHaveBeenCalled()
+  })
+
   it('envía la venta con la caja y el empleado de la caja abierta', async () => {
     useCajaStore.setState({ caja: caja(), cargado: true })
     const user = await agregarUnProducto()

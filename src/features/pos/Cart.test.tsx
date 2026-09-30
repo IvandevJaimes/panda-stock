@@ -53,9 +53,11 @@ function montarCart(over: { resumen?: ResumenTicket; activeTicketId?: string; nu
     onQuitar: vi.fn(),
     onVaciar: vi.fn(),
     idsDesactivados: new Set<number>(),
+    stockPorId: new Map<number, number>(),
     confirmandoVaciar: over.confirmandoVaciar ?? false,
     onSolicitarVaciar: vi.fn(),
     onCancelarVaciar: vi.fn(),
+    onAbrirHistorial: vi.fn(),
     onCobrar: vi.fn(),
     motivoCobroBloqueado: null,
     cobrando: false,
@@ -258,9 +260,11 @@ describe("Cart: totales", () => {
         onQuitar={vi.fn()}
         onVaciar={vi.fn()}
         idsDesactivados={new Set()}
+        stockPorId={new Map()}
         confirmandoVaciar={false}
         onSolicitarVaciar={vi.fn()}
         onCancelarVaciar={vi.fn()}
+        onAbrirHistorial={vi.fn()}
         onCobrar={vi.fn()}
         motivoCobroBloqueado={null}
         cobrando={false}
