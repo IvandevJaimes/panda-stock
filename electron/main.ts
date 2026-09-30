@@ -40,6 +40,7 @@ import {
   getMovimientosStock,
   getProductoById,
   getProductos,
+  getMasVendidos,
   getNegocio,
   getReportesSummary,
   getVentaDetalle,
@@ -263,6 +264,9 @@ function registerIpcHandlers() {
   );
   ipcMain.handle("productos:get-all", (_event, filtros?: FiltrosProducto) =>
     getProductos(filtros),
+  );
+  ipcMain.handle("productos:mas-vendidos", (_event, limite: number) =>
+    getMasVendidos(limite),
   );
   ipcMain.handle("productos:get-by-id", (_event, id: number) =>
     getProductoById(id),

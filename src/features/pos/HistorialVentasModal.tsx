@@ -105,8 +105,8 @@ useEffect(() => {
       title="Historial de ventas"
       subtitle={`Últimas ${HISTORIAL_MINIMO} ventas`}
       headerIcon={<History size={18} aria-hidden="true" />}
-      maxWidth="xl"
-      height="h-[60vh]"
+      maxWidth="2xl"
+      height="h-[75vh]"
       footer={
         <>
           <span className="mr-auto text-xs tabular-nums text-slate-400 dark:text-slate-500">

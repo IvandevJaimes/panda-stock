@@ -1,6 +1,7 @@
 import type {
   ConflictoCodigo,
   FiltrosProducto,
+  MasVendido,
   Producto,
   ProductoConLoteActivo,
 } from '../../electron/db/types'
@@ -8,6 +9,14 @@ import { toErrorMessage } from './errors'
 import { bumpAssetVersion } from '../lib/assets'
 import { MIME_A_EXTENSION, MAX_LOGO_SIZE } from '../features/onboarding/business.schema'
 import { separarCodigos } from '../lib/codigosBarras'
+
+/**
+ * El modo "más vendidos" es un carril corto para el cajero, no un catálogo: con
+ * la grilla entera el modo pierde su razón de ser, porque volver al catálogo
+ * alternativo cuesta un clic. 24 llenan dos filas y deja las siguientes en
+ * pantalla sin obligar a scrollear.
+ */
+export const MAS_VENDIDOS_LIMITE = 24
 
 function limpiarBarras(codigosBarra: string | null | undefined): string | null {
   if (!codigosBarra?.trim()) return null
@@ -50,6 +59,14 @@ export const productosService = {
   async getAll(filtros?: FiltrosProducto): Promise<ProductoConLoteActivo[]> {
     try {
       return await window.electronAPI.productos.getAll(filtros)
+    } catch (error) {
+      throw new Error(toErrorMessage(error), { cause: error })
+    }
+  },
+
+  async getMasVendidos(limite: number = MAS_VENDIDOS_LIMITE): Promise<MasVendido[]> {
+    try {
+      return await window.electronAPI.productos.getMasVendidos(limite)
     } catch (error) {
       throw new Error(toErrorMessage(error), { cause: error })
     }

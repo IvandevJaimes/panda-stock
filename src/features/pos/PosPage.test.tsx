@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   Categoria,
   Marca,
+  MasVendido,
   ProductoConLoteActivo,
 } from "../../../electron/db/types";
 import { PosPage } from "./PosPage";
@@ -966,35 +967,151 @@ describe("PosPage", () => {
       const titulo = screen.getByRole("heading", { name: /vender/i });
       const buscador = screen.getByLabelText("Buscar producto");
 
-      // Los botones viven en un grupo dentro de la fila del título, y esa fila
-      // está por encima del buscador en el documento.
-      const fila = titulo.parentElement;
-      expect(boton.parentElement?.parentElement).toBe(fila);
+      // `Tooltip` no mete wrapper (clona el hijo), así que el padre directo del
+      // botón ES el grupo de la fila del título.
+      const grupo = boton.parentElement!;
+      // El título vive en un grupo propio (título + botón Volver) que debe
+      // seguir siendo hermano del grupo de botones, no su padre.
+      expect(titulo.parentElement!.parentElement).toBe(grupo.parentElement);
+
+      // Y esa fila está por encima del buscador en el documento.
       expect(
-        boton.compareDocumentPosition(buscador) &
+        grupo.compareDocumentPosition(buscador) &
           Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
     });
 
-    it("el botón de más vendidos existe pero todavía no hace nada", async () => {
-      render(<PosPage />);
-      await esperarCatalogo();
+    describe("modo más vendidos", () => {
+      const naranja = producto({
+        id: 2,
+        nombre: "Gaseosa Naranja",
+        codigoInterno: "222",
+      });
+      const agua = producto({ id: 3, nombre: "Agua Mineral", codigoInterno: "333" });
 
-      const masVendidos = screen.getByRole("button", {
-        name: /ver los productos más vendidos/i,
+      /**
+       * Ranking a mano, no el de `beforeEach`: el orden lo define la lista que
+       * devuelve la base y el producto más caro en unidades tiene que ser el
+       * primero, para que un orden alfabético accidental se note.
+       */
+      function montar(ranking: MasVendido[]) {
+        window.electronAPI = {
+          productos: {
+            getAll: vi.fn().mockResolvedValue([producto(), naranja, agua]),
+            getMasVendidos: vi.fn().mockResolvedValue(ranking),
+            scan: vi.fn().mockResolvedValue(null),
+          },
+          categorias: { getAll: vi.fn().mockResolvedValue(categorias) },
+          marcas: { getAll: vi.fn().mockResolvedValue(marcas) },
+        } as unknown as Window["electronAPI"];
+      }
+
+      it("no consulta el ranking al montar, solo al apretar el botón", async () => {
+        montar([{ productoId: 2, unidades: 20 }]);
+        render(<PosPage />);
+        await esperarCatalogo();
+
+        // Agregar la consulta al arranque le cobraría latencia a toda sesión de
+        // caja que nunca abre el modo.
+        expect(window.electronAPI.productos.getMasVendidos).not.toHaveBeenCalled();
       });
 
-      // Va a la derecha de Marcas, en la misma fila del título.
-      const marcas = screen.getByRole("button", { name: /marcas/i });
-      expect(masVendidos.parentElement).toBe(marcas.parentElement);
-      // Marcas va a la izquierda, así que "más vendidos" lo FOLLOWS.
-      expect(
-        marcas.compareDocumentPosition(masVendidos) &
-          Node.DOCUMENT_POSITION_FOLLOWING,
-      ).toBeTruthy();
+      it("cambia la grilla a los más vendidos y los deja agregar al ticket", async () => {
+        const user = userEvent.setup();
+        montar([
+          { productoId: 2, unidades: 20 },
+          { productoId: 1, unidades: 5 },
+        ]);
+        render(<PosPage />);
+        await esperarCatalogo();
 
-      // Placeholder: deshabilitado para que no sea un click que no hace nada.
-      expect((masVendidos as HTMLButtonElement).disabled).toBe(true);
+        await user.click(
+          screen.getByRole("button", { name: /ver los productos más vendidos/i }),
+        );
+
+        // El título dice que cambió de vista, y el catálogo entero se fue.
+        expect(
+          await screen.findByRole("heading", { name: /más vendidos/i }),
+        ).toBeTruthy();
+        await waitFor(() =>
+          expect(
+            screen.queryByRole("button", { name: /agregar agua mineral/i }),
+          ).toBeNull(),
+        );
+
+        // Los que sí vendieron quedan, y se pueden agregar.
+        const agregar = await screen.findByRole("button", {
+          name: /agregar gaseosa naranja/i,
+        });
+        await user.click(agregar);
+        await waitFor(() => {
+          expect(screen.getByText("1 ítem")).toBeTruthy();
+        });
+      });
+
+      it("el botón Volver devuelve el catálogo", async () => {
+        const user = userEvent.setup();
+        montar([{ productoId: 2, unidades: 20 }]);
+        render(<PosPage />);
+        await esperarCatalogo();
+
+        await user.click(
+          screen.getByRole("button", { name: /ver los productos más vendidos/i }),
+        );
+        await screen.findByRole("heading", { name: /más vendidos/i });
+
+        await user.click(screen.getByRole("button", { name: /volver/i }));
+
+        expect(
+          await screen.findByRole("heading", { name: /^vender$/i }),
+        ).toBeTruthy();
+        expect(
+          await screen.findByRole("button", { name: /agregar agua mineral/i }),
+        ).toBeTruthy();
+      });
+
+      it("sin ventas explica que el modo necesita historial", async () => {
+        const user = userEvent.setup();
+        montar([]);
+        render(<PosPage />);
+        await esperarCatalogo();
+
+        await user.click(
+          screen.getByRole("button", { name: /ver los productos más vendidos/i }),
+        );
+
+        // El mensaje de ProductGrid ("no coincide con la búsqueda") sería falso:
+        // no se buscó nada.
+        expect(await screen.findByText(/todavía no hay ventas/i)).toBeTruthy();
+        expect(
+          screen.queryByRole("button", { name: /agregar gaseosa cola/i }),
+        ).toBeNull();
+      });
+
+      it("si la consulta falla, sale del modo en vez de mostrar el catálogo mudo", async () => {
+        const user = userEvent.setup();
+        montar([]);
+        window.electronAPI.productos.getMasVendidos = vi
+          .fn()
+          .mockRejectedValue(new Error("base caída"));
+        render(<PosPage />);
+        await esperarCatalogo();
+
+        await user.click(
+          screen.getByRole("button", { name: /ver los productos más vendidos/i }),
+        );
+
+        // Dejarlo activo mostrando el catálogo entero es indistinguible de que
+        // el botón no funciona.
+        expect(
+          await screen.findByRole("heading", { name: /^vender$/i }),
+        ).toBeTruthy();
+        expect(
+          screen
+            .getByRole("button", { name: /ver los productos más vendidos/i })
+            .getAttribute("aria-pressed"),
+        ).toBe("false");
+      });
     });
 
     it("Ctrl+M abre el modal de marcas", async () => {

@@ -23,6 +23,7 @@ import type {
   NuevoLote,
   Producto,
   ProductoConLoteActivo,
+  MasVendido,
   ReportesSummary,
   Venta,
   VentaCompletaInput,
@@ -67,6 +68,7 @@ declare global {
         scan: (codigo: string) => Promise<ProductoConLoteActivo | null>
         verificarCodigos: (codigos: string[], excluirProductoId?: number | null) => Promise<ConflictoCodigo[]>
         getAll: (filtros?: FiltrosProducto) => Promise<ProductoConLoteActivo[]>
+        getMasVendidos: (limite: number) => Promise<MasVendido[]>
         getById: (id: number) => Promise<Producto | null>
         create: (data: Record<string, unknown>) => Promise<Producto>
         update: (id: number, data: Record<string, unknown>) => Promise<Producto>

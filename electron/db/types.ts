@@ -268,6 +268,16 @@ export type FiltrosVentas = {
 }
 
 /**
+ * Producto ranked por unidades vendidas. `unidades` es la suma de `cantidad` de
+ * todas sus líneas completadas, no la cantidad de ventas: un producto que se
+ * vendió de a tres en tres pesa más que uno que salió dos veces de a una.
+ */
+export type MasVendido = {
+  productoId: number
+  unidades: number
+}
+
+/**
  * Ítem del historial: la foto y el precio del producto, con la descripción
  * congelada al momento de la venta.
  */

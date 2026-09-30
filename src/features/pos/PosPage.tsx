@@ -6,22 +6,38 @@ import {
   useRef,
   useState,
 } from 'react'
-import { ChevronLeft, ChevronRight, FilterX, Search, Ticket, TrendingUp } from 'lucide-react'
+import {
+  ArrowLeft,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  FilterX,
+  Loader2,
+  Search,
+  Ticket,
+  TrendingUp,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '../../lib/cn'
 import { CustomSelect } from '../../components/ui/CustomSelect'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { LoadingState } from '../../components/ui/LoadingState'
+import { EmptyState } from '../../components/ui/EmptyState'
 import { Tooltip } from '../../components/ui/Tooltip'
 import { MarcasModal, type ConteoMarca } from '../../components/inventory/MarcasModal'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
 import { MOD_IS_META } from '../../lib/hotkeys'
 import type { LineaTicket } from './posQuery'
-import type { Categoria, Marca, ProductoConLoteActivo } from '../../../electron/db/types'
+import type {
+  Categoria,
+  Marca,
+  MasVendido,
+  ProductoConLoteActivo,
+} from '../../../electron/db/types'
 import { categoriasService } from '../../services/categorias.service'
 import { marcasService } from '../../services/marcas.service'
-import { productosService } from '../../services/productos.service'
+import { productosService, MAS_VENDIDOS_LIMITE } from '../../services/productos.service'
 import { AyudaAtajos } from './AyudaAtajos'
 import { Cart } from './Cart'
 import { CategoryFilter } from './CategoryFilter'
@@ -85,6 +101,9 @@ export function PosPage() {
   const [busqueda, setBusqueda] = useState('')
   const [categoriaId, setCategoriaId] = useState('all')
   const [vista, setVista] = useState<VistaCatalogo>(VISTA_POR_DEFECTO)
+  const [viendoMasVendidos, setViendoMasVendidos] = useState(false)
+  const [masVendidos, setMasVendidos] = useState<MasVendido[]>([])
+  const [cargandoMasVendidos, setCargandoMasVendidos] = useState(false)
 
   // Cada venta en curso es una sesión con su propio contenido y su propio
   // método de pago. Siempre hay al menos una: `crearTicket` la abre y
@@ -191,17 +210,51 @@ export function PosPage() {
     [catalogo, busquedaDiferida],
   )
 
-  const productos = useMemo(
-    () =>
-      aplicarVistaCatalogo(
-        porBusqueda.filter(
-          (producto) =>
-            categoriaId === 'all' || String(producto.categoriaId) === categoriaId,
-        ),
-        vista,
-      ),
-    [porBusqueda, categoriaId, vista],
-  )
+  /**
+   * El ranking entra DESPUÉS del catálogo, no antes. El renderer ya tiene cada
+   * producto mapeado a POS con su estado de stock calculado; el ranking solo
+   * necesita decir en qué orden van. Traer los productos otra vez desde la base
+   * duplicaría el mapeo y devolvería un producto crudo sin `estado`, que
+   * `separarPorDisponibilidad` no sabe clasificar.
+   */
+  const catalogoRanking = useMemo(() => {
+    const porId = new Map(catalogo.map((producto) => [producto.id, producto]))
+    const top: ProductoPOS[] = []
+    for (const item of masVendidos) {
+      // Un top seller desactivado NO entra: `catalogo` ya lo filtró, y el POS no
+      // debe ofrecer agregar al ticket un producto desactivado. El ranking se
+      // acorta solo, sin hueco: la posición siguiente sube por lo que reste.
+      const producto = porId.get(item.productoId)
+      if (producto) top.push(producto)
+    }
+    return top
+  }, [catalogo, masVendidos])
+
+  /**
+ * Lo que la grilla está mostrando AHORA: el ranking en modo más vendidos, o el
+ * catálogo filtrado por búsqueda.
+ *
+ * Es la única fuente para la grilla y para las pills de categoría. Si las pills
+ * se calcularan aparte del conjunto real, en modo ranking seguirían contando
+ * productos que no están a la vista: el cajero filtraría por "Bebidas", vería
+ * un número que no corresponde con las cards de abajo y no sabría cuál de los
+ * dos datos miente.
+ */
+  const conjuntoGrilla = useMemo(() => {
+    if (!viendoMasVendidos) return porBusqueda
+    return filtrarCatalogoPOS(catalogoRanking, busquedaDiferida, 'all')
+  }, [porBusqueda, catalogoRanking, busquedaDiferida, viendoMasVendidos])
+
+  const productos = useMemo(() => {
+    const porCategoria = conjuntoGrilla.filter(
+      (producto) => categoriaId === 'all' || String(producto.categoriaId) === categoriaId,
+    )
+    // El ranking ES el orden. Aplicar `vista.orden` lo pisaría y el cajero vería
+    // los más vendidos alfabéticos, que es exactamente lo contrario de lo que
+    // pidió al apretar el botón.
+    if (viendoMasVendidos) return porCategoria
+    return aplicarVistaCatalogo(porCategoria, vista)
+  }, [conjuntoGrilla, categoriaId, vista, viendoMasVendidos])
 
   const { vendibles, noVendibles } = useMemo(
     () => separarPorDisponibilidad(productos),
@@ -217,8 +270,8 @@ export function PosPage() {
     vista.orden !== VISTA_POR_DEFECTO.orden
 
   const vendiblesDeBusqueda = useMemo(
-    () => porBusqueda.filter(esVendible),
-    [porBusqueda],
+    () => conjuntoGrilla.filter(esVendible),
+    [conjuntoGrilla],
   )
 
   const categoriasCatalogo = useMemo(
@@ -285,6 +338,37 @@ export function PosPage() {
     (producto: ProductoPOS) => agregarAlTicketActivo(producto),
     [agregarAlTicketActivo],
   )
+
+  // ── Modo "más vendidos" ──
+  //
+  // El ranking se pide la PRIMERA vez que se aprieta el botón, no en el arranque
+  // de la pantalla. Son 24 filas agrupadas sobre `detalle_ventas`, y hoy esa
+  // tabla no tiene ningún índice: cargarla siempre le agrega latencia a un POS
+  // que ya tarda en pintar. La mayoría de las sesiones de caja nunca aprieta el
+  // botón, así que no hay por qué pagar esa consulta de entrada.
+  const toggleMasVendidos = useCallback(async () => {
+    const activando = !viendoMasVendidos
+    setViendoMasVendidos(activando)
+
+    if (!activando) return
+    if (masVendidos.length > 0 || cargandoMasVendidos) return
+
+    setCargandoMasVendidos(true)
+    try {
+      setMasVendidos(await productosService.getMasVendidos(MAS_VENDIDOS_LIMITE))
+    } catch (error) {
+      // Se sale del modo: dejarlo activo mostrando el catálogo entero silencioso
+      // sería indistinguishable de que el botón no funciona.
+      setViendoMasVendidos(false)
+      toast.error(
+        error instanceof Error
+          ? `No se pudieron cargar los más vendidos: ${error.message}`
+          : 'No se pudieron cargar los más vendidos',
+      )
+    } finally {
+      setCargandoMasVendidos(false)
+    }
+  }, [viendoMasVendidos, masVendidos.length, cargandoMasVendidos])
 
   // ── Lectora de código de barras ──
   //
@@ -541,9 +625,29 @@ export function PosPage() {
                 filtro conviven, y el buscador queda abajo como la caja donde
                 aterriza la marca elegida. */}
             <div className="flex items-center justify-between gap-3">
-              <h2 className="font-display font-semibold text-2xl tracking-tight text-slate-900 dark:text-white">
-                Vender
-              </h2>
+              <div className="flex min-w-0 items-center gap-2">
+                  {/* El título cambia porque el cajero tiene que saber si está
+                      mirando el catálogo entero o el ranking. El botón vuelve a
+                      ser el camino de salida, y no solo apagar el highlight del
+                      botón de más vendidos: el catálogo completo tiene que
+                      quedar siempre a un clic de vuelta. */}
+                  {viendoMasVendidos && (
+                    <Tooltip content="Volver a todo el catálogo" placement="bottom">
+                      <Button
+                        variant="ghost"
+                        onClick={() => void toggleMasVendidos()}
+                        aria-label="Volver a todo el catálogo"
+                        className="h-9 w-9 shrink-0 rounded-xl p-0 text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/60 dark:hover:text-white"
+                      >
+                        <ArrowLeft size={18} className="shrink-0" aria-hidden />
+                      </Button>
+                    </Tooltip>
+                  )}
+
+                  <h2 className="truncate font-display font-semibold text-2xl tracking-tight text-slate-900 dark:text-white">
+                    {viendoMasVendidos ? 'Más vendidos' : 'Vender'}
+                  </h2>
+                </div>
 
               <div className="flex items-center gap-2">
                 <Tooltip
@@ -563,21 +667,45 @@ export function PosPage() {
                   </Button>
                 </Tooltip>
 
-                {/* Placeholder: el pedido fue explícitamente solo el botón, sin
-                    cablear la consulta de más vendidos. Va `disabled` a
-                    propósito para que no sea un click que no hace nada, con
-                    `disabled:opacity-100` para que el fondo se vea entero en
-                    lugar de lavado. Fondo verde suave: se distingue del
-                    outline blanco de Marcas sin competir con el `Cobrar`, que
-                    es el único botón sólido de la pantalla. */}
-                <Tooltip content="Próximamente" placement="bottom">
+                {/* Modo "más vendidos": cambia lo que muestra la grilla, no el orden de la
+                    grilla entera.
+                    `ghost` trae sus propios slate y se pisan con los de acá vía
+                    `cn`, pero igual se declaran los dos estados completos
+                    (reposo y hover) con su par claro/oscuro: dejar el hover solo
+                    en claro hacía que en oscuro el botón se apagara al pasar el
+                    mouse y pareciera deshabilitado.
+                    Fondo verde suave para distinguirse del outline de Marcas sin
+                    competir con el `Cobrar`, que es el único botón sólido de la
+                    pantalla. Activo se llena y suma un check, porque el estado
+                    vive acá y no se deduce del color. */}
+                <Tooltip
+                  content={
+                    viendoMasVendidos
+                      ? 'Volver a todo el catálogo'
+                      : 'Ver los productos más vendidos'
+                  }
+                  placement="bottom"
+                >
                   <Button
                     variant="ghost"
-                    disabled
+                    onClick={() => void toggleMasVendidos()}
+                    aria-pressed={viendoMasVendidos}
                     aria-label="Ver los productos más vendidos"
-                    className="disabled:opacity-100 whitespace-nowrap rounded-2xl border border-emerald-500/25 bg-emerald-500/10 px-2 py-2.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-500/20 hover:text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/15 dark:text-emerald-400 dark:hover:bg-emerald-500/25"
+                    aria-busy={cargandoMasVendidos}
+                    className={cn(
+                      'whitespace-nowrap rounded-2xl border text-sm font-semibold',
+                      viendoMasVendidos
+                        ? 'border-emerald-500 bg-emerald-500/25 text-emerald-800 hover:bg-emerald-500/30 hover:text-emerald-900 dark:border-emerald-500/60 dark:bg-emerald-500/25 dark:text-emerald-200 dark:hover:bg-emerald-500/35 dark:hover:text-white'
+                        : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/20 hover:text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-500/15 dark:text-emerald-400 dark:hover:bg-emerald-500/25 dark:hover:text-emerald-200',
+                    )}
                   >
-                    <TrendingUp size={15} className="shrink-0" aria-hidden />
+                    {cargandoMasVendidos ? (
+                      <Loader2 size={15} className="shrink-0 animate-spin" aria-hidden />
+                    ) : viendoMasVendidos ? (
+                      <Check size={15} className="shrink-0" aria-hidden />
+                    ) : (
+                      <TrendingUp size={15} className="shrink-0" aria-hidden />
+                    )}
                     Más vendidos
                   </Button>
                 </Tooltip>
@@ -596,14 +724,23 @@ export function PosPage() {
                 wrapperClassName="min-w-[200px] flex-1"
               />
 
-              <CustomSelect
-                options={OPCIONES_VISTA}
-                value={valorVistaActiva(vista)}
-                onChange={(valor) => setVista(aplicarValorVista(vista, String(valor)))}
-                displayLabel={etiquetaVista(vista)}
-                className="w-50 shrink-0"
-                buttonClassName="h-11"
-              />
+              {/* En modo más vendidos el selector se OCULTA, no se deshabilita. Mostrar un
+                orden activo que no va a pasar nada es peor que no mostrarlo: el
+                cajero lo lee como el criterio real de la grilla. El filtro de
+                avisos tampoco se arrastra al ranking (`conjuntoGrilla` entra con
+                'all'); queda guardado para cuando vuelva al catálogo. */}
+              {!viendoMasVendidos && (
+                <CustomSelect
+                  options={OPCIONES_VISTA}
+                  value={valorVistaActiva(vista)}
+                  onChange={(valor) =>
+                    setVista(aplicarValorVista(vista, String(valor)))
+                  }
+                  displayLabel={etiquetaVista(vista)}
+                  className="w-50 shrink-0"
+                  buttonClassName="h-11"
+                />
+              )}
 
               <Tooltip
                 content={hayFiltrosActivos ? 'Limpiar todos los filtros' : undefined}
@@ -634,16 +771,38 @@ export function PosPage() {
             />
           </div>
 
-          <ProductGrid
-        
-            productos={vendibles}
-            sinStock={noVendibles}
-            onAgregar={handleAgregar}
-            error={errorProductos}
-            terminoConsulta={busquedaDiferida}
-            onLimpiarFiltros={hayFiltrosActivos ? handleLimpiarFiltros : undefined}
+          {/* Sin historial no hay ranking que mostrar, y el mensaje de
+              `ProductGrid` ("no hay productos que coincidan con la búsqueda")
+              sería falso: no se buscó nada. El modo solo nace después de la
+              primera venta. */}
+          {viendoMasVendidos && !cargandoMasVendidos && masVendidos.length === 0 ? (
+            <div className="flex w-full min-h-0 flex-1 flex-col justify-center">
+              <EmptyState
+                icon={
+                  <TrendingUp
+                    className="h-12 w-12 stroke-[1.5] text-emerald-500"
                   />
+                }
+                title="Todavía no hay ventas"
+                description="Los más vendidos se arma con las ventas que ya hiciste. Registrá la primera y la lista se arma sola."
+              />
+            </div>
+          ) : (
+            <ProductGrid
+              productos={vendibles}
+              sinStock={noVendibles}
+              onAgregar={handleAgregar}
+              error={errorProductos}
+              terminoConsulta={busquedaDiferida}
+              onLimpiarFiltros={
+                hayFiltrosActivos ? handleLimpiarFiltros : undefined
+              }
+            />
+          )}
 
+          {/* El badge cuenta el bloqueo del catálogo COMPLETO, no del ranking:
+              en modo más vendidos un producto sin stock puede no estar en la
+              grilla, pero sigue pesando en el total que ve el cajero. */}
           {!errorProductos && <NoVendiblesBadge conteo={bloqueo} />}
         </section>
 

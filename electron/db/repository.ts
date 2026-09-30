@@ -62,6 +62,7 @@ import type {
   VentaHistorialItem,
   VentaResult,
   MetodoPago,
+  MasVendido,
   CrearMovimientoInput,
 } from './types.ts'
 
@@ -1122,6 +1123,47 @@ export function getVentaDetalle(idVenta: number): VentaDetalle | null {
     .all()
 
   return { venta: filaVenta, items, pagos: filasPagos }
+}
+
+/**
+ * Ranking de productos por unidades vendidas.
+ *
+ * Solo devuelve lo que TIENE ventas. No se completa con el resto del catálogo:
+ * un producto que nunca salió no es "más vendidos", y rellenarlo convertiría el
+ * modo en un orden por defecto con otro nombre.
+ *
+ * El `innerJoin` a `ventas` es de muchas a una y no multiplica filas, al revés
+ * de unir las dos hijas de una misma venta. Sirve para excluir las anuladas: sus
+ * líneas están en `detalle_ventas` como las de cualquier otra venta, así que sin
+ * este filtro una venta anulada contaría como rotación y podría poner arriba un
+ * producto que en realidad nadie se llevó.
+ *
+ * El `from` arranca en `productos` y no en `detalle_ventas` por dos motivos. Uno
+ * tipográfico: `productos.id` no es nullable, así que el tipo de salida queda
+ * `number` sin castear, mientras que `detalle_ventas.producto_id` sí lo es y
+ * obligaría a un `as number` para afirmar algo que el join ya garantiza. El otro
+ * es real: una línea con `producto_id` nulo (un ítem de combo) simplemente no
+ * empata con ningún producto y desaparece sola, sin un filtro aparte.
+ *
+ * El desempate por nombre NO es decorativo. `sum(cantidad)` deja empates (dos
+ * productos con 4 unidades, por ejemplo) y SQLite puede devolverlos en cualquier
+ * orden entre consultas: sin desempate la grilla reordena sola dos cards cada
+ * vez que se abre el modo.
+ */
+export function getMasVendidos(limite: number): MasVendido[] {
+  const db = getDb()
+  const unidades = sql<number>`sum(${detalleVentas.cantidad})`
+
+  return db
+    .select({ productoId: productos.id, unidades })
+    .from(productos)
+    .innerJoin(detalleVentas, eq(detalleVentas.productoId, productos.id))
+    .innerJoin(ventas, eq(detalleVentas.ventaId, ventas.id))
+    .where(eq(ventas.estado, 'completada'))
+    .groupBy(productos.id)
+    .orderBy(desc(unidades), asc(productos.nombre))
+    .limit(limite)
+    .all()
 }
 
 export function getMovimientosStock(filtros?: FiltrosMovimientos): MovimientoStock[] {

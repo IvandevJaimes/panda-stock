@@ -92,7 +92,7 @@ export function Cart({
     // El panel trae su propia superficie (borde, radio, sombra y fondo con dark
     // mode). Por eso `PosPage` NO lo envuelve en otra caja.
     <aside className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-[#111827]">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 bg-white px-[22px] py-[18px] dark:border-slate-800 dark:bg-[#111827]">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 bg-white px-[22px] py-[9px] dark:border-slate-800 dark:bg-[#111827]">
         <div className="flex items-center gap-2.5">
           <Ticket size={20} className="shrink-0 text-emerald-500" aria-hidden="true" />
           <h2 className="font-display text-[17px] tracking-tight text-slate-900 dark:text-slate-100">
@@ -115,9 +115,9 @@ export function Cart({
               type="button"
               onClick={onAbrirHistorial}
               aria-label="Ver historial de ventas"
-              className="grid h-7 w-7 shrink-0 cursor-pointer place-items-center rounded-lg text-slate-400 transition-colors duration-150 hover:bg-slate-100 hover:text-emerald-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-emerald-400"
+              className="grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-lg text-slate-400 transition-colors duration-150 hover:bg-slate-100 hover:text-emerald-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-emerald-400"
             >
-              <History size={16} aria-hidden="true" />
+              <History size={18} aria-hidden="true" />
             </button>
           </Tooltip>
         </div>
