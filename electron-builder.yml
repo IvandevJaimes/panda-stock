@@ -20,7 +20,9 @@ electronLanguages:
   - es
 
 win:
-  icon: build/icon.png
+  # Fuente unica del logo: el mismo PNG que usa la app en pantalla.
+  # electron-builder convierte a .ico solo. Pide minimo 256x256 y este es de 500.
+  icon: public/panda-stock-logo-512x512.png
   target:
     - target: nsis
       arch:
@@ -33,7 +35,10 @@ nsis:
   shortcutName: Panda Stock
 
 mac:
-  icon: build/icon.png
+  # Derivado del logo de public, no un icono aparte: el original mide 500x500 y
+  # para .icns electron-builder exige 512 como minimo. build/icon-mac.png es ese
+  # mismo PNG reescalado a 512.
+  icon: build/icon-mac.png
   category: public.app-category.business
   target:
     - target: dmg
@@ -42,7 +47,7 @@ mac:
         - arm64
 
 linux:
-  icon: build/icon.png
+  icon: public/panda-stock-logo-512x512.png
   category: Office
   maintainer: Panda Stock
   target:

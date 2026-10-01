@@ -11,6 +11,7 @@ import {
   Store,
   Sun,
   TrendingUp,
+  BookUser,
   type LucideIcon,
 } from "lucide-react";
 import { useSettingsStore } from "../../stores/settings.store";
@@ -40,6 +41,7 @@ interface MainNavItem {
 const mainNavItems: MainNavItem[] = [
   { to: "/pos", label: "Vender", icon: ShoppingBag },
   { to: "/inventory", label: "Inventario", icon: Package },
+  { to: "/accounts", label: "Cuentas corrientes", icon: BookUser, bloqueado: true },
   { to: "/reports", label: "Reportes", icon: TrendingUp, bloqueado: true },
 ];
 
@@ -60,7 +62,7 @@ export function Header() {
   const logoCaido = negocioLogoUrl !== null && logoFallidoUrl === negocioLogoUrl;
 
   return (
-    <header className="flex h-18 shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3 text-slate-900 dark:border-slate-800 dark:bg-[#111827] dark:text-slate-200 md:gap-4 md:px-6 lg:gap-6">
+    <header className="flex h-18 shadow-md z-10 shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3 text-slate-900 dark:border-slate-800 dark:bg-[#111827] dark:text-slate-200 md:gap-4 md:px-6 lg:gap-6">
       {/* ── Marca ── */}
       <div className="flex min-w-0 items-center gap-2 sm:gap-3">
         <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-xl bg-emerald-500">
@@ -71,7 +73,7 @@ export function Header() {
             draggable={false}
           />
         </div>
-        <div className="hidden sm:flex min-w-0 flex-col leading-tight">
+        <div className="hidden md:flex min-w-0 flex-col leading-tight">
           <span className="truncate font-display text-[14px] font-bold text-slate-900 dark:text-white sm:text-[15px]">
             {storeName}
           </span>
@@ -95,7 +97,7 @@ export function Header() {
                 )}
               >
                 <Icon size={17} className="shrink-0" />
-                <span className="hidden lg:inline">{label}</span>
+                <span className="hidden xl:inline">{label}</span>
               </span>
             </Tooltip>
           ) : (
@@ -113,7 +115,7 @@ export function Header() {
                 }
               >
                 <Icon size={17} className="shrink-0" />
-                <span className="hidden lg:inline">{label}</span>
+                <span className="hidden xl:inline">{label}</span>
               </NavLink>
             </Tooltip>
           ),

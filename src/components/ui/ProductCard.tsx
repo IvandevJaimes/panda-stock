@@ -28,6 +28,7 @@ import { buildAssetUrl } from "../../lib/assets";
 import { getProductPlaceholder } from "../../lib/productPlaceholder";
 import { evaluateExpiry } from "../../lib/dateUtils";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
+import { useSrcConFallback } from "../../hooks/useSrcConFallback";
 
 export type ProductStatus =
   | "normal"
@@ -179,6 +180,13 @@ export function ProductCard({
             : "—"
         } · ${margenDelta > 0 ? "+" : ""}$${margenDelta.toFixed(2)}`;
 
+  const placeholderProducto = getProductPlaceholder(producto?.id);
+  const imagenProducto = useSrcConFallback(
+    (producto?.imgPath ? buildAssetUrl(producto.imgPath) : null) ??
+      placeholderProducto,
+    placeholderProducto,
+  );
+
   return (
     <div
       style={style}
@@ -209,7 +217,8 @@ export function ProductCard({
             : null;
           return (
             <img
-              src={imgUrl ?? getProductPlaceholder(producto?.id)}
+              src={imagenProducto.src}
+              onError={imagenProducto.onError}
               alt={imgUrl ? name : `${name} sin foto`}
               loading="lazy"
               className="h-full w-full object-cover"

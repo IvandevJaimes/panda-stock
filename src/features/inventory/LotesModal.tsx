@@ -14,6 +14,7 @@ import { cn } from "../../lib/cn";
 import { evaluateExpiry } from "../../lib/dateUtils";
 import { buildAssetUrl } from "../../lib/assets";
 import { getProductPlaceholder } from "../../lib/productPlaceholder";
+import { useSrcConFallback } from "../../hooks/useSrcConFallback";
 import { lotesService } from "../../services/lotes.service";
 import { Button } from "../../components/ui/Button";
 import { ConfirmModal } from "../../components/ui/ConfirmModal";
@@ -165,6 +166,12 @@ export function LotesModal({
   const lotesSiguientes = getLotesSiguientes(lotes);
   const historial = lotes?.filter((l) => l.cantidadActual <= 0) ?? [];
   const productoStockBajo = esStockBajo(product.stockActual, product.stockMinimo);
+
+  const placeholderProducto = getProductPlaceholder(product.id);
+  const imagenProducto = useSrcConFallback(
+    buildAssetUrl(product.imgPath) ?? placeholderProducto,
+    placeholderProducto,
+  );
 
   const handlePerdidaSuccess = () => {
     refreshData();
@@ -342,7 +349,8 @@ export function LotesModal({
             <div className="flex min-w-0 items-center gap-3">
               <div className="grid h-12 w-12 shrink-0 select-none place-items-center overflow-hidden rounded-xl bg-slate-200/60 dark:bg-slate-800/60">
                 <img
-                  src={buildAssetUrl(product.imgPath) ?? getProductPlaceholder(product.id)}
+                  src={imagenProducto.src}
+                  onError={imagenProducto.onError}
                   alt={product.imgPath ? product.nombre : `${product.nombre} sin foto`}
                   loading="lazy"
                   className="h-full w-full object-cover"

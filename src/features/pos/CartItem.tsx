@@ -7,9 +7,10 @@ import { QuantityStepper } from "../../components/ui/QuantityStepper";
 import { TruncatedText } from "../../components/ui/TruncatedText";
 import { buildAssetUrl } from "../../lib/assets";
 import { getProductPlaceholder } from "../../lib/productPlaceholder";
+import { useSrcConFallback } from "../../hooks/useSrcConFallback";
 import {
   formatearMoneda,
-  motivoStockInsuficiente,
+  motivoStockInsuficienteCorto,
   MOTIVO_SIN_INCREMENTO,
   type LineaTicket,
 } from "./posQuery";
@@ -48,6 +49,11 @@ export function CartItem({
   const [saliendo, setSaliendo] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const imgUrl = linea.imgPath ? buildAssetUrl(linea.imgPath) : null;
+  const placeholderLinea = getProductPlaceholder(linea.productoId);
+  const imagenLinea = useSrcConFallback(
+    imgUrl ?? placeholderLinea,
+    placeholderLinea,
+  );
 
   const sinStock = stockDisponible !== null && linea.cantidad >= stockDisponible;
   const {
@@ -64,7 +70,11 @@ export function CartItem({
     if (sinStock && stockDisponible !== null) {
       setError("cantidad", {
         type: "validate",
-        message: motivoStockInsuficiente(linea.nombre, stockDisponible),
+        // Sin el nombre: el mensaje va al tooltip del `+` de esta fila, y el
+        // producto ya está escrito a la izquierda. Repetirlo ahí suma ruido; el
+        // nombre sí importa en el toast de `PosPage`, que sí viene desligado de
+        // la línea.
+        message: motivoStockInsuficienteCorto(stockDisponible),
       });
     } else {
       clearErrors("cantidad");
@@ -116,7 +126,8 @@ export function CartItem({
     >
       <div className="h-13 w-13 shrink-0 overflow-hidden rounded-lg bg-slate-200/60 dark:bg-slate-800/60">
         <img
-          src={imgUrl ?? getProductPlaceholder(linea.productoId)}
+          src={imagenLinea.src}
+          onError={imagenLinea.onError}
           alt={imgUrl ? linea.nombre : `${linea.nombre} sin foto`}
           loading="lazy"
           draggable={false}

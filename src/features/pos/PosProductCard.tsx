@@ -2,6 +2,7 @@ import { memo } from 'react'
 import { cn } from '../../lib/cn'
 import { buildAssetUrl } from '../../lib/assets'
 import { getProductPlaceholderLarge } from '../../lib/productPlaceholder'
+import { useSrcConFallback } from '../../hooks/useSrcConFallback'
 import { HighlightMatch } from '../../components/ui/HighlightMatch'
 import { TruncatedText } from '../../components/ui/TruncatedText'
 import {
@@ -31,6 +32,11 @@ function PosProductCardComponent({
 
   const aviso = descripcionAviso(producto)
   const conAviso = tieneAviso(producto)
+  const preview = getProductPlaceholderLarge(producto.id)
+  const imagen = useSrcConFallback(
+    buildAssetUrl(producto.imgPath) ?? preview,
+    preview,
+  )
 
   return (
     <button
@@ -106,7 +112,8 @@ function PosProductCardComponent({
 
       <span className="relative block aspect-square w-full shrink-0 overflow-hidden bg-slate-100 dark:bg-slate-800">
         <img
-          src={buildAssetUrl(producto.imgPath) ?? getProductPlaceholderLarge(producto.id)}
+          src={imagen.src}
+          onError={imagen.onError}
           alt={producto.nombre}
           loading="lazy"
           draggable={false}

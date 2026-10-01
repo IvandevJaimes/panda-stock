@@ -13,6 +13,7 @@ import { formatearCodigo } from "./quick-actions/formatters";
 import { productosService } from "../../services/productos.service";
 import { buildAssetUrl } from "../../lib/assets";
 import { getProductPlaceholder } from "../../lib/productPlaceholder";
+import { useSrcConFallback } from "../../hooks/useSrcConFallback";
 import type {
   Categoria,
   Marca,
@@ -20,6 +21,34 @@ import type {
 } from "../../../electron/db/types";
 
 const PRODUCTOS_POR_PAGINA = 20;
+
+/**
+ * Componente aparte porque la lista se arma con `.map`: un hook no se puede
+ * llamar dentro del callback, y cada fila necesita su propio estado de "el
+ * archivo no cargó" sin arrastrar al resto.
+ */
+function InactivoImagen({ producto }: { producto: ProductoConLoteActivo }) {
+  const preview = getProductPlaceholder(producto.id);
+  const imagen = useSrcConFallback(
+    producto.imgPath ? (buildAssetUrl(producto.imgPath) ?? preview) : preview,
+    preview,
+  );
+
+  return (
+    <img
+      src={imagen.src}
+      onError={imagen.onError}
+      alt={
+        producto.imgPath
+          ? producto.nombre
+          : `${producto.nombre} sin foto`
+      }
+      loading="lazy"
+      draggable={false}
+      className="h-full w-full object-cover opacity-70 saturate-50"
+    />
+  );
+}
 
 function normalizar(texto: string): string {
   return texto
@@ -252,20 +281,7 @@ export function InactivosModal({
                     className="flex w-full items-stretch overflow-hidden rounded-xl border border-slate-200 text-left dark:border-slate-800"
                   >
                     <div className="flex w-13 shrink-0 items-center justify-center overflow-hidden bg-slate-200/60 sm:w-15 dark:bg-slate-800/60">
-                      {(() => {
-                        const imgUrl = producto.imgPath
-                          ? buildAssetUrl(producto.imgPath)
-                          : null;
-                        return (
-                          <img
-                            src={imgUrl ?? getProductPlaceholder(producto.id)}
-                            alt={imgUrl ? producto.nombre : `${producto.nombre} sin foto`}
-                            loading="lazy"
-                            draggable={false}
-                            className="h-full w-full object-cover opacity-70 saturate-50"
-                          />
-                        );
-                      })()}
+                      <InactivoImagen producto={producto} />
                     </div>
                     <span className="flex min-w-0 flex-1 flex-col justify-center py-2.5 pl-3 pr-3">
                       <span className="block truncate text-sm font-semibold text-slate-900 dark:text-slate-100">

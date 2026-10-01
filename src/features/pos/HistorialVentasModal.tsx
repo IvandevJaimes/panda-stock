@@ -7,6 +7,7 @@ import { EmptyStateCompact } from '../../components/ui/EmptyStateCompact'
 import { ventasService, HISTORIAL_MINIMO } from '../../services/ventas.service'
 import { buildAssetUrl } from '../../lib/assets'
 import { getProductPlaceholder } from '../../lib/productPlaceholder'
+import { useSrcConFallback } from '../../hooks/useSrcConFallback'
 import { formatearMoneda } from './posQuery'
 import type { MetodoPago, VentaHistorial } from '../../../electron/db/types'
 
@@ -55,6 +56,29 @@ function etiquetaMetodos(metodos: MetodoPago[]): string {
 type HistorialVentasModalProps = {
   isOpen: boolean
   onClose: () => void
+}
+
+/**
+ * Imagen del ítem dentro de una venta del historial. Vive en su propio
+ * componente a propósito: la lista se arma con `.map`, y un hook no se puede
+ * llamar dentro del callback. Cada fila necesita su propio estado de "el
+ * archivo no cargó": si el hook viviera en el padre, caería el preview de una
+ * fila y arrastraría a todas.
+ */
+function ItemHistorialImagen({ item }: { item: VentaHistorial['items'][number] }) {
+  const preview = getProductPlaceholder(item.productoId ?? item.id)
+  const imagen = useSrcConFallback(buildAssetUrl(item.imgPath) ?? preview, preview)
+
+  return (
+    <img
+      src={imagen.src}
+      onError={imagen.onError}
+      alt={item.descripcionItem}
+      loading="lazy"
+      draggable={false}
+      className="h-9 w-9 shrink-0 rounded-md object-cover"
+    />
+  )
 }
 
 /**
@@ -169,16 +193,7 @@ useEffect(() => {
                     key={item.id}
                     className="flex items-center gap-2.5 py-1.5  first:pt-0 last:pb-0"
                   >
-                    <img
-                      src={
-                        buildAssetUrl(item.imgPath) ??
-                        getProductPlaceholder(item.productoId ?? item.id)
-                      }
-                      alt={item.descripcionItem}
-                      loading="lazy"
-                      draggable={false}
-                      className="h-9 w-9 shrink-0 rounded-md object-cover"
-                    />
+                    <ItemHistorialImagen item={item} />
 
                     <span className="flex min-w-0 flex-1 flex-col">
                       <span className="truncate text-[13px] font-medium text-slate-700 dark:text-slate-300">

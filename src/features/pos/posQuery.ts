@@ -555,6 +555,11 @@ export function motivoStockInsuficiente(nombre: string, disponible: number): str
   return `Stock insuficiente: quedan ${disponible} de "${nombre}"`
 }
 
+/** Variante para tooltips o avisos dentro de la línea, sin el nombre del producto. */
+export function motivoStockInsuficienteCorto(disponible: number): string {
+  return `Stock insuficiente: quedan ${disponible}`
+}
+
 /**
  * Ids de los productos que están en la base pero desactivados.
  *
