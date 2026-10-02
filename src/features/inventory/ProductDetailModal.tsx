@@ -17,7 +17,6 @@ import {
   PackageX,
   Pencil,
   Plus,
-  QrCode,
   RotateCcw,
   ShoppingCart,
   Trash2,
@@ -322,14 +321,6 @@ export function ProductDetailModal({
       ? (margenDelta / (product.costo ?? 0)) * 100
       : null;
   const margenEsGanancia = margenDelta > 0;
-  const esCodigoBarras = /^\d{8,14}$/.test(
-    product.codigoInterno || product.codigosBarras || "",
-  );
-  const valorCodigo = esCodigoBarras
-    ? codigosBarras.length > 0
-      ? codigosBarras.join(", ")
-      : product.codigoInterno
-    : product.codigoInterno;
 
   const loteActivo = getLoteActivo(lotes);
   const loteIdentidad = loteActivo
@@ -393,22 +384,24 @@ export function ProductDetailModal({
             </dl>
           </section>
 
-          {/* Sección 2: Identificación (detección automática del tipo de código) */}
-          {(product.codigoInterno || product.codigosBarras) && (
+          {/* Sección 2: Identificación (código interno y códigos de barra) */}
+          {(product.codigoInterno || codigosBarras.length > 0) && (
             <section className="py-4">
-              <SectionTitle icon={esCodigoBarras ? Barcode : QrCode}>
+              <SectionTitle icon={Barcode}>
                 Identificación y códigos
               </SectionTitle>
-              <div className="flex flex-col gap-1">
-                <Dato
-                  etiqueta={
-                    esCodigoBarras ? "Código de barras" : "Código interno"
-                  }
-                  mono
-                >
-                  {valorCodigo}
-                </Dato>
-              </div>
+              <dl className="grid grid-cols-2 gap-y-3 gap-x-6">
+                {product.codigoInterno && (
+                  <Dato etiqueta="Código interno" mono>
+                    {product.codigoInterno}
+                  </Dato>
+                )}
+                {codigosBarras.length > 0 && (
+                  <Dato etiqueta="Códigos de barra" mono>
+                    {codigosBarras.join(", ")}
+                  </Dato>
+                )}
+              </dl>
             </section>
           )}
 

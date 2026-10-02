@@ -175,16 +175,6 @@ export function QuickActionsMenu({
                   {categoriaNombre}
                 </span>
               ) : null,
-              producto.codigoInterno || producto.codigosBarras ? (
-                <span
-                  key="codigo"
-                  className="font-mono text-xs text-slate-400 dark:text-slate-500"
-                >
-                  {formatearCodigo(
-                    producto.codigoInterno || producto.codigosBarras,
-                  )}
-                </span>
-              ) : null,
             ]
               .filter((chip): chip is ReactElement => chip !== null)
               .map((chip, index) => (
@@ -201,6 +191,23 @@ export function QuickActionsMenu({
                 </span>
               ))}
           </div>
+          {(producto.codigoInterno || producto.codigosBarras) && (
+            <div className="mt-0.5 truncate text-xs text-slate-400 dark:text-slate-500">
+              {producto.codigoInterno && (
+                <span className="font-mono">{producto.codigoInterno}</span>
+              )}
+              {producto.codigoInterno && producto.codigosBarras && (
+                <span className="mx-1.5 text-slate-300 dark:text-slate-600">
+                  •
+                </span>
+              )}
+              {producto.codigosBarras && (
+                <span className="font-mono">
+                  {formatearCodigo(producto.codigosBarras)}
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -342,10 +349,16 @@ export function QuickActionsMenu({
           </span>
           <span className="min-w-0">
             <span className="block text-sm font-semibold text-slate-800 dark:text-slate-100">
-              Editar Código
+              {producto.codigoInterno || producto.codigosBarras
+                ? "Editar Códigos"
+                : "Agregar Códigos"}
+         
             </span>
             <span className="block text-xs font-medium text-slate-400 dark:text-slate-500">
-              Cambiar código interno o códigos de barras.
+              {producto.codigoInterno || producto.codigosBarras
+                ? "Cambiar código interno o códigos de barras."
+                : "Agregar código interno o códigos de barras."}
+         
             </span>
           </span>
         </button>
@@ -360,10 +373,13 @@ export function QuickActionsMenu({
           </span>
           <span className="min-w-0">
             <span className="block text-sm font-semibold text-slate-800 dark:text-slate-100">
-              Editar Variante / Detalle
+              {producto.variante ? "Editar variante / detalle" : "Agregar variante / detalle"}
+          
             </span>
             <span className="block text-xs font-medium text-slate-400 dark:text-slate-500">
-              Modificar la variante o detalle del producto.
+              {producto.variante
+                ? "Modificar la variante o detalle del producto."
+                : "Agregar una variante o detalle al producto."}
             </span>
           </span>
         </button>

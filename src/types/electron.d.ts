@@ -2,9 +2,11 @@ import type {
   AjusteStockInput,
   AperturaCajaInput,
   Caja,
+  CajaConResponsable,
   CajaSummary,
   Categoria,
   CierreCajaInput,
+  ConflictoCodigo,
   CrearMovimientoInput,
   Empleado,
   FiltrosMovimientos,
@@ -21,10 +23,12 @@ import type {
   NuevoLote,
   Producto,
   ProductoConLoteActivo,
+  MasVendido,
   ReportesSummary,
   Venta,
   VentaCompletaInput,
   VentaDetalle,
+  VentaHistorial,
   VentaResult,
 } from '../../electron/db/types'
 
@@ -61,8 +65,10 @@ declare global {
         delete: (id: number) => Promise<void>
       }
       productos: {
-        scan: (codigo: string) => Promise<Producto | null>
+        scan: (codigo: string) => Promise<ProductoConLoteActivo | null>
+        verificarCodigos: (codigos: string[], excluirProductoId?: number | null) => Promise<ConflictoCodigo[]>
         getAll: (filtros?: FiltrosProducto) => Promise<ProductoConLoteActivo[]>
+        getMasVendidos: (limite: number) => Promise<MasVendido[]>
         getById: (id: number) => Promise<Producto | null>
         create: (data: Record<string, unknown>) => Promise<Producto>
         update: (id: number, data: Record<string, unknown>) => Promise<Producto>
@@ -80,8 +86,8 @@ declare global {
         delete: (id: number) => Promise<void>
       }
       cajas: {
-        getActive: () => Promise<Caja | null>
-        open: (data: AperturaCajaInput) => Promise<Caja>
+        getActive: () => Promise<CajaConResponsable | null>
+        open: (data: AperturaCajaInput) => Promise<CajaConResponsable>
         getSummary: (cajaId: number) => Promise<CajaSummary>
         close: (data: CierreCajaInput) => Promise<Caja>
       }
@@ -89,6 +95,7 @@ declare global {
         process: (venta: VentaCompletaInput) => Promise<VentaResult>
         getAll: (filtros?: FiltrosVentas) => Promise<Venta[]>
         getDetail: (idVenta: number) => Promise<VentaDetalle | null>
+        getRecientes: (limite: number) => Promise<VentaHistorial[]>
       }
       movimientos: {
         getAll: (filtros?: FiltrosMovimientos) => Promise<MovimientoStock[]>
@@ -97,6 +104,12 @@ declare global {
       }
       reportes: {
         getSummary: (filtros?: FiltrosReportes) => Promise<ReportesSummary>
+      }
+      app: {
+        /** Llega cuando se intentó cerrar la app con una caja abierta. */
+        onPedirCierre: (callback: () => void) => void
+        /** Confirma que la caja ya se cerró y deja salir. */
+        salir: () => Promise<void>
       }
     }
   }

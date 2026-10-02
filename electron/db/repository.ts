@@ -14,6 +14,7 @@ import {
   ne,
   or,
   sql,
+  inArray,
 } from 'drizzle-orm'
 import { getDb, sha256 } from './index.ts'
 import {
@@ -34,9 +35,11 @@ import type {
   AjusteStockInput,
   AperturaCajaInput,
   Caja,
+  CajaConResponsable,
   CajaSummary,
   Categoria,
   CierreCajaInput,
+  ConflictoCodigo,
   Empleado,
   FiltrosMovimientos,
   FiltrosProducto,
@@ -55,7 +58,11 @@ import type {
   Venta,
   VentaCompletaInput,
   VentaDetalle,
+  VentaHistorial,
+  VentaHistorialItem,
   VentaResult,
+  MetodoPago,
+  MasVendido,
   CrearMovimientoInput,
 } from './types.ts'
 
@@ -288,10 +295,39 @@ export function deleteMarca(id: number): void {
     .run()
 }
 
-export function scanProductByCode(codigo: string): Producto | null {
+/**
+ * Proyección de `productos` con el vencimiento del lote activo: el lote con
+ * stock que vence primero (FEFO). Es el que determina si el producto hoy tiene
+ * mercadería vencida; los lotes sin fecha no pueden decidir el vencimiento.
+ *
+ * Las columnas van calificadas con alias: si no, drizzle las emite sin calificar
+ * y SQLite resuelve "id" contra el lote interno, rompiendo la correlación (todas
+ * las cards mostraban el mismo vencimiento).
+ *
+ * La comparten el listado y el escaneo por código: el POS necesita el vencimiento
+ * para decidir si puede cobrar, igual que la card.
+ */
+function seleccionConLoteActivo() {
+  return {
+    ...getTableColumns(productos),
+    loteActivoVencimiento: sql<string | null>`
+      (
+        select l.fecha_vence
+        from lotes l
+        where l.producto_id = productos.id
+          and l.cantidad_actual > 0
+          and l.fecha_vence is not null
+        order by l.fecha_vence asc
+        limit 1
+      )
+    `,
+  }
+}
+
+export function scanProductByCode(codigo: string): ProductoConLoteActivo | null {
   const db = getDb()
   const fila = db
-    .select()
+    .select(seleccionConLoteActivo())
     .from(productos)
     .where(
       or(
@@ -302,7 +338,64 @@ export function scanProductByCode(codigo: string): Producto | null {
     .limit(1)
     .get()
 
-  return fila ?? null
+  return (fila as ProductoConLoteActivo | undefined) ?? null
+}
+
+/** Separa una lista CSV de códigos de barra en tokens únicos y recortados. */
+function separarCodigosCsv(csv: string | null | undefined): string[] {
+  if (!csv?.trim()) return []
+  return Array.from(
+    new Set(
+      csv
+        .split(',')
+        .map((codigo) => codigo.trim())
+        .filter(Boolean),
+    ),
+  )
+}
+
+/** Productos (activos o desactivados) que usan un código en coincidencia exacta (interno o de barras). */
+function listarProductosConCodigo(codigo: string): Producto[] {
+  return getDb()
+    .select()
+    .from(productos)
+    .where(
+      or(
+        eq(productos.codigoInterno, codigo),
+        sql`instr(',' || ${productos.codigosBarras} || ',', ',' || ${codigo} || ',') > 0`,
+      ),
+    )
+    .all()
+}
+
+/**
+ * Devuelve qué códigos de una lista ya están asociados a otro producto.
+ * Un producto desactivado (borrado lógico) CONSERVA sus códigos: cederlos a
+ * otro producto impediría reactivarlo sin conflicto.
+ */
+export function verificarCodigosEnUso(
+  codigos: string[],
+  excluirProductoId?: number | null,
+): ConflictoCodigo[] {
+  const conflictos: ConflictoCodigo[] = []
+  for (const codigo of separarCodigosCsv(codigos.join(','))) {
+    const duenio = listarProductosConCodigo(codigo).find(
+      (producto) => producto.id !== excluirProductoId,
+    )
+    if (duenio) conflictos.push({ codigo, producto: duenio.nombre })
+  }
+  return conflictos
+}
+
+/** Guardia autoritativa: lanza error si algún código ya pertenece a otro producto. */
+function bloquearCodigosEnUso(codigos: string[], excluirProductoId?: number | null): void {
+  const conflictos = verificarCodigosEnUso(codigos, excluirProductoId)
+  if (conflictos.length > 0) {
+    const primero = conflictos[0]
+    throw new Error(
+      `El código de barras "${primero.codigo}" ya está asociado al producto "${primero.producto}"`,
+    )
+  }
 }
 
 export function getProductos(filtros?: FiltrosProducto): ProductoConLoteActivo[] {
@@ -331,28 +424,7 @@ export function getProductos(filtros?: FiltrosProducto): ProductoConLoteActivo[]
 
   const condicion = and(...condiciones)
 
-  // Vencimiento del lote activo: el lote con stock que vence primero (FEFO).
-  // Es el que determina si el producto hoy tiene mercadería vencida; los lotes
-  // sin fecha no pueden decidir el vencimiento de la card.
-  // Las columnas van calificadas con alias: si no, drizzle las emite sin
-  // calificar y SQLite resuelve "id" contra el lote interno, rompiendo la
-  // correlación (todas las cards mostraban el mismo vencimiento).
-  const loteActivoSubquery = sql<string | null>`
-    (
-      select l.fecha_vence
-      from lotes l
-      where l.producto_id = productos.id
-        and l.cantidad_actual > 0
-        and l.fecha_vence is not null
-      order by l.fecha_vence asc
-      limit 1
-    )
-  `
-
-  const selectProductos = {
-    ...getTableColumns(productos),
-    loteActivoVencimiento: loteActivoSubquery,
-  }
+  const selectProductos = seleccionConLoteActivo()
 
   const consulta = condicion
     ? db.select(selectProductos).from(productos).where(condicion)
@@ -424,6 +496,9 @@ export function createProducto(data: Record<string, unknown>): Producto {
   const valores = mapNuevoProducto(data)
   const ahora = new Date().toISOString()
 
+  // Guardia de unicidad: un código de barras no puede pertenecer a otro producto ACTIVO.
+  bloquearCodigosEnUso(separarCodigosCsv(valores.codigosBarras))
+
   return db.transaction((tx) => {
     // Marca libre por nombre: busca existente o crea una nueva
     valores.marcaId = resolverMarcaId(tx, data.marca as string | null | undefined)
@@ -477,7 +552,12 @@ export function updateProducto(id: number, data: Record<string, unknown>): Produ
   if (data.codigoInterno !== undefined) {
     set.codigoInterno = (data.codigoInterno as string | null)?.trim() || null
   }
-  if (data.codigosBarras !== undefined) set.codigosBarras = (data.codigosBarras as string | null)?.trim() || null
+  if (data.codigosBarras !== undefined) {
+    const nuevos = (data.codigosBarras as string | null | undefined)?.trim() || null
+    // Guardia de unicidad: rechaza códigos de otro producto ACTIVO (surge al editar duplicados).
+    bloquearCodigosEnUso(separarCodigosCsv(nuevos), id)
+    set.codigosBarras = nuevos
+  }
   if (data.variante !== undefined) set.variante = (data.variante as string | null)?.trim() || null
   if (data.categoriaId !== undefined) set.categoriaId = data.categoriaId
   if (data.marca !== undefined) {
@@ -627,31 +707,119 @@ export function getLotesPorVencer(diasLimite: number): Lote[] {
     .all()
 }
 
-export function getActiveCaja(): Caja | null {
+export function getActiveCaja(): CajaConResponsable | null {
   return getDb()
-    .select()
+    .select({
+      id: cajas.id,
+      empleadoId: cajas.empleadoId,
+      empleadoNombre: empleados.nombre,
+      montoInicial: cajas.montoInicial,
+      montoEsperado: cajas.montoEsperado,
+      montoReal: cajas.montoReal,
+      diferencia: cajas.diferencia,
+      estado: cajas.estado,
+      fechaApertura: cajas.fechaApertura,
+      fechaCierre: cajas.fechaCierre,
+      observaciones: cajas.observaciones,
+    })
     .from(cajas)
+    .innerJoin(empleados, eq(empleados.id, cajas.empleadoId))
     .where(eq(cajas.estado, 'abierta'))
     .orderBy(desc(cajas.id))
     .get() ?? null
 }
 
-export function openCaja(data: AperturaCajaInput): Caja {
-  const db = getDb()
-  const activa = getActiveCaja()
-  if (activa) throw new Error('Ya existe una caja abierta')
+/**
+ * La comparación va en JS y no con `lower()` de SQLite porque ese no le saca los
+ * acentos: "José" y "jose" darían empleados distintos y la caja quedaría partida
+ * en dos.
+ */
+function normalizarNombre(nombre: string): string {
+  return nombre
+    .trim()
+    .replace(/\s+/g, ' ')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+}
 
-  return db
-    .insert(cajas)
-    .values({
-      empleadoId: data.empleadoId,
-      montoInicial: data.montoInicial ?? 0,
-      estado: 'abierta',
-      fechaApertura: new Date().toISOString(),
-      observaciones: data.observaciones ?? null,
-    })
-    .returning()
+export function openCaja(data: AperturaCajaInput): CajaConResponsable {
+  const db = getDb()
+  const nombre = data.responsable.trim().replace(/\s+/g, ' ')
+  if (!nombre) throw new Error('El nombre del responsable es obligatorio')
+
+  // El chequeo de "ya hay una caja abierta" va adentro y no antes: leer afuera es
+  // una carrera, y dos cajas abiertas romperían el reparto de la venta.
+  return db.transaction((tx) => {
+    const activa = tx
+      .select({ id: cajas.id })
+      .from(cajas)
+      .where(eq(cajas.estado, 'abierta'))
+      .get()
+    if (activa) throw new Error('Ya existe una caja abierta')
+
+    const clave = normalizarNombre(nombre)
+    const existente = tx
+      .select()
+      .from(empleados)
+      .all()
+      .find((empleado) => normalizarNombre(empleado.nombre) === clave)
+
+    const empleadoId =
+      existente?.id ??
+      tx
+        .insert(empleados)
+        .values({ nombre, creadoEn: new Date().toISOString() })
+        .returning({ id: empleados.id })
+        .get().id
+
+    // Un empleado desactivado que vuelve a abrir caja tiene que reactivarse: si
+    // se reutilizara el registro tal cual, sus ventas quedarían marcadas como de
+    // alguien dado de baja.
+    if (existente && !existente.activo) {
+      tx.update(empleados).set({ activo: true }).where(eq(empleados.id, existente.id)).run()
+    }
+
+    const caja = tx
+      .insert(cajas)
+      .values({
+        empleadoId,
+        montoInicial: data.montoInicial ?? 0,
+        estado: 'abierta',
+        fechaApertura: new Date().toISOString(),
+        observaciones: data.observaciones?.trim() || null,
+      })
+      .returning()
+      .get()
+
+    return { ...caja, empleadoNombre: nombre }
+  })
+}
+
+/**
+ * Fondo inicial + efectivo cobrado. Vive acá porque `closeCaja` necesita el mismo
+ * número que muestra el modal: duplicar la fórmula garantiza que dejen de
+ * coincidir.
+ */
+function montoEsperadoDeCaja(
+  db: Pick<ReturnType<typeof getDb>, 'select'>,
+  cajaId: number,
+  montoInicial: number,
+): number {
+  const fila = db
+    .select({ efectivo: sql<number>`coalesce(sum(${pagos.monto}), 0)` })
+    .from(pagos)
+    .innerJoin(ventas, eq(pagos.ventaId, ventas.id))
+    .where(
+      and(
+        eq(ventas.cajaId, cajaId),
+        eq(ventas.estado, 'completada'),
+        eq(pagos.metodo, 'efectivo'),
+      ),
+    )
     .get()
+
+  return montoInicial + (fila?.efectivo ?? 0)
 }
 
 export function getCajaSummary(cajaId: number): CajaSummary {
@@ -659,9 +827,16 @@ export function getCajaSummary(cajaId: number): CajaSummary {
   const resumenVentas = db
     .select({
       totalVentas: sql<number>`coalesce(sum(${ventas.total}), 0)`,
+      cantidadVentas: sql<number>`count(*)`,
     })
     .from(ventas)
     .where(and(eq(ventas.cajaId, cajaId), eq(ventas.estado, 'completada')))
+    .get()
+
+  const filaCaja = db
+    .select({ montoInicial: cajas.montoInicial })
+    .from(cajas)
+    .where(eq(cajas.id, cajaId))
     .get()
 
   const filasMetodo = db
@@ -687,9 +862,11 @@ export function getCajaSummary(cajaId: number): CajaSummary {
 
   return {
     totalVentas: resumenVentas?.totalVentas ?? 0,
+    cantidadVentas: resumenVentas?.cantidadVentas ?? 0,
     totalEfectivo,
     totalTransferencia,
     totalTarjeta,
+    montoEsperado: montoEsperadoDeCaja(db, cajaId, filaCaja?.montoInicial ?? 0),
   }
 }
 
@@ -701,15 +878,7 @@ export function closeCaja(data: CierreCajaInput): Caja {
     if (!filaCaja) throw new Error('Caja no encontrada')
     if (filaCaja.estado === 'cerrada') throw new Error('La caja ya está cerrada')
 
-    const resumen = tx
-      .select({
-        total: sql<number>`coalesce(sum(${ventas.total}), 0)`,
-      })
-      .from(ventas)
-      .where(and(eq(ventas.cajaId, data.cajaId), eq(ventas.estado, 'completada')))
-      .get()
-
-    const montoEsperado = filaCaja.montoInicial + (resumen?.total ?? 0)
+    const montoEsperado = montoEsperadoDeCaja(tx, data.cajaId, filaCaja.montoInicial)
 
     return tx
       .update(cajas)
@@ -809,21 +978,12 @@ export function processSale(venta: VentaCompletaInput): VentaResult {
       }
 
       if (restante > 0) {
-        tx.insert(movimientosStock)
-          .values({
-            productoId: item.productoId,
-            loteId: null,
-            ventaId: idVenta,
-            tipo: 'venta',
-            cantidad: restante,
-            stockAnterior: stock,
-            stockPosterior: stock - restante,
-            motivo: null,
-            fechaHora: ahora,
-          })
-          .run()
-
-        stock -= restante
+        // Throw y no stock negativo: un lote en negativo rompe el FEFO de las
+        // ventas siguientes. Estamos en la transacción, así que se revierte
+        // entera, venta y movimientos.
+        throw new Error(
+          `Stock insuficiente de "${item.descripcionItem}": quedan ${stock} unidades y la venta pide ${item.cantidad}`,
+        )
       }
 
       tx.update(productos)
@@ -863,7 +1023,84 @@ export function getVentas(filtros?: FiltrosVentas): Venta[] {
     ? db.select().from(ventas).where(condicion)
     : db.select().from(ventas)
 
-  return consulta.orderBy(desc(ventas.fechaHora)).all()
+  const ordenadas = consulta.orderBy(desc(ventas.fechaHora))
+  return (filtros?.limit != null ? ordenadas.limit(filtros.limit) : ordenadas).all()
+}
+
+/**
+ * Últimas ventas con sus ítems, unidades y métodos de pago.
+ *
+ * Se resuelve en TRES consultas y el cruce se arma en JS, a propósito.
+ *
+ * La versión de una sola consulta usaba subqueries correlacionados dentro de un
+ * `sql` crudo, y Drizzle renderiza las columnas SIN calificar ahí: sale
+ * `where "venta_id" = "id"` en vez de `where "detalle_ventas"."venta_id" =
+ * "ventas"."id"`. SQLite resuelve el `"id"` contra la tabla del propio subquery,
+ * la condición se cumple siempre, y cada venta recibía el agregado de la tabla
+ * completa (mismo total de unidades y los tres métodos de pago en todas). El
+ * síntoma era indistinguible de un dato inventado.
+ *
+ * Tampoco sirve unir `detalle_ventas` y `pagos` en un solo `from`: son las dos
+ * hijas de la misma venta, y unem-blas multiplica filas entre sí (2 ítems × 2
+ * pagos = 4 filas) así que el `sum(cantidad)` sale duplicado. Tres consultas
+ * sobre índices, sin multiplicación ni correlación que pueda romperse en
+ * silencio.
+ */
+export function getVentasRecientes(limite: number): VentaHistorial[] {
+  const db = getDb()
+
+  const filas = db.select().from(ventas).orderBy(desc(ventas.fechaHora)).limit(limite).all()
+
+  if (filas.length === 0) return []
+
+  const ids = filas.map((fila) => fila.id)
+
+  // `leftJoin` y no `innerJoin`: `detalle_ventas.producto_id` es nullable (un ítem
+  // de combo no apunta a un producto), y con `innerJoin` esa fila desaparecería
+  // del historial junto con la venta.
+  const itemsPorVenta = new Map<number, VentaHistorialItem[]>()
+  for (const item of db
+    .select({
+      id: detalleVentas.id,
+      ventaId: detalleVentas.ventaId,
+      productoId: detalleVentas.productoId,
+      descripcionItem: detalleVentas.descripcionItem,
+      cantidad: detalleVentas.cantidad,
+      precioUnitario: detalleVentas.precioUnitario,
+      subtotal: detalleVentas.subtotal,
+      imgPath: productos.imgPath,
+    })
+    .from(detalleVentas)
+    .leftJoin(productos, eq(detalleVentas.productoId, productos.id))
+    .where(inArray(detalleVentas.ventaId, ids))
+    .orderBy(asc(detalleVentas.id))
+    .all()) {
+    itemsPorVenta.set(item.ventaId, [...(itemsPorVenta.get(item.ventaId) ?? []), item])
+  }
+
+  const metodosPorVenta = new Map<number, MetodoPago[]>()
+  for (const pago of db
+    .select({ ventaId: pagos.ventaId, metodo: pagos.metodo })
+    .from(pagos)
+    .where(inArray(pagos.ventaId, ids))
+    .all()) {
+    const yaAnotados = metodosPorVenta.get(pago.ventaId) ?? []
+    // Sin `includes`, una venta pagada mitad en efectivo y mitad en efectivo otra
+    // vez (o dos pagos del mismo método) salía "Efectivo + Efectivo".
+    if (!yaAnotados.includes(pago.metodo)) {
+      metodosPorVenta.set(pago.ventaId, [...yaAnotados, pago.metodo])
+    }
+  }
+
+  return filas.map((fila) => ({
+    ...fila,
+    unidades: (itemsPorVenta.get(fila.id) ?? []).reduce(
+      (total, item) => total + item.cantidad,
+      0,
+    ),
+    metodos: metodosPorVenta.get(fila.id) ?? [],
+    items: itemsPorVenta.get(fila.id) ?? [],
+  }))
 }
 
 export function getVentaDetalle(idVenta: number): VentaDetalle | null {
@@ -886,6 +1123,47 @@ export function getVentaDetalle(idVenta: number): VentaDetalle | null {
     .all()
 
   return { venta: filaVenta, items, pagos: filasPagos }
+}
+
+/**
+ * Ranking de productos por unidades vendidas.
+ *
+ * Solo devuelve lo que TIENE ventas. No se completa con el resto del catálogo:
+ * un producto que nunca salió no es "más vendidos", y rellenarlo convertiría el
+ * modo en un orden por defecto con otro nombre.
+ *
+ * El `innerJoin` a `ventas` es de muchas a una y no multiplica filas, al revés
+ * de unir las dos hijas de una misma venta. Sirve para excluir las anuladas: sus
+ * líneas están en `detalle_ventas` como las de cualquier otra venta, así que sin
+ * este filtro una venta anulada contaría como rotación y podría poner arriba un
+ * producto que en realidad nadie se llevó.
+ *
+ * El `from` arranca en `productos` y no en `detalle_ventas` por dos motivos. Uno
+ * tipográfico: `productos.id` no es nullable, así que el tipo de salida queda
+ * `number` sin castear, mientras que `detalle_ventas.producto_id` sí lo es y
+ * obligaría a un `as number` para afirmar algo que el join ya garantiza. El otro
+ * es real: una línea con `producto_id` nulo (un ítem de combo) simplemente no
+ * empata con ningún producto y desaparece sola, sin un filtro aparte.
+ *
+ * El desempate por nombre NO es decorativo. `sum(cantidad)` deja empates (dos
+ * productos con 4 unidades, por ejemplo) y SQLite puede devolverlos en cualquier
+ * orden entre consultas: sin desempate la grilla reordena sola dos cards cada
+ * vez que se abre el modo.
+ */
+export function getMasVendidos(limite: number): MasVendido[] {
+  const db = getDb()
+  const unidades = sql<number>`sum(${detalleVentas.cantidad})`
+
+  return db
+    .select({ productoId: productos.id, unidades })
+    .from(productos)
+    .innerJoin(detalleVentas, eq(detalleVentas.productoId, productos.id))
+    .innerJoin(ventas, eq(detalleVentas.ventaId, ventas.id))
+    .where(eq(ventas.estado, 'completada'))
+    .groupBy(productos.id)
+    .orderBy(desc(unidades), asc(productos.nombre))
+    .limit(limite)
+    .all()
 }
 
 export function getMovimientosStock(filtros?: FiltrosMovimientos): MovimientoStock[] {

@@ -6,6 +6,14 @@ directories:
   output: release
   buildResources: build
 
+# Icono unico del proyecto, para las tres plataformas. electron-builder lo
+# convierte a .ico y .icns por su cuenta.
+# OJO: el generador de .icns NO falla con una imagen chica, descarta en
+# silencio los frames que no entran (icns.ts: ICNS_ENTRIES.filter(size <=
+# sourceSize)). Con menos de 512 el .icns se queda en 256 y macOS lo muestra
+# borroso en Retina sin avisar. Por eso este PNG tiene que medir 512 de verdad.
+icon: public/panda-stock-logo-512x512.png
+
 files:
   - dist/**
   - dist-electron/**
@@ -20,7 +28,6 @@ electronLanguages:
   - es
 
 win:
-  icon: build/icon.png
   target:
     - target: nsis
       arch:
@@ -33,7 +40,6 @@ nsis:
   shortcutName: Panda Stock
 
 mac:
-  icon: build/icon.png
   category: public.app-category.business
   target:
     - target: dmg
@@ -42,7 +48,6 @@ mac:
         - arm64
 
 linux:
-  icon: build/icon.png
   category: Office
   maintainer: Panda Stock
   target:

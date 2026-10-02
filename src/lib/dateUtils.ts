@@ -1,3 +1,34 @@
+/**
+ * Duración transcurrida como `HH:MM:SS`.
+ *
+ * Las horas no tienen tope: un turno de 26 horas tiene que leerse `26` y no `02`,
+ * porque el número grande es justamente la señal de que el turno se pasó de largo
+ * y encotrarlo a `02` lo haría pasar por algo que empieza a las dos.
+ *
+ * `ahora` entra por parámetro para que el cálculo sea testeable sin reloj falso.
+ */
+export function formatearDuracionTranscurrida(
+  desdeIso: string | null | undefined,
+  ahora: number,
+): string {
+  if (!desdeIso) return '—'
+  const desde = new Date(desdeIso).getTime()
+  if (Number.isNaN(desde)) return '—'
+
+  // Se clampa en 0 porque un reloj del sistema atrasado, o una fecha de apertura
+  // cargada en el futuro, darían un negativo con signo de reloj: "−1:59:59".
+  const totalSegundos = Math.max(0, Math.floor((ahora - desde) / 1000))
+  const horas = Math.floor(totalSegundos / 3600)
+  const minutos = Math.floor((totalSegundos % 3600) / 60)
+  const segundos = totalSegundos % 60
+
+  return `${dosDigitos(horas)}:${dosDigitos(minutos)}:${dosDigitos(segundos)}`
+}
+
+function dosDigitos(valor: number): string {
+  return String(valor).padStart(2, '0')
+}
+
 export interface ExpiryEvaluation {
   status: 'expired' | 'expiring_soon' | 'normal';
   daysDiff: number;

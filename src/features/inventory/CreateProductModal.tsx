@@ -28,6 +28,12 @@ import type {
   UnidadMedida,
 } from "../../../electron/db/types";
 import { Tooltip } from "../../components/ui/Tooltip";
+import { useBarcodeScanner } from "../../hooks/useBarcodeScanner";
+import { useCodigosBarrasUnicos } from "../../hooks/useCodigosBarrasUnicos";
+import {
+  dismissCodigoEnUso,
+  toastCodigoEnUso,
+} from "../../lib/codigosBarras";
 
 export interface CreateProductModalProps {
   isOpen: boolean;
@@ -40,7 +46,8 @@ export interface CreateProductModalProps {
 export interface FormValues {
   nombre: string;
   variante?: string;
-  codigo: string;
+  codigoInterno: string;
+  codigosBarras: string;
   categoriaId: number;
   marca: string;
   unidadMedida: UnidadMedida;
@@ -58,7 +65,8 @@ const SUGERENCIAS_LIMITE = 8;
 const VALORES_INICIALES: DefaultValues<FormValues> = {
   nombre: "",
   variante: "",
-  codigo: "",
+  codigoInterno: "",
+  codigosBarras: "",
   categoriaId: 0,
   marca: "",
   unidadMedida: "unidad",
@@ -82,7 +90,7 @@ export function CreateProductModal({
     handleSubmit,
     reset,
     setValue,
-    setError,
+    getValues,
     control,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
@@ -90,6 +98,35 @@ export function CreateProductModal({
   });
 
   const [creandoCategoria, setCreandoCategoria] = React.useState(false);
+
+  // Verificación en caliente: avisa con un toast apenas un código de barra ya
+  // está asociado a otro producto (se oculta al corregir el campo). Si el código
+  // está en uso, no queda escrito: se revierte quitándolo del campo.
+  useCodigosBarrasUnicos(
+    control,
+    (mensaje) => toastCodigoEnUso(mensaje),
+    () => dismissCodigoEnUso(),
+    { setValorCampo: (valor) => setValue("codigosBarras", valor) },
+  );
+
+  // Scanner: al escanear un código, se escribe en "Códigos de barra" sin importar
+  // qué campo tenga el foco. Si ya hay códigos, se agrega separado por coma.
+  useBarcodeScanner(
+    "product-form",
+    (barcode) => {
+      const actual = getValues("codigosBarras") ?? "";
+      const codigos = actual
+        .split(",")
+        .map((c) => c.trim())
+        .filter(Boolean);
+
+      if (!codigos.includes(barcode)) {
+        codigos.push(barcode);
+      }
+      setValue("codigosBarras", codigos.join(", "), { shouldValidate: true });
+    },
+    isOpen,
+  );
 
   React.useEffect(() => {
     if (isOpen) reset(VALORES_INICIALES);
@@ -153,7 +190,7 @@ export function CreateProductModal({
 
   const generarCodigoSugerido = () => {
     const codigoSugerido = String(Math.floor(1000 + Math.random() * 9000));
-    setValue("codigo", codigoSugerido, { shouldValidate: true });
+    setValue("codigoInterno", codigoSugerido, { shouldValidate: true });
     toast.info(`Código sugerido: ${codigoSugerido}`);
   };
 
@@ -183,8 +220,9 @@ export function CreateProductModal({
       ...data,
       nombre: data.nombre.trim(),
       variante: data.variante?.trim() || null,
-      codigoInterno: data.codigo.trim(),
-      codigosBarras: data.codigo.trim() || null,
+      codigoInterno: data.codigoInterno.trim(),
+      codigosBarras:
+        data.codigosBarras.trim() || null,
       vencimiento: vencimientoNormalizado,
       categoriaId:
         Number(data.categoriaId) > 0 ? Number(data.categoriaId) : null,
@@ -214,14 +252,12 @@ export function CreateProductModal({
     const mensaje =
       error instanceof Error ? error.message : "Error al crear el producto";
 
-    if (
+    if (mensaje.toLowerCase().includes("de barras")) {
+      toastCodigoEnUso(mensaje);
+    } else if (
       mensaje.toLowerCase().includes("unique") &&
       mensaje.toLowerCase().includes("codigo_interno")
     ) {
-      setError("codigo", {
-        type: "manual",
-        message: "Este código ya está en uso",
-      });
       toast.error("El código ya existe en otro producto");
     } else {
       toast.error(mensaje);
@@ -453,46 +489,75 @@ export function CreateProductModal({
           </div>
         </div>
 
-        {/* Fila 3 (ancho completo): Código único (interno o de barra) */}
-        <div className="flex flex-col gap-1.5">
-          <div className="flex items-center justify-between ml-1">
-            <label
-              htmlFor="codigo"
-              className="text-xs font-semibold text-slate-700 dark:text-slate-300"
-            >
-              Código (interno o de barra)
-            </label>
-            <Tooltip content="Generar código sugerido">
-              <button
-                type="button"
-                onClick={generarCodigoSugerido}
-                disabled={isSubmitting}
-                className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 cursor-pointer disabled:opacity-50"
+        {/* Fila 3 (dos columnas): Código interno y Códigos de barra */}
+        <div className="grid grid-cols-2 gap-3.5">
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between ml-1">
+              <label
+                htmlFor="codigoInterno"
+                className="text-xs font-semibold text-slate-700 dark:text-slate-300"
               >
-                <Sparkles className="h-3 w-3" />
-                <span>Autogenerar</span>
-              </button>
-            </Tooltip>
+                Código interno
+              </label>
+              <Tooltip content="Generar código sugerido">
+                <button
+                  type="button"
+                  onClick={generarCodigoSugerido}
+                  disabled={isSubmitting}
+                  className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 cursor-pointer disabled:opacity-50"
+                >
+                  <Sparkles className="h-3 w-3" />
+                  <span>Autogenerar</span>
+                </button>
+              </Tooltip>
+            </div>
+            <input
+              id="codigoInterno"
+              type="text"
+              disabled={isSubmitting}
+              placeholder="Ej. 111"
+              {...register("codigoInterno", {
+                maxLength: {
+                  value: 20,
+                  message: "Máximo 20 caracteres",
+                },
+              })}
+              className={cn(
+                "h-10 w-full rounded-xl border bg-white px-3 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 dark:bg-[#0B1120] dark:text-slate-100 dark:placeholder:text-slate-600",
+                errors.codigoInterno
+                  ? "border-red-500 focus:border-red-500 focus:ring-4 focus:ring-red-500/10"
+                  : "border-slate-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700/80",
+              )}
+            />
+            <FieldError error={errors.codigoInterno?.message} />
           </div>
-          <input
-            id="codigo"
-            type="text"
-            disabled={isSubmitting}
-            placeholder="Ej. 111 o 7790012345678"
-            {...register("codigo", {
-              maxLength: {
-                value: 30,
-                message: "Máximo 30 caracteres",
-              },
-            })}
-            className={cn(
-              "h-10 w-full rounded-xl border bg-white px-3 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 dark:bg-[#0B1120] dark:text-slate-100 dark:placeholder:text-slate-600",
-              errors.codigo
-                ? "border-red-500 focus:border-red-500 focus:ring-4 focus:ring-red-500/10"
-                : "border-slate-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700/80",
-            )}
-          />
-          <FieldError error={errors.codigo?.message} />
+          <div className="flex flex-col gap-1.5">
+            <label
+              htmlFor="codigosBarras"
+              className="ml-1 text-xs font-semibold text-slate-700 dark:text-slate-300"
+            >
+              Códigos de barra
+            </label>
+            <input
+              id="codigosBarras"
+              type="text"
+              disabled={isSubmitting}
+              placeholder="Ej. 779001, 779002"
+              {...register("codigosBarras", {
+                maxLength: {
+                  value: 100,
+                  message: "Máximo 100 caracteres",
+                },
+              })}
+              className={cn(
+                "h-10 w-full rounded-xl border bg-white px-3 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 dark:bg-[#0B1120] dark:text-slate-100 dark:placeholder:text-slate-600",
+                errors.codigosBarras
+                  ? "border-red-500 focus:border-red-500 focus:ring-4 focus:ring-red-500/10"
+                  : "border-slate-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700/80",
+              )}
+            />
+            <FieldError error={errors.codigosBarras?.message} />
+          </div>
         </div>
 
         {/* Fila 5 (dos columnas): Precios (Costo y Venta) */}

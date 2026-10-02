@@ -1,8 +1,14 @@
-import type { AperturaCajaInput, Caja, CajaSummary, CierreCajaInput } from '../../electron/db/types'
+import type {
+  AperturaCajaInput,
+  Caja,
+  CajaConResponsable,
+  CajaSummary,
+  CierreCajaInput,
+} from '../../electron/db/types'
 import { toErrorMessage } from './errors'
 
 export const cajasService = {
-  async getActive(): Promise<Caja | null> {
+  async getActive(): Promise<CajaConResponsable | null> {
     try {
       return await window.electronAPI.cajas.getActive()
     } catch (error) {
@@ -10,12 +16,15 @@ export const cajasService = {
     }
   },
 
-  async open(data: AperturaCajaInput): Promise<Caja> {
-    if (!data.empleadoId) throw new Error('El empleado es obligatorio')
+  async open(data: AperturaCajaInput): Promise<CajaConResponsable> {
+    const responsable = data.responsable.trim()
+    if (!responsable) throw new Error('El nombre del responsable es obligatorio')
+    if ((data.montoInicial ?? 0) < 0) throw new Error('El monto inicial no puede ser negativo')
 
     try {
       return await window.electronAPI.cajas.open({
         ...data,
+        responsable,
         montoInicial: data.montoInicial ?? 0,
         observaciones: data.observaciones?.trim() || null,
       })

@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import { cn } from '../../lib/cn'
 import { buildAssetUrl } from '../../lib/assets'
 import { getProductPlaceholderLarge } from '../../lib/productPlaceholder'
+import { useSrcConFallback } from '../../hooks/useSrcConFallback'
 import { productosService } from '../../services/productos.service'
 import { Tooltip } from './Tooltip'
 import { ConfirmModal } from './ConfirmModal'
@@ -55,6 +56,18 @@ export function ProductImageBox({
   }
 
   const tieneImagen = Boolean(imgPath)
+
+  // `tieneImagen` mira la DB, no el disco: un producto migrado desde otra
+  // máquina conserva el `img_path` pero no el archivo. El preview cubre ese
+  // hueco para que no aparezca la imagen rota del navegador.
+  const preview = useSrcConFallback(
+    buildAssetUrl(imgPath) ?? getProductPlaceholderLarge(productoId),
+    getProductPlaceholderLarge(productoId),
+  )
+  const imagenRota = tieneImagen && preview.cayo
+
+  // Con el archivo ausente el lightbox solo abriría el preview en grande.
+  const puedeAbrirLightbox = tieneImagen && !imagenRota
 
   async function elegirArchivo(e: ChangeEvent<HTMLInputElement>) {
     const archivo = e.target.files?.[0] ?? null
@@ -111,16 +124,23 @@ export function ProductImageBox({
           Click sobre la foto abre el lightbox (solo cuando hay imagen real). */}
       <div
         className="absolute inset-0 overflow-hidden rounded-2xl"
-        onClick={tieneImagen ? () => setLightboxAbierto(true) : undefined}
+        onClick={puedeAbrirLightbox ? () => setLightboxAbierto(true) : undefined}
       >
         <img
-          src={buildAssetUrl(imgPath) ?? getProductPlaceholderLarge(productoId)}
-          alt={tieneImagen ? nombre : `${nombre} sin foto`}
+          src={preview.src}
+          onError={preview.onError}
+          alt={
+            imagenRota
+              ? `${nombre}: no se encontró el archivo de la imagen`
+              : tieneImagen
+                ? nombre
+                : `${nombre} sin foto`
+          }
           loading="lazy"
           draggable={false}
           className={cn(
             'h-full w-full object-cover transition-transform duration-200',
-            tieneImagen &&
+            puedeAbrirLightbox &&
               'cursor-pointer hover:scale-[1.04] hover:ring-2 hover:ring-inset hover:ring-emerald-500/60',
           )}
         />

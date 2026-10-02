@@ -17,6 +17,17 @@ export const MOD_IS_META =
   typeof navigator !== "undefined" &&
   /Mac|iPhone|iPad|iPod/.test(navigator.platform);
 
+/** Modificador como lo ve el cajero: "Ctrl" o "Cmd". Para tooltips y ayudas. */
+export const MOD_TEXTO = MOD_IS_META ? "Cmd" : "Ctrl";
+
+/**
+ * Atajo en notación W3C para `aria-keyshortcuts` (ej: "Control+KeyC"). El valor
+ * crudo del atributo no se muestra nunca: es para lectores de pantalla, que
+ * necesitan el nombre de la tecla literal y no "mod".
+ */
+export const modAtajo = (tecla: string, shift = false) =>
+  `${MOD_IS_META ? "Meta" : "Control"}${shift ? "+Shift" : ""}+Key${tecla}`;
+
 const ALIASES: Record<string, string> = {
   esc: "escape",
   return: "enter",

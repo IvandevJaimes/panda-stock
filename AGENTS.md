@@ -53,6 +53,14 @@ Todos los commits deben seguir el estándar de **Conventional Commits traducido 
   - Fuentes tipográficas: `Nunito Sans` para cuerpo/sans y `Rubik` para encabezados/display (`font-display`).
   - Se mantiene la regla global `user-select: none` para experiencia tipo app de escritorio.
 
+### 2.1 Comentarios en el Código
+
+- **Comentá lo no obvio, nada más.** Un comentario tiene que justificar una decisión o advertir sobre una trampa. Si el código ya lo dice, el comentario es ruido.
+- **Prohibido comentar por comentar.** No vale como excusa para describir qué hace la función, aclarar el tipo, ni para narrar un cambio.
+- **Sin comentarios que cuenten la historia del código** ("antes era X", "se cambió porque Y", "ya se intentó Z"). Eso es historial de commits, no código.
+- **Si un comentario necesita más de unas 4 líneas para explicar una línea de código, la decisión está mal tomada.** Revisá el diseño antes que escribir el comentario.
+- **Lo que sí vale la pena:** trampas de CSS o de framework que no se deducen leyendo (containing blocks, orden de cascada, interacciones de `z-index`), invariantes que si se rompen fallan en silencio, y acoplamientos no visibles en el archivo (números que deben coincidir en varios lugares).
+
 ---
 
 ## 🏛️ 3. Arquitectura del Proyecto y Stack Tecnológico
@@ -97,6 +105,7 @@ Todos los commits deben seguir el estándar de **Conventional Commits traducido 
 - **TypeScript estricto:** No uses `any` salvo excepciones inevitables en contratos nativos IPC; escribe interfaces explícitas en `src/types/`.
 - **No romper funcionalidades existentes:** Verifica las rutas configuradas en `src/app/router.tsx` antes de alterar componentes compartidos.
 - **Confirmación antes de cambios destructivos:** No elimines archivos de migración ni limpies bases de datos de prueba sin confirmación explícita.
+- **Tests solo cuando el cambio los justifique:** No corras la suite ni subsets de tests por un cambio chico (copy, estilos, un texto, un prop, un ajuste de tipos). Cada corrida cuesta tiempo y tokens y no aporta nada cuando la lógica no cambió. Corré tests cuando agregues o modifiques lógica de negocio, un hook con estado, o cuando el usuario los pida. Con un cambio chico alcanza con `tsc --noEmit` y `lint`.
 
 ### Reglas de Ejecución de Terminal y Ahorro de Tokens:
 

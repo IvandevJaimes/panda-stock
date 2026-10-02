@@ -18,6 +18,12 @@ import {
 import { createPortal } from "react-dom";
 import type { ButtonHTMLAttributes, HTMLAttributes } from "react";
 import { cn } from "../../lib/cn";
+import {
+  dropdownItemBase,
+  dropdownItemVariants,
+  dropdownPanelBase,
+  type DropdownMenuItemVariant,
+} from "./menuTokens";
 
 // ---------------------------------------------------------------------------
 // Tipos
@@ -50,25 +56,6 @@ function useDropdownMenu(): DropdownMenuContextValue {
   }
   return context;
 }
-
-// ---------------------------------------------------------------------------
-// Utilidades internas
-// ---------------------------------------------------------------------------
-
-const panelBase =
-  "fixed z-50 min-w-[180px] rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl shadow-slate-900/10 outline-none dark:border-slate-800 dark:bg-[#0B1120] dark:shadow-black/40";
-
-const itemBase =
-  "group inline-flex w-full cursor-pointer select-none items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs font-medium outline-none transition-colors";
-
-const itemVariants = {
-  default:
-    "text-slate-700 hover:bg-slate-100 hover:text-slate-900 focus-visible:bg-slate-100 focus-visible:text-slate-900 dark:text-slate-200 dark:hover:bg-slate-800/80 dark:hover:text-white dark:focus-visible:bg-slate-800/80 dark:focus-visible:text-white",
-  danger:
-    "text-red-600 hover:bg-red-50 hover:text-red-700 focus-visible:bg-red-50 focus-visible:text-red-700 dark:text-red-400 dark:hover:bg-red-500/10 dark:hover:text-red-300 dark:focus-visible:bg-red-500/10 dark:focus-visible:text-red-300",
-} as const;
-
-export type DropdownMenuItemVariant = keyof typeof itemVariants;
 
 // ---------------------------------------------------------------------------
 // DropdownMenu: contenedor principal proveedor de contexto
@@ -347,7 +334,7 @@ export function DropdownMenuContent({
         willChange: "transform, opacity",
       }}
       className={cn(
-        panelBase,
+        dropdownPanelBase,
         "pointer-events-none",
         originClase,
         "transition-[opacity,transform] ease",
@@ -401,8 +388,8 @@ export function DropdownMenuItem({
       disabled={disabled}
       onClick={handleClick}
       className={cn(
-        itemBase,
-        itemVariants[variant] ?? itemVariants.default,
+        dropdownItemBase,
+        dropdownItemVariants[variant] ?? dropdownItemVariants.default,
         disabled && "cursor-not-allowed opacity-50 hover:bg-transparent",
         className,
       )}

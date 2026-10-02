@@ -71,6 +71,14 @@ export type FiltrosProducto = {
   bajoStock?: boolean
 }
 
+/** Código (interno o de barras) ya asociado a otro producto. */
+export type ConflictoCodigo = {
+  /** Código en conflicto, ya recortado y normalizado. */
+  codigo: string
+  /** Nombre del producto que lo tiene asociado. */
+  producto: string
+}
+
 /** Producto enriquecido con el vencimiento del lote activo (FIFO) para el listado. */
 export type ProductoConLoteActivo = Producto & {
   /** Vencimiento del lote activo: primer lote con stock ordenado por fecha de ingreso. */
@@ -151,8 +159,12 @@ export type Caja = {
   observaciones: string | null
 }
 
+/**
+ * La caja se abre por NOMBRE y no por `empleadoId`: no hay login ni catálogo de
+ * empleados al que elegir, así que el nombre escrito es la identidad.
+ */
 export type AperturaCajaInput = {
-  empleadoId: number
+  responsable: string
   montoInicial?: number
   observaciones?: string | null
 }
@@ -163,11 +175,23 @@ export type CierreCajaInput = {
   observaciones?: string | null
 }
 
+/**
+ * El nombre del empleado viaja con la caja y no solo en el estado de pantalla: si
+ * viviera ahí, al reabrir la app la caja seguiría abierta sin responsable que
+ * mostrar.
+ */
+export type CajaConResponsable = Caja & {
+  empleadoNombre: string
+}
+
 export type CajaSummary = {
   totalVentas: number
+  cantidadVentas: number
   totalEfectivo: number
   totalTransferencia: number
   totalTarjeta: number
+  /** Fondo inicial + efectivo cobrado. Mismo número con el que `closeCaja` calcula la diferencia. */
+  montoEsperado: number
 }
 
 export type Venta = {
@@ -239,6 +263,45 @@ export type FiltrosVentas = {
   desde?: string
   hasta?: string
   cajaId?: number
+  /** Tope de filas. Sin tope, `getVentas` devuelve el histórico completo. */
+  limit?: number
+}
+
+/**
+ * Producto ranked por unidades vendidas. `unidades` es la suma de `cantidad` de
+ * todas sus líneas completadas, no la cantidad de ventas: un producto que se
+ * vendió de a tres en tres pesa más que uno que salió dos veces de a una.
+ */
+export type MasVendido = {
+  productoId: number
+  unidades: number
+}
+
+/**
+ * Ítem del historial: la foto y el precio del producto, con la descripción
+ * congelada al momento de la venta.
+ */
+export type VentaHistorialItem = {
+  id: number
+  productoId: number | null
+  descripcionItem: string
+  cantidad: number
+  precioUnitario: number
+  subtotal: number
+  /** Del producto ACTUAL, no del histórico: la foto se puede haber cambiado. */
+  imgPath: string | null
+}
+
+/**
+ * Venta con lo que el cajero necesita para reconocerla de un vistazo: qué se
+ * llevó, cuántas unidades y cómo se pagó. Sin esto el historial obliga a abrir
+ * cada venta una por una solo para descubrir qué contenía.
+ */
+export type VentaHistorial = Venta & {
+  unidades: number
+  /** Métodos usados, sin repetir. Una venta con pago mixto trae más de uno. */
+  metodos: MetodoPago[]
+  items: VentaHistorialItem[]
 }
 
 export type VentaDetalle = {

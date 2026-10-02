@@ -1,8 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   AlertTriangle,
   Archive,
-  ArrowLeft,
   Boxes,
   Clock,
   FilterX,
@@ -10,14 +17,16 @@ import {
   PackageX,
   Plus,
   Minus,
+  Power,
+  PowerOff,
   Search,
   SlidersHorizontal,
+  Trash2,
   X,
   XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "../../lib/cn";
-import { evaluateExpiry } from "../../lib/dateUtils";
 import { Button } from "../../components/ui/Button";
 import { ConfirmModal } from "../../components/ui/ConfirmModal";
 import { CreateCategoryModal } from "../../components/inventory/CreateCategoryModal";
@@ -26,15 +35,28 @@ import { CreateProductModal } from "./CreateProductModal";
 import { ProductDetailModal } from "./ProductDetailModal";
 import { LotesModal } from "./LotesModal";
 import { ConfirmarPerdidaModal } from "./ConfirmarPerdidaModal";
-import { MarcasModal } from "./MarcasModal";
+import { MarcasModal } from "../../components/inventory/MarcasModal";
+import { InactivosModal } from "./InactivosModal";
+import { ScanBadge } from "./ScanBadge";
 import { esLoteVencido } from "./loteHelpers";
+import {
+  coincideBusqueda,
+  filtrarProductos,
+  mapearProducto,
+  normalizar,
+  ordenarProductos,
+  type ProductoInventario,
+} from "./inventoryQuery";
 import { ProductQuickActionsModal } from "./quick-actions";
 import { AccionGlobalModal } from "./quick-actions/AccionGlobalModal";
 import type { AccionGlobal } from "./quick-actions/AccionGlobalModal";
 import type { QuickActionView } from "./quick-actions/types";
 import { EmptyState } from "../../components/ui/EmptyState";
+import { LoadingState } from "../../components/ui/LoadingState";
 import { useCategories } from "../../hooks/useCategories";
 import { useHotkey } from "../../hooks/useHotkey";
+import { useAutoScrollHover } from "../../hooks/useAutoScrollHover";
+import { useBarcodeScanner } from "../../hooks/useBarcodeScanner";
 import { MOD_IS_META } from "../../lib/hotkeys";
 import { Input } from "../../components/ui/Input";
 import { KpiCard } from "../../components/ui/KpiCard";
@@ -45,7 +67,9 @@ import {
   ProductCard,
   type ProductStatus,
 } from "../../components/ui/ProductCard";
+import { ContextMenu, ContextMenuItem } from "../../components/ui/ContextMenu";
 import { Tooltip } from "../../components/ui/Tooltip";
+import { productoEnTicketAbierto } from "../../stores/pos-tickets.store";
 import { productosService } from "../../services/productos.service";
 import { marcasService } from "../../services/marcas.service";
 import { lotesService } from "../../services/lotes.service";
@@ -71,6 +95,7 @@ type OrdenInventario =
   | "nombre_desc"
   | "stock_asc"
   | "stock_desc"
+  | "margen_asc"
   | "sin_marca"
   | "sin_minimo";
 
@@ -81,104 +106,10 @@ const OPCIONES_ORDEN: { value: OrdenInventario; label: string }[] = [
   { value: "nombre_desc", label: "Alfabético Z→A" },
   { value: "stock_asc", label: "Menor stock" },
   { value: "stock_desc", label: "Mayor stock" },
+  { value: "margen_asc", label: "Menor margen" },
   { value: "sin_marca", label: "Sin marca" },
   { value: "sin_minimo", label: "Sin mínimo" },
 ];
-
-function ordenarProductos(
-  productos: ProductoConLoteActivo[],
-  orden: OrdenInventario,
-): ProductoConLoteActivo[] {
-  const comparadorNombre = (
-    a: ProductoConLoteActivo,
-    b: ProductoConLoteActivo,
-  ) => a.nombre.localeCompare(b.nombre, "es");
-  switch (orden) {
-    case "creado_desc":
-      return [...productos].sort((a, b) =>
-        b.creadoEn.localeCompare(a.creadoEn),
-      );
-    case "creado_asc":
-      return [...productos].sort((a, b) =>
-        a.creadoEn.localeCompare(b.creadoEn),
-      );
-    case "nombre_asc":
-      return [...productos].sort(comparadorNombre);
-    case "nombre_desc":
-      return [...productos].sort((a, b) => comparadorNombre(b, a));
-    case "stock_asc":
-      return [...productos].sort(
-        (a, b) => a.stockActual - b.stockActual || comparadorNombre(a, b),
-      );
-    case "stock_desc":
-      return [...productos].sort(
-        (a, b) => b.stockActual - a.stockActual || comparadorNombre(a, b),
-      );
-    case "sin_marca":
-    case "sin_minimo":
-      return [...productos];
-  }
-}
-
-type ProductoInventario = {
-  id: number;
-  name: string;
-  variant: string | null;
-  brand: string;
-  category: string;
-  price: number;
-  cost: number;
-  stock: number;
-  minStock: number;
-  expiresAt: string | null;
-  codigoInterno: string;
-  codigosBarras: string;
-  status: "vencido" | "por-vencer" | "ok";
-};
-
-function derivarEstadoVencimiento(
-  vencimiento: string | null,
-): "vencido" | "por-vencer" | "ok" {
-  if (!vencimiento) return "ok";
-  const result = evaluateExpiry(vencimiento);
-  if (!result) return "ok";
-  if (result.status === "expired") return "vencido";
-  if (result.status === "expiring_soon") return "por-vencer";
-  return "ok";
-}
-
-function mapearProducto(
-  producto: ProductoConLoteActivo,
-  categorias: Categoria[],
-  marcas: Marca[],
-): ProductoInventario {
-  const categoria = categorias.find((c) => c.id === producto.categoriaId);
-  const marca = marcas.find((m) => m.id === producto.marcaId);
-  // El vencimiento de la card sigue la regla FIFO: primer lote activo con stock.
-  const vencimientoFifo = producto.loteActivoVencimiento;
-  return {
-    id: producto.id,
-    name: producto.nombre,
-    variant: producto.variante,
-    brand: marca?.nombre ?? "",
-    category: categoria?.nombre ?? "",
-    price: producto.precioVenta,
-    cost: producto.costo,
-    stock: producto.stockActual,
-    minStock: producto.stockMinimo,
-    expiresAt: vencimientoFifo,
-    codigoInterno: producto.codigoInterno ?? "",
-    codigosBarras: producto.codigosBarras ?? "",
-    status: derivarEstadoVencimiento(vencimientoFifo),
-  };
-}
-
-function normalizar(texto: string): string {
-  return texto
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
-}
 
 function derivarStatus(p: ProductoInventario): ProductStatus {
   if (p.status === "vencido") return "expired";
@@ -196,16 +127,113 @@ const MOD_TEXTO = MOD_IS_META ? "Cmd" : "Ctrl";
 const modAtajo = (tecla: string, shift = false) =>
   `${MOD_IS_META ? "Meta" : "Control"}${shift ? "+Shift" : ""}+Key${tecla}`;
 
+type InventarioRowProps = {
+  /** Producto crudo (DB) para los handlers de acciones del menú. */
+  raiz: ProductoConLoteActivo | undefined;
+  /** Vista mapeada (id + nombre + estatus + campos pre-normalizados). */
+  vista: ProductoInventario;
+  /** Término resaltado en vivo mientras el cajero escribe. */
+  highlightQuery: string;
+  /** Índice dentro de la página para anclar el foco de teclado. */
+  index: number;
+  /** true si esta fila es la que navega el teclado (↑/↓). */
+  enfocada: boolean;
+  /** true mientras se persiste el toggle activo/inactivo de la API. */
+  toggling: boolean;
+  onToggleActivo: (producto: Producto, activo: boolean) => void;
+  onOpenQuickActions: (producto: Producto) => void;
+  onOpenLotes: (producto: Producto) => void;
+  onDeleteProduct: (producto: Producto) => void;
+  onOpenDetail: (producto: Producto) => void;
+  onEditPrice: (producto: Producto) => void;
+  onConfirmarPerdida: (producto: Producto) => void;
+  onAgregarInventario: (producto: Producto) => void;
+  onContextMenu: (event: React.MouseEvent, producto: Producto) => void;
+};
+
+/** Fila memoizada de la grilla: re-renderiza solo si cambian SUS props.
+ *  Los handlers son estables (useCallback en la página), así un setEstado de
+ *  la página (toggle, abrir modal, cambio de orden…) no vuelve a pintar las
+ *  50 cards de la página actual. */
+const InventarioRow = memo(function InventarioRow({
+  raiz,
+  vista,
+  highlightQuery,
+  index,
+  enfocada,
+  toggling,
+  onToggleActivo,
+  onOpenQuickActions,
+  onOpenLotes,
+  onDeleteProduct,
+  onOpenDetail,
+  onEditPrice,
+  onConfirmarPerdida,
+  onAgregarInventario,
+  onContextMenu,
+}: InventarioRowProps) {
+  return (
+    <div
+      data-card-idx={index}
+      className="w-full scroll-mt-36"
+    >
+      <ProductCard
+        className={cn(enfocada && "ring-2 ring-emerald-500/70")}
+        style={{
+          animationDelay: index < 8 ? `${index * 20}ms` : "0ms",
+        }}
+        producto={raiz}
+        category={vista.category}
+        name={vista.name}
+        variant={vista.variant}
+        brand={vista.brand || undefined}
+        stock={vista.stock}
+        minStock={vista.minStock}
+        price={vista.price}
+        expiresAt={vista.expiresAt ?? undefined}
+        status={derivarStatus(vista)}
+        codigoInterno={vista.codigoInterno}
+        codigosBarras={vista.codigosBarras}
+        highlightQuery={highlightQuery}
+        inactivo={false}
+        onToggleActivo={onToggleActivo}
+        togglingActivo={toggling}
+        onOpenQuickActions={onOpenQuickActions}
+        onOpenLotes={onOpenLotes}
+        onDeleteProduct={onDeleteProduct}
+        onOpenDetail={onOpenDetail}
+        onEditPrice={onEditPrice}
+        onConfirmarPerdida={
+          vista.status === "vencido" && vista.stock > 0
+            ? onConfirmarPerdida
+            : undefined
+        }
+        onAgregarInventario={
+          vista.stock <= 0 ? onAgregarInventario : undefined
+        }
+        onContextMenu={onContextMenu}
+      />
+    </div>
+  );
+});
+
 export function InventoryPage() {
   const [busqueda, setBusqueda] = useState("");
+  // El input actualiza `busqueda` al instante (tecleo a 60fps); el filtrado y
+  // el resaltado consumen una copia diferida que React re-sincroniza cuando
+  // hay presupuesto. Así escribir nunca se traba por re-renderizar la grilla.
+  const busquedaDeferida = useDeferredValue(busqueda);
+  const [barcodeEscaneado, setBarcodeEscaneado] = useState<string | null>(null);
+  const [inactivosAbierta, setInactivosAbierta] = useState(false);
   const [activeKpiFilter, setActiveKpiFilter] = useState<KpiFilter>("all");
   const [paginaActual, setPaginaActual] = useState(1);
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const { ref: refCategorias, alMover: alMoverCategorias, alSalir: alSalirCategorias } =
+    useAutoScrollHover<HTMLDivElement>();
   const [orden, setOrden] = useState<OrdenInventario>("creado_desc");
   const [isCreateCategoryOpen, setIsCreateCategoryOpen] = useState(false);
   const [isCreateProductOpen, setIsCreateProductOpen] = useState(false);
   const [marcasAbiertas, setMarcasAbiertas] = useState(false);
-  const [verInactivos, setVerInactivos] = useState(false);
   const [selectedProductForDetail, setSelectedProductForDetail] =
     useState<Producto | null>(null);
   const [productForQuickActions, setProductForQuickActions] =
@@ -228,6 +256,13 @@ export function InventoryPage() {
     null,
   );
   const [deletingProduct, setDeletingProduct] = useState<Producto | null>(null);
+  /** Menú contextual (click derecho) sobre una card: producto + coordenadas
+   *  del cursor en el viewport. Un único panel para toda la grilla. */
+  const [menuContextual, setMenuContextual] = useState<{
+    producto: Producto;
+    x: number;
+    y: number;
+  } | null>(null);
   const { categories, addCategory, updateCategory, removeCategory } =
     useCategories();
 
@@ -305,31 +340,40 @@ export function InventoryPage() {
     }
   }, [obtenerProductos, obtenerMarcas]);
 
-  const productosActivos = useMemo(() => {
-    const activos = productosCrudos.filter((p) => p.activo);
-    const filtrados = activos.filter(
-      (p) =>
-        (orden !== "sin_marca" || p.marcaId === null) &&
-        (orden !== "sin_minimo" || p.stockMinimo === 0),
-    );
-    return ordenarProductos(filtrados, orden).map((p) =>
-      mapearProducto(p, categories, marcas),
-    );
-  }, [productosCrudos, orden, categories, marcas]);
+  const categoriasPorId = useMemo(
+    () => new Map(categories.map((c) => [c.id, c])),
+    [categories],
+  );
+  const marcasPorId = useMemo(
+    () => new Map(marcas.map((m) => [m.id, m])),
+    [marcas],
+  );
+  const crudosPorId = useMemo(
+    () => new Map(productosCrudos.map((p) => [p.id, p])),
+    [productosCrudos],
+  );
+
+  // Un único pasaje de mapeo (nombre→id de marca/categoría con Map O(1) y
+  // campos normalizados precomputados). Antes se mapeaban 3 veces al mismo
+  // subconjunto en los memos productos/productosActivos/productosBase.
+  const activosMapeados = useMemo(() => {
+    return productosCrudos
+      .filter((p) => p.activo)
+      .map((p) => mapearProducto(p, categoriasPorId, marcasPorId));
+  }, [productosCrudos, categoriasPorId, marcasPorId]);
+
+  const productosBase = useMemo(() => {
+    return ordenarProductos(activosMapeados, "creado_desc");
+  }, [activosMapeados]);
 
   const productos = useMemo(() => {
-    const visibles = productosCrudos.filter((p) =>
-      verInactivos ? !p.activo : p.activo,
-    );
-    const filtrados = visibles.filter(
+    const filtrados = activosMapeados.filter(
       (p) =>
         (orden !== "sin_marca" || p.marcaId === null) &&
-        (orden !== "sin_minimo" || p.stockMinimo === 0),
+        (orden !== "sin_minimo" || p.minStock === 0),
     );
-    return ordenarProductos(filtrados, orden).map((p) =>
-      mapearProducto(p, categories, marcas),
-    );
-  }, [productosCrudos, orden, categories, marcas, verInactivos]);
+    return ordenarProductos(filtrados, orden);
+  }, [activosMapeados, orden]);
 
   const handleKpiClick = (filter: KpiFilter) => {
     setActiveKpiFilter((prev) => {
@@ -340,18 +384,19 @@ export function InventoryPage() {
       }
       return nuevo;
     });
+    setBarcodeEscaneado(null);
   };
 
   const hayFiltroActivo =
-    verInactivos ||
+    barcodeEscaneado !== null ||
     busqueda.trim() !== "" ||
     activeKpiFilter !== "all" ||
     selectedCategory !== "all" ||
     orden !== "creado_desc";
 
   const limpiarFiltros = () => {
-    setVerInactivos(false);
     setBusqueda("");
+    setBarcodeEscaneado(null);
     setActiveKpiFilter("all");
     setSelectedCategory("all");
     setOrden("creado_desc");
@@ -359,17 +404,74 @@ export function InventoryPage() {
     setCardFoco(null);
   };
 
-  const handleOpenLotes = (producto: Producto) => {
+  const handleOpenLotes = useCallback((producto: Producto) => {
     setSelectedProductForDetail(null);
     setAbrirInventarioAuto(false);
     setLotesProducto(producto);
-  };
+  }, []);
 
-  const abrirAccionesRapidas = (producto: Producto, vista: QuickActionView) => {
-    setVistaAccionInicial(vista);
-    setAperturaAcciones((n) => n + 1);
-    setProductForQuickActions(producto);
-  };
+  const abrirAccionesRapidas = useCallback(
+    (producto: Producto, vista: QuickActionView) => {
+      setVistaAccionInicial(vista);
+      setAperturaAcciones((n) => n + 1);
+      setProductForQuickActions(producto);
+    },
+    [],
+  );
+
+  const abrirQuickActionsMenu = useCallback(
+    (producto: Producto) => abrirAccionesRapidas(producto, "menu"),
+    [abrirAccionesRapidas],
+  );
+
+  const abrirEditarPrecio = useCallback(
+    (producto: Producto) => abrirAccionesRapidas(producto, "precio-venta"),
+    [abrirAccionesRapidas],
+  );
+
+  const abrirAgregarInventario = useCallback(
+    (producto: Producto) =>
+      abrirAccionesRapidas(producto, "agregar-inventario"),
+    [abrirAccionesRapidas],
+  );
+
+  /**
+   * Borrar un producto que ya está en un ticket abierto dejaría esa venta
+   * apuntando a algo que no existe. En vez de romperla, se avisa: hay que
+   * cobrar el ticket o sacar la línea primero.
+   *
+   * El guard va acá y no en el `onConfirm` porque los tres caminos de borrado
+   * (card, menú contextual y detalle) pasan por acá, y avisar antes de abrir el
+   * diálogo de confirmación es más honesto que dejar confirmar y después fallar.
+   */
+  const eliminarProducto = useCallback((producto: Producto) => {
+    if (productoEnTicketAbierto(producto.id)) {
+      toast.warning(
+        `"${producto.nombre}" está en un ticket abierto. Cobralo o quitá la línea antes de eliminarlo.`,
+      );
+      return;
+    }
+    setDeletingProduct(producto);
+  }, []);
+
+  const abrirDetalle = useCallback((producto: Producto) => {
+    setSelectedProductForDetail(producto);
+  }, []);
+
+  const abrirMenuContextual = useCallback(
+    (event: React.MouseEvent, producto: Producto) => {
+      setMenuContextual({
+        producto,
+        x: event.clientX,
+        y: event.clientY,
+      });
+    },
+    [],
+  );
+
+  const cerrarMenuContextual = useCallback(() => {
+    setMenuContextual(null);
+  }, []);
 
   const handleToggleActivo = useCallback(
     async (producto: Producto, activo: boolean) => {
@@ -393,7 +495,7 @@ export function InventoryPage() {
     [refreshProductos],
   );
 
-  const handleConfirmarPerdida = async (producto: Producto) => {
+  const handleConfirmarPerdida = useCallback(async (producto: Producto) => {
     try {
       const lotes = await lotesService.getByProducto(producto.id);
       const loteActivo =
@@ -408,7 +510,7 @@ export function InventoryPage() {
     } catch {
       toast.error("No se pudieron cargar los lotes del producto");
     }
-  };
+  }, []);
 
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -420,44 +522,47 @@ export function InventoryPage() {
     return counts;
   }, [productos]);
   const totalProducts = productos.length;
-  const totalActivos = productosCrudos.filter((p) => p.activo).length;
   const totalInactivos = productosCrudos.filter((p) => !p.activo).length;
 
-  const filasFiltradas = useMemo(() => {
-    const texto = normalizar(busqueda.trim());
-    const coincideTexto = (p: ProductoInventario) =>
-      !texto ||
-      normalizar(p.name).includes(texto) ||
-      normalizar(p.brand).includes(texto) ||
-      normalizar(p.variant ?? "").includes(texto) ||
-      normalizar(p.codigoInterno).includes(texto) ||
-      normalizar(p.codigosBarras).includes(texto);
-
-    const coincideCategoria = (p: ProductoInventario) => {
-      if (selectedCategory === "all") return true;
-      const catSel = categories.find((c) => String(c.id) === selectedCategory);
-      return catSel ? p.category === catSel.nombre : false;
+  const { filasFiltradas, escaneoVigente } = useMemo(() => {
+    // El escaneo filtra "en segundo plano": la grilla muestra solo el producto
+    // escaneado SIN escribir el código en el input. Cuando el cajero vuelve a
+    // teclear, el filtro textual retoma el control (onChange limpia el estado).
+    // El escaneo es DERIVADO (no se limpia con setState): solo está vigente
+    // mientras su código coincida con algún producto. Si el código se borra o
+    // se renombra, el badge desaparece y la grilla vuelve sola al filtro
+    // textual (filtros "limpios" sin efecto ni escritura de refs).
+    const filtros = {
+      categoriaId: selectedCategory,
+      kpi: activeKpiFilter,
     };
 
-    const coincideKpi = (p: ProductoInventario) => {
-      switch (activeKpiFilter) {
-        case "low_stock":
-          return p.stock < p.minStock && p.stock > 0;
-        case "expiring_soon":
-          return p.status === "por-vencer";
-        case "out_of_stock":
-          return p.stock === 0;
-        case "expired":
-          return p.status === "vencido";
-        default:
-          return true;
-      }
-    };
+    const filasConEscaneo = barcodeEscaneado
+      ? filtrarProductos(productos, {
+          termino: barcodeEscaneado,
+          ...filtros,
+        })
+      : null;
+    const coincideEscaneo =
+      filasConEscaneo !== null && filasConEscaneo.length > 0;
 
-    return productos.filter(
-      (p) => coincideTexto(p) && coincideCategoria(p) && coincideKpi(p),
-    );
-  }, [busqueda, selectedCategory, activeKpiFilter, categories, productos]);
+    let filasFiltradas: ProductoInventario[];
+    if (barcodeEscaneado === null) {
+      filasFiltradas = filtrarProductos(productos, {
+        termino: busquedaDeferida,
+        ...filtros,
+      });
+    } else if (coincideEscaneo) {
+      filasFiltradas = filasConEscaneo!;
+    } else {
+      filasFiltradas = productosBase;
+    }
+
+    return {
+      filasFiltradas,
+      escaneoVigente: coincideEscaneo,
+    };
+  }, [barcodeEscaneado, busquedaDeferida, selectedCategory, activeKpiFilter, productos, productosBase]);
 
   const totalPaginas = Math.max(
     1,
@@ -469,27 +574,45 @@ export function InventoryPage() {
     paginaSegura * PAGE_SIZE,
   );
 
+  // Ids de las filas de LA PÁGINA que coinciden con el término diferido. Con
+  // esto la grilla pasa highlightQuery="" (constante) a las filas que NO
+  // coinciden: el memo de InventarioRow las bloquea y NO se re-renderizan
+  // mientras se tipea. Solo las coincidentes (cada vez menos) se repintan
+  // para actualizar el resaltado en vivo — O(n·k) sobre 50 filas como máximo.
+  const idsCoincidentes = useMemo(() => {
+    const terminoN = normalizar(busquedaDeferida.trim());
+    if (!terminoN) return null;
+    const ids = new Set<number>();
+    for (const fila of filasPagina) {
+      if (coincideBusqueda(fila, terminoN)) ids.add(fila.id);
+    }
+    return ids;
+  }, [filasPagina, busquedaDeferida]);
+
   const totalItems = filasFiltradas.length;
 
   const kpis = useMemo(
     () => ({
-      stockBajo: productosActivos.filter(
-        (p) => p.stock < p.minStock && p.stock > 0,
-      ).length,
-      porVencer: productosActivos.filter((p) => p.status === "por-vencer")
+      stockBajo: productos.filter((p) => p.stock < p.minStock && p.stock > 0)
         .length,
-      agotados: productosActivos.filter((p) => p.stock === 0).length,
-      vencidos: productosActivos.filter((p) => p.status === "vencido").length,
+      porVencer: productos.filter((p) => p.status === "por-vencer").length,
+      agotados: productos.filter((p) => p.stock === 0).length,
+      vencidos: productos.filter((p) => p.status === "vencido").length,
     }),
-    [productosActivos],
+    [productos],
   );
 
   // Ajuste de stock y merma requieren un lote activo (stock > 0): sin productos
   // con stock, esas acciones globales no tienen sentido y se bloquean.
-  const hayStockDisponible = productosActivos.some((p) => p.stock > 0);
+  const hayStockDisponible = productos.some((p) => p.stock > 0);
+
+  // Producto del menú contextual, resuelto una vez para que los handlers de
+  // los items no dependan de un narrowing nullable dentro de los closures.
+  const productoMenuContextual = menuContextual?.producto ?? null;
 
   // ── Atajos de teclado (deshabilitados mientras hay un modal abierto) ──
   const hayModalAbierto =
+    inactivosAbierta ||
     isCreateProductOpen ||
     marcasAbiertas ||
     isCreateCategoryOpen ||
@@ -501,6 +624,43 @@ export function InventoryPage() {
     editingCategory !== null ||
     perdidaSeleccion !== null ||
     accionGlobal !== null;
+
+  // ── Scanner de código de barras (deshabilitado mientras hay un modal abierto) ──
+  // Búsqueda EN SEGUNDO PLANO: el scanner jamás escribe en el buscador (el
+  // servicio lo retiene en bloqueo). Si el producto existe y está activo, el
+  // código filtra la grilla para mostrar SOLO esa card, SIN resaltar con ring;
+  // si no existe, o está desactivado, se avisa con toast y el input queda intacto.
+  const buscarPorEscaneo = async (barcode: string) => {
+    const producto = await productosService.scan(barcode);
+    if (!producto) {
+      toast.error(`No existe ningún producto con el código "${barcode}"`);
+      setBarcodeEscaneado(null);
+      return;
+    }
+
+    if (!producto.activo) {
+      toast.error(
+        `El producto "${producto.nombre}" está desactivado: no aparece en la búsqueda`,
+      );
+      setBarcodeEscaneado(null);
+      return;
+    }
+    setBusqueda("");
+    setBarcodeEscaneado(barcode);
+    setActiveKpiFilter("all");
+    setSelectedCategory("all");
+    setOrden("creado_desc");
+    setPaginaActual(1);
+    buscadorRef.current?.focus();
+  };
+
+  useBarcodeScanner(
+    "inventory",
+    (barcode) => {
+      void buscarPorEscaneo(barcode);
+    },
+    !hayModalAbierto,
+  );
 
   /** Índice de cardFoco solo si sigue siendo válido para la página actual. */
   const cardFocoValida =
@@ -536,7 +696,7 @@ export function InventoryPage() {
   const abrirCardFoco = () => {
     if (cardFocoValida === null) return;
     const fila = filasPagina[cardFocoValida];
-    const raw = productosCrudos.find((p) => p.id === fila.id);
+    const raw = crudosPorId.get(fila.id);
     if (raw) abrirAccionesRapidas(raw, "menu");
   };
 
@@ -570,13 +730,13 @@ export function InventoryPage() {
     },
     { enabled: !hayModalAbierto, ignoreInputs: false },
   );
-  // Ctrl+Shift+N → nueva categoría (solo en la vista de activos, donde vive el botón).
+  // Ctrl+Shift+N → nueva categoría.
   useHotkey(
     "mod+shift+n",
     () => {
       setIsCreateCategoryOpen(true);
     },
-    { enabled: !hayModalAbierto && !verInactivos, ignoreInputs: false },
+    { enabled: !hayModalAbierto, ignoreInputs: false },
   );
   // ↑ / ↓ → navegar entre cards; Enter → abrir quick actions de la card foco.
   useHotkey(
@@ -604,43 +764,34 @@ export function InventoryPage() {
     { enabled: !hayModalAbierto },
   );
 
+  // `main` en AppLayout es `flex-1` dentro de una columna `h-screen`, así que
+  // tiene altura definida: `h-full` alcanza y `min-h-[70vh]` sobra. El padding
+  // propio de la página tiene que quedar en el centro —si no, el bloque queda
+  // desplazado hacia abajo y no se ve centrado.
+  if (cargandoProductos && productos.length === 0) {
+    return (
+      <div className="flex h-full w-full items-center justify-center">
+        <LoadingState
+          title="Cargando inventario..."
+          description="Estamos trayendo el inventario desde la base de datos."
+          fullPage
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col gap-3 pt-4 md:pt-6">
       {/* ── Encabezado ── */}
       <div className="flex flex-row items-center justify-between gap-3">
         <div className="flex  items-center gap-2">
-          {verInactivos && (
-            <div className="flex items-center gap-2">
-            <Tooltip content="Volver a los productos activos" placement="top">
-              <button
-                type="button"
-                onClick={limpiarFiltros}
-                aria-label="Volver al inventario activo"
-                className="grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-xl border border-slate-200 text-slate-500 transition-colors hover:border-slate-300 hover:text-slate-700 dark:border-slate-700/80 dark:text-slate-400 dark:hover:border-slate-600 dark:hover:text-slate-200"
-              >
-                <ArrowLeft className="h-4.5 w-4.5" />
-              </button>
-            </Tooltip>
-            <h1 className="font-display text-xl font-bold text-slate-900 dark:text-white sm:text-2xl">
-              {verInactivos ? "Desactivados" : "Inventario"}
-            </h1>
-            </div>
-          )}
-          {!verInactivos && (
-            <h1 className="font-display text-xl font-bold text-slate-900 dark:text-white sm:text-2xl">
-              Inventario
-            </h1>
-          )}
+          <h1 className="font-display text-xl font-bold text-slate-900 dark:text-white sm:text-2xl">
+            Inventario
+          </h1>
           <Tooltip
-            content={
-              verInactivos
-                ? `${productos.length} ${
-                    productos.length === 1 ? "desactivado" : "desactivados"
-                  }`
-                : `${productos.length} ${
-                    productos.length === 1 ? "producto" : "productos"
-                  }`
-            }
+            content={`${productos.length} ${
+              productos.length === 1 ? "producto" : "productos"
+            }`}
             placement="top"
           >
             <span className="inline-flex shrink-0 select-none items-center rounded-full border border-slate-200 bg-slate-100 px-2.5 py-0.5 font-display text-base font-bold text-emerald-600 dark:border-slate-700/80 dark:bg-slate-800 dark:text-emerald-400">
@@ -649,7 +800,26 @@ export function InventoryPage() {
           </Tooltip>
         </div>
         <div className="flex items-center gap-2">
-          <Tooltip content={`Abrir marcas · ${MOD_TEXTO}+M`} placement="bottom">
+          <Tooltip
+            content={`Ver los productos desactivados (${totalInactivos})`}
+            placement="top"
+          >
+            <button
+              type="button"
+              onClick={() => setInactivosAbierta(true)}
+              aria-label="Ver desactivados"
+              className="flex shrink-0 select-none cursor-pointer items-center gap-1.5 rounded-2xl border border-slate-200 px-2 py-2 text-sm font-medium text-slate-400 transition-colors duration-150 hover:border-slate-300 hover:text-slate-600 dark:border-slate-700/80 dark:text-slate-500 dark:hover:border-slate-600 dark:hover:text-slate-300"
+            >
+              <Archive className="h-5 w-5" />
+              <span className="select-none rounded-full bg-slate-200 px-1.5 py-0.5 text-xs font-semibold leading-none text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+                {totalInactivos}
+              </span>
+            </button>
+          </Tooltip>
+          <Tooltip
+            content={`Abrir marcas · ${MOD_TEXTO}+M`}
+            placement="bottom"
+          >
             <Button
               variant="outline"
               onClick={() => setMarcasAbiertas(true)}
@@ -662,7 +832,6 @@ export function InventoryPage() {
               </span>
             </Button>
           </Tooltip>
-          {/* Botón Grande Esquinado */}
           <Tooltip
             content={`Nuevo producto · ${MOD_TEXTO}+N`}
             placement="bottom"
@@ -678,12 +847,10 @@ export function InventoryPage() {
             </Button>
           </Tooltip>
         </div>
-
       </div>
 
       {/* ── KPIs ── */}
-      {!verInactivos && (
-        <div className="mt-2 grid grid-cols-2 gap-2.5 sm:gap-3.5 lg:grid-cols-4">
+      <div className="mt-2 grid grid-cols-2 gap-2.5 sm:gap-3.5 lg:grid-cols-4">
         <KpiCard
           className="animate-entry-up stagger-1"
           icon={<AlertTriangle className="h-4 w-4 sm:h-4.5 sm:w-4.5" />}
@@ -732,16 +899,14 @@ export function InventoryPage() {
           isActive={activeKpiFilter === "expired"}
           activeColor="red"
         />
-        </div>
-      )}
+      </div>
 
       {/* ── Contenedor sticky: categorías + toolbar se anclan al top al scrollear ── */}
       <div className="sticky top-0 z-20 flex w-full min-w-0 flex-col gap-2.5 border-slate-200/80 bg-[#f4f6f8] pt-3 pb-3 transition-colors select-none relative after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-3 after:bg-gradient-to-b after:from-slate-900/10 after:to-transparent after:content-[''] dark:border-slate-800/60 dark:bg-[#0b0f17] dark:after:from-black/45">
-        {!verInactivos && (
-          /* ── Barra de categorías: anclaje fijo + carrusel desplazable ── */
-          <div className="flex w-full items-center select-none">
+        {/* ── Barra de categorías: anclaje fijo + carrusel desplazable ── */}
+        <div className="flex w-full items-center select-none">
             {/* 1. Anclaje fijo: botón Nueva + separador + fondo opaco + máscara degradada */}
-            <div className="relative z-10 flex shrink-0 items-center bg-[#f4f6f8]  pb-2 dark:bg-[#0b0f17]">
+            <div className="relative z-10 flex shrink-0 items-center bg-[#f4f6f8] dark:bg-[#0b0f17]">
               <Tooltip
                 content={`Crear una nueva categoría · ${MOD_TEXTO}+Shift+N`}
                 placement="top"
@@ -771,7 +936,12 @@ export function InventoryPage() {
             </div>
 
             {/* 2. Carrusel desplazable: Todas + categorías */}
-            <div className="custom-scrollbar flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto pl-1 pb-2 pr-8 sm:pr-10">
+            <div
+              ref={refCategorias}
+              onMouseMove={alMoverCategorias}
+              onMouseLeave={alSalirCategorias}
+              className="scrollbar-none flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto pl-1 pr-8 sm:pr-10"
+            >
               <Pill
                 label="Todas"
                 active={selectedCategory === "all"}
@@ -779,6 +949,7 @@ export function InventoryPage() {
                 count={totalProducts}
                 onSelect={() => {
                   setSelectedCategory("all");
+                  setBarcodeEscaneado(null);
                   setPaginaActual(1);
                   setCardFoco(null);
                 }}
@@ -796,6 +967,7 @@ export function InventoryPage() {
                         ? "all"
                         : String(categoria.id),
                     );
+                    setBarcodeEscaneado(null);
                     setPaginaActual(1);
                     setCardFoco(null);
                   }}
@@ -808,8 +980,7 @@ export function InventoryPage() {
                 aria-hidden="true"
               />
             </div>
-          </div>
-        )}
+        </div>
 
         {/* ── Barra de herramientas ── */}
         <div className="flex pt-0.5 w-full  min-w-0 flex-col items-stretch justify-between gap-3 lg:flex-row lg:items-center">
@@ -820,6 +991,7 @@ export function InventoryPage() {
               value={busqueda}
               onChange={(e) => {
                 setBusqueda(e.target.value);
+                setBarcodeEscaneado(null);
                 setPaginaActual(1);
                 setCardFoco(null);
               }}
@@ -845,60 +1017,18 @@ export function InventoryPage() {
                 ) : undefined
               }
             />
-            {!verInactivos && (
-              <CustomSelect
-                options={OPCIONES_ORDEN}
-                value={orden}
-                onChange={(value) => {
-                  setOrden(value as OrdenInventario);
-                  setPaginaActual(1);
-                  setCardFoco(null);
-                }}
-                className="w-44 shrink-0 sm:w-48"
-              />
-            )}
-            <Tooltip
-              content={
-                verInactivos
-                  ? "Volver a los productos activos"
-                  : `Ver los productos desactivados (${totalInactivos})`
-              }
-              placement="top"
-            >
-              <button
-                type="button"
-                onClick={() => {
-                  setVerInactivos((prev) => !prev);
-                  setActiveKpiFilter("all");
-                  setSelectedCategory("all");
-                  setOrden("creado_desc");
-                  setPaginaActual(1);
-                  setCardFoco(null);
-                }}
-                aria-pressed={verInactivos}
-                aria-label={
-                  verInactivos ? "Ver productos activos" : "Ver desactivados"
-                }
-                className={cn(
-                  "flex shrink-0 select-none cursor-pointer items-center gap-1.5 rounded-xl border px-2 py-2 text-sm font-medium transition-colors duration-150",
-                  verInactivos
-                    ? "border-slate-300 bg-slate-200 text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
-                    : "border-slate-200 text-slate-400 hover:border-slate-300 hover:text-slate-600 dark:border-slate-700/80 dark:text-slate-500 dark:hover:border-slate-600 dark:hover:text-slate-300",
-                )}
-              >
-                <Archive className="h-5 w-5" />
-                <span
-                  className={cn(
-                    "select-none rounded-full px-1.5 py-0.5 text-xs font-semibold leading-none",
-                    verInactivos
-                      ? "bg-slate-700 text-slate-100 dark:bg-slate-600 dark:text-white"
-                      : "bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-400",
-                  )}
-                >
-                  {verInactivos ? totalActivos : totalInactivos}
-                </span>
-              </button>
-            </Tooltip>
+            <CustomSelect
+              options={OPCIONES_ORDEN}
+              value={orden}
+              onChange={(value) => {
+                setOrden(value as OrdenInventario);
+                setBarcodeEscaneado(null);
+                setPaginaActual(1);
+                setCardFoco(null);
+              }}
+              className="w-44 shrink-0 sm:w-48"
+            />
+
             <Tooltip
               content={
                 hayFiltroActivo
@@ -925,54 +1055,44 @@ export function InventoryPage() {
             </Tooltip>
           </div>
           <div className="flex flex-nowrap items-center gap-2.5 overflow-x-auto pb-1 lg:pb-0">
-            {!verInactivos && (
-            <>
             <div
               className="h-6 w-px hidden lg:block shrink-0 self-center bg-slate-200 sm:h-7 dark:bg-slate-700/60"
               aria-hidden="true"
             />
 
             <Button
-                variant="primary"
-                icon={<Plus size={16} />}
-                onClick={() => setAccionGlobal("agregar-inventario")}
-                disabled={productos.length === 0}
-                className="whitespace-nowrap"
-              >
-                Agregar Inventario
-              </Button>
-              <Button
-                variant="outline"
-                icon={<SlidersHorizontal size={16} />}
-                onClick={() => setAccionGlobal("ajustar-stock")}
-                disabled={!hayStockDisponible}
-                className="whitespace-nowrap"
-              >
-                Ajustar stock
-              </Button>
-              <Button
-                variant="danger"
-                icon={<Minus size={16} />}
-                onClick={() => setAccionGlobal("registrar-perdida")}
-                disabled={!hayStockDisponible}
-                className="whitespace-nowrap"
-              >
-                Registrar merma
-              </Button>
-            </>
-          )}
+              variant="primary"
+              icon={<Plus size={16} />}
+              onClick={() => setAccionGlobal("agregar-inventario")}
+              disabled={productos.length === 0}
+              className="whitespace-nowrap"
+            >
+              Agregar Inventario
+            </Button>
+            <Button
+              variant="outline"
+              icon={<SlidersHorizontal size={16} />}
+              onClick={() => setAccionGlobal("ajustar-stock")}
+              disabled={!hayStockDisponible}
+              className="whitespace-nowrap"
+            >
+              Ajustar stock
+            </Button>
+            <Button
+              variant="danger"
+              icon={<Minus size={16} />}
+              onClick={() => setAccionGlobal("registrar-perdida")}
+              disabled={!hayStockDisponible}
+              className="whitespace-nowrap"
+            >
+              Registrar merma
+            </Button>
           </div>
         </div>
       </div>
 
       {/* ── Cuadrícula de productos ── */}
-      {cargandoProductos && productos.length === 0 ? (
-        <EmptyState
-          icon={<Boxes className="h-12 w-12 stroke-[1.5]" />}
-          title="Cargando productos…"
-          description="Estamos trayendo el inventario desde la base de datos."
-        />
-      ) : errorProductos && productos.length === 0 ? (
+      {errorProductos && productos.length === 0 ? (
         <EmptyState
           icon={<AlertTriangle className="h-12 w-12 stroke-[1.5]" />}
           title="No se pudieron cargar los productos"
@@ -987,30 +1107,16 @@ export function InventoryPage() {
         productos.length === 0 ? (
           <EmptyState
             icon={<Boxes className="h-12 w-12 stroke-[1.5]" />}
-            title={
-              verInactivos
-                ? "No hay productos desactivados"
-                : "Todavía no hay productos"
-            }
-            description={
-              verInactivos
-                ? "Todos los productos del inventario están activos."
-                : "Creá tu primer producto para empezar a controlar el inventario."
-            }
+            title="Todavía no hay productos"
+            description="Creá tu primer producto para empezar a controlar el inventario."
             action={
-              verInactivos ? (
-                <Button variant="outline" onClick={() => setVerInactivos(false)}>
-                  Ver productos activos
-                </Button>
-              ) : (
-                <Button
-                  variant="primary"
-                  onClick={() => setIsCreateProductOpen(true)}
-                >
-                  <PackagePlus className="h-4 w-4" />
-                  Nuevo producto
-                </Button>
-              )
+              <Button
+                variant="primary"
+                onClick={() => setIsCreateProductOpen(true)}
+              >
+                <PackagePlus className="h-4 w-4" />
+                Nuevo producto
+              </Button>
             }
           />
         ) : (
@@ -1034,80 +1140,28 @@ export function InventoryPage() {
           ref={grillaRef}
           className="mt-2 px-0.5 flex w-full min-w-0 flex-col gap-2.5"
         >
-          {filasPagina.map((producto, index) => {
-            const raw = productosCrudos.find((p) => p.id === producto.id);
-            return (
-              <div
-                key={producto.id}
-                data-card-idx={index}
-                className="w-full scroll-mt-36"
-              >
-                <ProductCard
-                  className={cn(
-                    cardFocoValida === index && "ring-2 ring-emerald-500/70",
-                  )}
-                  style={{
-                    animationDelay: index < 8 ? `${index * 20}ms` : "0ms",
-                  }}
-                producto={raw}
-                category={producto.category}
-                name={producto.name}
-                variant={producto.variant}
-                brand={producto.brand || undefined}
-                stock={producto.stock}
-                minStock={producto.minStock}
-                price={producto.price}
-                expiresAt={producto.expiresAt ?? undefined}
-                status={derivarStatus(producto)}
-                codigoInterno={producto.codigoInterno}
-                codigosBarras={producto.codigosBarras}
-                highlightQuery={busqueda}
-                inactivo={verInactivos}
-                onToggleActivo={raw ? handleToggleActivo : undefined}
-                togglingActivo={togglingActivoId === producto.id}
-                onOpenQuickActions={
-                  raw ? (p) => abrirAccionesRapidas(p, "menu") : undefined
-                }
-                onOpenLotes={
-                  raw
-                    ? (p) => {
-                        setSelectedProductForDetail(null);
-                        setAbrirInventarioAuto(false);
-                        setLotesProducto(p);
-                      }
-                    : undefined
-                }
-                onDeleteProduct={raw ? (p) => setDeletingProduct(p) : undefined}
-                onOpenDetail={() => {
-                  const detalle = productosCrudos.find(
-                    (p) => p.id === producto.id,
-                  );
-                  if (detalle) setSelectedProductForDetail(detalle);
-                }}
-                onEditPrice={
-                  raw
-                    ? (p) => abrirAccionesRapidas(p, "precio-venta")
-                    : undefined
-                }
-                onConfirmarPerdida={
-                  producto.status === "vencido" && producto.stock > 0
-                    ? () => {
-                        const lote = productosCrudos.find(
-                          (p) => p.id === producto.id,
-                        );
-                        if (lote) void handleConfirmarPerdida(lote);
-                      }
-                    : undefined
-                }
-                onAgregarInventario={
-                  raw && producto.stock <= 0
-                    ? () => abrirAccionesRapidas(raw, "agregar-inventario")
-                    : undefined
-                }
-                />
-              </div>
-            );
-          })}
+          {filasPagina.map((producto, index) => (
+            <InventarioRow
+              key={producto.id}
+              raiz={crudosPorId.get(producto.id)}
+              vista={producto}
+              highlightQuery={
+                idsCoincidentes?.has(producto.id) ? busquedaDeferida : ""
+              }
+              index={index}
+              enfocada={cardFocoValida === index}
+              toggling={togglingActivoId === producto.id}
+              onToggleActivo={handleToggleActivo}
+              onOpenQuickActions={abrirQuickActionsMenu}
+              onOpenLotes={handleOpenLotes}
+              onDeleteProduct={eliminarProducto}
+              onOpenDetail={abrirDetalle}
+              onEditPrice={abrirEditarPrecio}
+              onConfirmarPerdida={handleConfirmarPerdida}
+              onAgregarInventario={abrirAgregarInventario}
+              onContextMenu={abrirMenuContextual}
+            />
+          ))}
 
           <div className="mt-2 flex flex-col items-center justify-between gap-2 sm:flex-row">
             <span className="text-xs font-medium text-slate-400 dark:text-slate-500">
@@ -1129,6 +1183,59 @@ export function InventoryPage() {
           </div>
         </div>
       )}
+
+      {barcodeEscaneado && escaneoVigente && (
+        <ScanBadge
+          key={barcodeEscaneado}
+          barcode={barcodeEscaneado}
+          onClose={() => {
+            setBarcodeEscaneado(null);
+            setPaginaActual(1);
+            setCardFoco(null);
+            buscadorRef.current?.focus();
+          }}
+        />
+      )}
+
+      {/* ── Menú contextual de card (click derecho), anclado al cursor ── */}
+      <ContextMenu
+        open={menuContextual !== null}
+        x={menuContextual?.x ?? 0}
+        y={menuContextual?.y ?? 0}
+        onClose={cerrarMenuContextual}
+      >
+        {productoMenuContextual &&
+          (productoMenuContextual.activo ? (
+            <ContextMenuItem
+              icon={<PowerOff className="h-3.5 w-3.5" />}
+              disabled={togglingActivoId === productoMenuContextual.id}
+              onClick={() => {
+                void handleToggleActivo(productoMenuContextual, false);
+              }}
+            >
+              Desactivar producto
+            </ContextMenuItem>
+          ) : (
+            <ContextMenuItem
+              icon={<Power className="h-3.5 w-3.5" />}
+              disabled={togglingActivoId === productoMenuContextual.id}
+              onClick={() => {
+                void handleToggleActivo(productoMenuContextual, true);
+              }}
+            >
+              Reactivar producto
+            </ContextMenuItem>
+          ))}
+        {productoMenuContextual && (
+          <ContextMenuItem
+            variant="danger"
+            icon={<Trash2 className="h-3.5 w-3.5" />}
+            onClick={() => eliminarProducto(productoMenuContextual)}
+          >
+            Eliminar producto
+          </ContextMenuItem>
+        )}
+      </ContextMenu>
 
       <CreateCategoryModal
         isOpen={isCreateCategoryOpen}
@@ -1152,6 +1259,15 @@ export function InventoryPage() {
           setMarcasAbiertas(false);
           setPaginaActual(1);
         }}
+      />
+
+      <InactivosModal
+        isOpen={inactivosAbierta}
+        onClose={() => setInactivosAbierta(false)}
+        productos={productosCrudos.filter((p) => !p.activo)}
+        marcas={marcas}
+        categorias={categories}
+        onChanged={() => void refreshProductos()}
       />
 
       <EditCategoryModal
@@ -1258,7 +1374,7 @@ export function InventoryPage() {
             setSelectedProductForDetail(null);
           }}
           onDelete={() => {
-            setDeletingProduct(selectedProductForDetail);
+            eliminarProducto(selectedProductForDetail);
             setSelectedProductForDetail(null);
           }}
           onMutated={() => {
@@ -1357,11 +1473,13 @@ export function InventoryPage() {
       />
 
       <AccionGlobalModal
+        key={accionGlobal ?? "cerrado"}
         isOpen={accionGlobal !== null}
         accion={accionGlobal}
         productos={productosCrudos}
         marcas={marcas}
         categorias={categories}
+        barcodeEscaneadoInicial={barcodeEscaneado}
         onClose={() => setAccionGlobal(null)}
         onSuccess={() => void refreshProductos()}
       />

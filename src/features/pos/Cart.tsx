@@ -1,0 +1,280 @@
+import type { RefObject } from 'react'
+import { History, ShoppingBag, Ticket, Trash2 } from 'lucide-react'
+import { cn } from '../../lib/cn'
+import { Button } from '../../components/ui/Button'
+import { ConfirmModal } from '../../components/ui/ConfirmModal'
+import { Tooltip } from '../../components/ui/Tooltip'
+import { CartItem } from './CartItem'
+import { PaymentMethodSelector } from './PaymentMethodSelector'
+import { formatearMoneda, type MetodoPagoPOS, type ResumenTicket } from './posQuery'
+
+type CartProps = {
+  resumen: ResumenTicket
+  metodoPago: MetodoPagoPOS
+  lineaSeleccionada: number
+  onSeleccionarLinea: (indice: number) => void
+  refLista: RefObject<HTMLDivElement | null>
+  /**
+   * Solo se usa como `key` del contenido. Al cambiar, React desmonta y vuelve a
+   * montar el nodo, y eso es lo que dispara la animación de entrada: no hace
+   * falta que la animación sepa nada del ticket, alcanza con que la identidad
+   * del nodo cambie. También reinicia el scroll, que es lo que se quiere al
+   * saltar a otra venta.
+   */
+  activeTicketId: string
+  /**
+   * Número del ticket activo, para el empty. No es un dato decorativo: con
+   * varios tickets abiertos, "Sin productos todavía" es el mismo texto para
+   * todos, así que al cambiar de pestaña el panel no decía cuál de los tickets
+   * vacíos estabas mirando. El número es lo que ancla la vista al ticket que se
+   * acaba de seleccionar, y va en el empty y no en el encabezado porque el
+   * encabezado tiene que decir "Ticket de venta" siempre, esté vacío o no.
+   */
+  numeroTicket: number
+  onCambiarMetodoPago: (metodo: MetodoPagoPOS) => void
+  onCambiarCantidad: (productoId: number, cantidad: number) => void
+  onQuitar: (productoId: number) => void
+  onVaciar: () => void
+  /** Ids de productos desactivados: bloquean el `+` de sus líneas. */
+  idsDesactivados: Set<number>
+  /**
+   * Stock disponible por producto, leído del catálogo. Vive acá y no en el
+   * ticket porque es dato de la base: el ticket solo guarda lo que decidió el
+   * cajero y se persiste en localStorage.
+   */
+  stockPorId: Map<number, number>
+  /** El estado vive en `PosPage` para que `Ctrl+D` abra el mismo confirm. */
+  confirmandoVaciar: boolean
+  onSolicitarVaciar: () => void
+  onCancelarVaciar: () => void
+  /** Abre el modal de historial. El estado vive en `PosPage`, junto al resto. */
+  onAbrirHistorial: () => void
+  onCobrar: () => void
+  /**
+   * Por qué no se puede cobrar ahora, o `null` si se puede. Vive acá y no dentro
+   * de `Cart` para que el texto sea uno solo: el botón y el handler de
+   * `PosPage` bloquean por la misma razón y no pueden drifting uno del otro.
+   */
+  motivoCobroBloqueado: string | null
+  /** La venta se está guardando: el botón se bloquea para no cobrar dos veces. */
+  cobrando: boolean
+}
+
+export function Cart({
+  resumen,
+  metodoPago,
+  lineaSeleccionada,
+  onSeleccionarLinea,
+  refLista,
+  activeTicketId,
+  numeroTicket,
+  onCambiarMetodoPago,
+  onCambiarCantidad,
+  onQuitar,
+  onVaciar,
+  idsDesactivados,
+  stockPorId,
+  confirmandoVaciar,
+  onSolicitarVaciar,
+  onCancelarVaciar,
+  onAbrirHistorial,
+  onCobrar,
+  motivoCobroBloqueado,
+  cobrando,
+}: CartProps) {
+  const vacio = resumen.unidades === 0
+  const cobroBloqueado = motivoCobroBloqueado !== null
+
+  return (
+    // `min-h-0 flex-1` en vez de `sticky`: el alto lo reparte el flex de la
+    // columna `<aside>` de `PosPage`, no el `Cart`.
+    //
+    // El panel trae su propia superficie (borde, radio, sombra y fondo con dark
+    // mode). Por eso `PosPage` NO lo envuelve en otra caja.
+    <aside className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-[#111827]">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 bg-white px-[22px] py-[9px] dark:border-slate-800 dark:bg-[#111827]">
+        <div className="flex items-center gap-2.5">
+          <Ticket size={20} className="shrink-0 text-emerald-500" aria-hidden="true" />
+          <h2 className="font-display text-[17px] tracking-tight text-slate-900 dark:text-slate-100">
+            Ticket de venta
+          </h2>
+        </div>
+
+        {/* El badge cuenta lo que hay EN el ticket y el botón mira lo que ya se
+            COBRÓ. Son dos números distintos que conviven en la misma esquina: el
+            primero es el ticket en curso, el segundo es el historial. Por eso el
+            botón queda al lado y no en el footer con "Vaciar" y "Cobrar": esos
+            son acciones sobre el ticket, este es una consulta. */}
+        <div className="flex shrink-0 items-center gap-1.5">
+          <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-[3px] font-display text-xs font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+            {resumen.unidades} {resumen.unidades === 1 ? 'ítem' : 'ítems'}
+          </span>
+
+          <Tooltip content="Ver historial de ventas" placement="bottom">
+            <button
+              type="button"
+              onClick={onAbrirHistorial}
+              aria-label="Ver historial de ventas"
+              className="grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-lg text-slate-400 transition-colors duration-150 hover:bg-slate-100 hover:text-emerald-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-emerald-400"
+            >
+              <History size={18} aria-hidden="true" />
+            </button>
+          </Tooltip>
+        </div>
+      </div>
+
+      {/* Todo lo que cambia al cambiar de pestaña va dentro de este nodo con
+          `key`. React lo desmonta y monta de nuevo, y como la animación CSS
+          arranca sola en el montaje, se repite en cada cambio sin que ninguna
+          clase ni estado tenga que saber que hay pestañas.
+
+          Es `animate-entry-up` y no un fade pelado: acá el contenido no aparece,
+          se REEMPLAZA por el de otro ticket, y con solo opacidad el cambio pasaba
+          desapercibido — veías la lista nueva, pero no veías el cambio. El
+          desplazamiento de 6px es lo que lo vuelve legible. Comparte duración y
+          curva con la etiqueta de la pestaña activa, así los dos movimientos se
+          leen como un gesto único y no como dos animaciones sueltas. */}
+      <div
+        key={activeTicketId}
+        className="animate-entry-up flex min-h-0 flex-1 flex-col"
+      >
+        {/* El scroll va acá y en ningún otro lado: es el único hijo que puede
+            crecer sin límites. `min-h-0` es obligatorio — sin él, el `flex-1`
+            no baja de su altura de contenido y el flexbox le roba espacio a las
+            secciones de abajo en vez de dejar que esta se desplace. */}
+        <div
+          ref={refLista}
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-[22px] py-2.5"
+        >
+          {vacio ? (
+            <div className="flex flex-col items-center justify-center gap-1.5 px-4 py-12 text-center">
+              <ShoppingBag
+                size={42}
+                strokeWidth={1.6}
+                className="mb-1 text-slate-300 dark:text-slate-600"
+                aria-hidden="true"
+              />
+              <p className="font-display text-[15px] font-semibold text-slate-600 dark:text-slate-400">
+                El ticket {numeroTicket} está vacío
+              </p>
+              <span className="text-[13px] text-slate-500 dark:text-slate-500">
+                Elegí del catálogo para armar la venta
+              </span>
+            </div>
+          ) : (
+            resumen.lineas.map((linea, indice) => (
+              <CartItem
+                key={linea.productoId}
+                linea={linea}
+                indice={indice}
+                seleccionada={indice === lineaSeleccionada}
+                onSeleccionar={onSeleccionarLinea}
+                onCambiarCantidad={onCambiarCantidad}
+                onQuitar={onQuitar}
+                desactivado={idsDesactivados.has(linea.productoId)}
+                stockDisponible={stockPorId.get(linea.productoId) ?? null}
+              />
+            ))
+          )}
+        </div>
+
+        {/* Cierra la zona scrolleable: sin este límite, la última fila de items
+            queda pegada al "Subtotal" y se lee como una sola lista corrida.
+            El borde da la línea y la sombra da la profundidad de "esto scrollea
+            por debajo". En dark mode la sombra se apaga a propósito: un rgba
+            negro sobre fondo negro no se ve, y el peso visual lo aporta el
+            borde, que es el único separador que funciona en los dos temas. */}
+        <div className="shrink-0 border-t border-slate-200 px-[22px] pt-2 pb-2 shadow-[0_-4px_6px_-4px_rgba(15,23,42,0.10)] dark:border-slate-800 dark:shadow-none">
+          <div className="flex items-baseline justify-between py-1 text-[13.5px] text-slate-600 dark:text-slate-400">
+            <span>Subtotal</span>
+            <span className="font-display font-semibold tabular-nums text-slate-900 dark:text-slate-100">
+              {formatearMoneda(resumen.subtotal)}
+            </span>
+          </div>
+
+          {resumen.descuento > 0 && (
+            <div className="flex items-baseline justify-between py-1 text-[13.5px] text-emerald-600 dark:text-emerald-400">
+              <span>Descuento mayorista</span>
+              <span className="font-display font-semibold tabular-nums">
+                −{formatearMoneda(resumen.descuento)}
+              </span>
+            </div>
+          )}
+
+          <div className="mt-1 flex items-baseline justify-between border-t border-slate-200 pt-2 dark:border-slate-800">
+            <span className="font-display text-[15px] font-bold text-slate-900 dark:text-slate-100">
+              Total
+            </span>
+            <span className="font-display bg-gradient-to-br from-emerald-700 to-emerald-600 bg-clip-text text-[22px] font-extrabold tracking-tight tabular-nums text-emerald-700 dark:from-emerald-400 dark:to-emerald-500 dark:text-transparent">
+              {formatearMoneda(resumen.total)}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <PaymentMethodSelector valor={metodoPago} onChange={onCambiarMetodoPago} />
+
+      <div className="grid shrink-0 grid-cols-[auto_1fr] gap-3 border-t border-slate-200 px-[22px] pt-3 pb-3.5 max-[600px]:grid-cols-1 dark:border-slate-800">
+        <button
+          type="button"
+          onClick={onSolicitarVaciar}
+          disabled={vacio}
+          className={cn(
+            'inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-slate-200 bg-transparent px-[18px] py-2.5 font-display text-sm font-semibold text-slate-600 transition-colors duration-150',
+            'hover:border-red-300 hover:bg-red-500/10 hover:text-red-600 dark:border-slate-800 dark:text-slate-400 dark:hover:border-red-500/40 dark:hover:bg-red-500/10 dark:hover:text-red-400',
+            'disabled:pointer-events-none disabled:opacity-50',
+          )}
+        >
+          <Trash2 size={17} className="shrink-0" aria-hidden="true" />
+          Vaciar
+        </button>
+
+        {/*
+          `variant="primary"` de la Button compartida: sólido, con icono y texto
+          en blanco. El botón de cobrar es la acción principal de la pantalla y
+          tiene que leerse como una sola señal, no como un degradado que compita
+          con el verde del catálogo. Además deja de ser un <button> con clases a
+          mano: focus-visible, disabled y cursor salen de la primitiva.
+        */}
+        {/*
+          Bloqueado va `aria-disabled` y no `disabled` porque `Button` aplica
+          `disabled:pointer-events-none` y el tooltip —que es lo que explica el
+          bloqueo— necesita hover. El `<span>` es el wrapper del Tooltip: sin
+          `w-full` el botón queda al tamaño del texto y no llena la columna.
+        */}
+        <Tooltip content={motivoCobroBloqueado ?? ''} disabled={!cobroBloqueado}>
+          <span className="flex w-full">
+            <Button
+              variant="primary"
+              icon={<ShoppingBag size={19} />}
+              onClick={() => {
+                if (!cobroBloqueado && !cobrando) onCobrar()
+              }}
+              aria-disabled={cobroBloqueado || cobrando}
+              aria-busy={cobrando}
+              aria-keyshortcuts="Enter"
+              className={cn(
+                'min-h-[44px] w-full px-[18px] py-2 font-display text-[15px] font-semibold tracking-wide shadow-sm hover:shadow-md',
+                (cobroBloqueado || cobrando) && 'pointer-events-none opacity-50',
+              )}
+            >
+              {cobrando ? 'Guardando…' : 'Cobrar'}
+            </Button>
+          </span>
+        </Tooltip>
+      </div>
+
+      {/* Vaciar el ticket tira trabajo de armado: si el cajero lo pulsa sin
+          querer, se pierde la venta entera y no hay forma de recuperarla. Por
+          eso pide confirmación. */}
+      <ConfirmModal
+        isOpen={confirmandoVaciar}
+        onClose={onCancelarVaciar}
+        onConfirm={onVaciar}
+        title="Vaciar ticket"
+        description="Se van a quitar todos los productos del ticket. No se puede deshacer."
+        confirmText="Vaciar"
+      />
+    </aside>
+  )
+}

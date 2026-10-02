@@ -1,11 +1,22 @@
 import type {
+  ConflictoCodigo,
   FiltrosProducto,
+  MasVendido,
   Producto,
   ProductoConLoteActivo,
 } from '../../electron/db/types'
 import { toErrorMessage } from './errors'
 import { bumpAssetVersion } from '../lib/assets'
 import { MIME_A_EXTENSION, MAX_LOGO_SIZE } from '../features/onboarding/business.schema'
+import { separarCodigos } from '../lib/codigosBarras'
+
+/**
+ * El modo "más vendidos" es un carril corto para el cajero, no un catálogo: con
+ * la grilla entera el modo pierde su razón de ser, porque volver al catálogo
+ * alternativo cuesta un clic. 24 llenan dos filas y deja las siguientes en
+ * pantalla sin obligar a scrollear.
+ */
+export const MAS_VENDIDOS_LIMITE = 24
 
 function limpiarBarras(codigosBarra: string | null | undefined): string | null {
   if (!codigosBarra?.trim()) return null
@@ -17,7 +28,7 @@ function limpiarBarras(codigosBarra: string | null | undefined): string | null {
 }
 
 export const productosService = {
-  async scan(codigo: string): Promise<Producto | null> {
+  async scan(codigo: string): Promise<ProductoConLoteActivo | null> {
     const codigoLimpio = codigo.trim()
     if (!codigoLimpio) return null
 
@@ -28,9 +39,34 @@ export const productosService = {
     }
   },
 
+  async verificarCodigosEnUso(
+    codigos: string[],
+    excluirProductoId?: number | null,
+  ): Promise<ConflictoCodigo[]> {
+    const unicos = separarCodigos(codigos.join(','))
+    if (unicos.length === 0) return []
+
+    try {
+      return await window.electronAPI.productos.verificarCodigos(
+        unicos,
+        excluirProductoId,
+      )
+    } catch (error) {
+      throw new Error(toErrorMessage(error), { cause: error })
+    }
+  },
+
   async getAll(filtros?: FiltrosProducto): Promise<ProductoConLoteActivo[]> {
     try {
       return await window.electronAPI.productos.getAll(filtros)
+    } catch (error) {
+      throw new Error(toErrorMessage(error), { cause: error })
+    }
+  },
+
+  async getMasVendidos(limite: number = MAS_VENDIDOS_LIMITE): Promise<MasVendido[]> {
+    try {
+      return await window.electronAPI.productos.getMasVendidos(limite)
     } catch (error) {
       throw new Error(toErrorMessage(error), { cause: error })
     }
@@ -140,15 +176,6 @@ export const productosService = {
 
   async updatePrecio(id: number, nuevoPrecio: number): Promise<Producto> {
     return this.update(id, { precioVenta: nuevoPrecio })
-  },
-
-  async updateCodigo(id: number, nuevoCodigo: string): Promise<Producto> {
-    const esBarra = /^[0-9, ]+$/.test(nuevoCodigo) && nuevoCodigo.length >= 8
-    if (esBarra) {
-      return this.update(id, { codigosBarras: nuevoCodigo })
-    } else {
-      return this.update(id, { codigoInterno: nuevoCodigo })
-    }
   },
 
   async updateVariante(id: number, nuevaVariante: string | null): Promise<Producto> {

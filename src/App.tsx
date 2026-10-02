@@ -6,12 +6,16 @@ import { useUIStore } from './stores/ui.store'
 import { useNegocioStore } from './stores/negocio.store'
 import { negocioService } from './services/negocio.service'
 import { BusinessSetupModal } from './features/onboarding/BusinessSetupModal'
+import { useScannerInit } from './hooks/useBarcodeScanner'
 
 function App() {
   const theme = useUIStore((state) => state.theme)
   const setNegocio = useNegocioStore((state) => state.setNegocio)
   const [verificando, setVerificando] = useState(true)
   const [onboardingAbierto, setOnboardingAbierto] = useState(false)
+
+  // Inicialización global del lector de códigos de barras USB.
+  useScannerInit()
 
   useEffect(() => {
     const root = document.documentElement
