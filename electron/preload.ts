@@ -1,9 +1,13 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type {
+  AbonoInput,
   AjusteStockInput,
   AperturaCajaInput,
+  CargoManualInput,
   CierreCajaInput,
+  ClienteInput,
   CrearMovimientoInput,
+  FiltrosCuentaCorriente,
   FiltrosMovimientos,
   FiltrosProducto,
   FiltrosReportes,
@@ -117,6 +121,28 @@ contextBridge.exposeInMainWorld("electronAPI", {
   reportes: {
     getSummary: (filtros?: FiltrosReportes) =>
       ipcRenderer.invoke("reportes:summary", filtros),
+  },
+  cuentasCorrientes: {
+    getClientes: (opciones?: { incluirInactivos?: boolean }) =>
+      ipcRenderer.invoke("cuentas-corrientes:clientes", opciones),
+    crearCliente: (data: ClienteInput) =>
+      ipcRenderer.invoke("cuentas-corrientes:cliente-crear", data),
+    actualizarCliente: (id: number, data: ClienteInput) =>
+      ipcRenderer.invoke("cuentas-corrientes:cliente-actualizar", id, data),
+    archivarCliente: (id: number) =>
+      ipcRenderer.invoke("cuentas-corrientes:cliente-archivar", id),
+    getMovimientos: (filtros?: FiltrosCuentaCorriente) =>
+      ipcRenderer.invoke("cuentas-corrientes:movimientos", filtros),
+    getResumen: () => ipcRenderer.invoke("cuentas-corrientes:resumen"),
+    registrarAbono: (data: AbonoInput) =>
+      ipcRenderer.invoke("cuentas-corrientes:abono", data),
+    registrarCargo: (data: CargoManualInput) =>
+      ipcRenderer.invoke("cuentas-corrientes:cargo", data),
+  },
+  datosPrueba: {
+    hay: () => ipcRenderer.invoke("datosPrueba:hay"),
+    generar: () => ipcRenderer.invoke("datosPrueba:generar"),
+    borrar: () => ipcRenderer.invoke("datosPrueba:borrar"),
   },
   app: {
     /** El main avisa que intentó cerrarse la app con la caja abierta. */

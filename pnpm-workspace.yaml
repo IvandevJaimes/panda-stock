@@ -4,3 +4,7 @@ allowBuilds:
   esbuild: true
 minimumReleaseAgeExclude:
   - electron@44.2.0
+# `recharts@3` todavía arrastra `react-is` para `Cell`, y si queda en una versión
+# distinta a la de React los gráficos no renderizan. Tiene que seguir a react.
+overrides:
+  react-is: ^19.2.8

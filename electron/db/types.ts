@@ -3,6 +3,7 @@ export type UnidadMedida = 'unidad' | 'ml' | 'g'
 export type EstadoVenta = 'completada' | 'anulada'
 export type EstadoCaja = 'abierta' | 'cerrada'
 export type MetodoPago = 'efectivo' | 'transferencia' | 'debito' | 'credito' | 'cuenta_corriente'
+export type TipoMovimientoCuentaCorriente = 'cargo' | 'abono'
 export type TipoTarifa = 'minorista' | 'mayoreo'
 export type TipoMovimientoStock = 'entrada' | 'venta' | 'ajuste_positivo' | 'ajuste_negativo' | 'merma' | 'devolucion'
 export type TipoAjusteStock = 'ajuste_positivo' | 'ajuste_negativo' | 'merma'
@@ -190,6 +191,8 @@ export type CajaSummary = {
   totalEfectivo: number
   totalTransferencia: number
   totalTarjeta: number
+  /** Ventas del turno cobradas en cuenta corriente. No son plata en la gaveta. */
+  totalCuentaCorriente: number
   /** Fondo inicial + efectivo cobrado. Mismo número con el que `closeCaja` calcula la diferencia. */
   montoEsperado: number
 }
@@ -252,6 +255,12 @@ export type VentaCompletaInput = {
   total: number
   items: DetalleVentaInput[]
   pagos: PagoInput[]
+  /**
+   * A quién se le fía. Solo se usa si algún pago viene como `cuenta_corriente`:
+   * sin cliente, ese pago es un cobro sin destinatario y `processSale` lo
+   * rechaza.
+   */
+  clienteId?: number | null
 }
 
 export type VentaResult = {
@@ -357,6 +366,109 @@ export type FiltrosMovimientos = {
   limit?: number
 }
 
+/**
+ * Costo de mercadería vendida: `costo_unitario` congelado en la línea al vender,
+ * no el costo actual del producto. Editar `productos.costo` después no
+ * reescribe la historia, y no debe: un resultado histórico que cambia cuando
+ * tocás el precio de compra no es un resultado.
+ */
+export type VentaDiaria = {
+  /** `YYYY-MM-DD` en hora local, que es como el usuario lee el calendario. */
+  fecha: string
+  ventas: number
+  unidades: number
+  total: number
+  costo: number
+}
+
+export type ProductoRanking = {
+  productoId: number | null
+  nombre: string
+  /** Unidades vendidas. No es la cantidad de ventas. */
+  cantidad: number
+  monto: number
+  costo: number
+  margen: number
+}
+
+/** Un tipo de movimiento con su conteo y las unidades que movió en el período. */
+export type MovimientoPorTipo = {
+  tipo: TipoMovimientoStock
+  cantidad: number
+  unidades: number
+}
+
+/**
+ * Movimientos de stock del período, agrupados por tipo.
+ *
+ * `entradas` y `salidas` son conteos de movimientos, no de unidades: mezclan
+ * tipos que suman (entrada, ajuste positivo) con los que restan. Para unidades
+ * hay que usar `porTipo`.
+ */
+export type ResumenMovimientos = {
+  cantidad: number
+  unidades: number
+  entradas: number
+  salidas: number
+  porTipo: MovimientoPorTipo[]
+}
+
+/** Pérdida de un producto: cuántas unidades se perdieron y a qué costo. */
+export type ProductoPerdida = {
+  productoId: number | null
+  nombre: string
+  unidades: number
+  /**
+   * `productos.costo` actual, NO el costo histórico. `movimientos_stock` no
+   * congela el costo al momento de la merma, así que es el único dato disponible
+   * y hay que leerlo como "a lo que hoy cuesta", no como lo que se perdió en
+   * plata el día de la merma.
+   */
+  costoUnitario: number
+  perdido: number
+}
+
+/**
+ * Solo `mermas`.
+ *
+ * Un `ajuste_negativo` no entra: puede ser una corrección de conteo de
+ * inventario, no una pérdida real, y sumarlo mezcla cosas distintas. Una
+ * `devolucion` tampoco, porque la mercadería vuelve a estar vendible.
+ */
+export type ResumenPerdidas = {
+  cantidadMermas: number
+  unidadesPerdidas: number
+  plataPerdida: number
+  porProducto: ProductoPerdida[]
+}
+
+/** Corte de caja cerrado, con el arqueo contra lo esperado. */
+export type CorteCaja = {
+  id: number
+  empleadoNombre: string
+  montoInicial: number
+  montoEsperado: number | null
+  montoReal: number | null
+  diferencia: number | null
+  fechaApertura: string | null
+  fechaCierre: string | null
+  observaciones: string | null
+}
+
+/**
+ * Cortes de caja cerrados en el período.
+ *
+ * Se filtra por `fecha_cierre`, no por `fecha_apertura`: un turno abierto el 31
+ * y cerrado el 1 pertenece al día en que se cerró, que es cuando se supo cuánto
+ * se cobró.
+ */
+export type ResumenCortes = {
+  cantidad: number
+  diferenciaTotal: number
+  conDescuadre: number
+  cortes: CorteCaja[]
+}
+
 export type ReportesSummary = {
   caja: {
     cajaId: number | null
@@ -368,11 +480,107 @@ export type ReportesSummary = {
   }
   totalVentas: number
   cantVentas: number
+  totalCosto: number
+  /** Margen bruto: `totalVentas - totalCosto`. No incluye gastos, que no se registran. */
+  resultado: number
   ventasPorMetodo: { metodo: MetodoPago; monto: number }[]
-  productosMasVendidos: { productoId: number | null; nombre: string; cantidad: number; monto: number }[]
+  productosMasVendidos: ProductoRanking[]
+  /**
+ * Solo los días que tuvieron ventas: el `GROUP BY` de la consulta no puede
+ * inventar los huecos de un rango, porque el rango vive en el renderer. Quien
+ * grafica tiene que densificar contra los `desde`/`hasta` del filtro.
+ */
+  ventasPorDia: VentaDiaria[]
+  movimientos: ResumenMovimientos
+  perdidas: ResumenPerdidas
+  cortes: ResumenCortes
 }
 
 export type FiltrosReportes = {
   desde?: string
   hasta?: string
+  /** Cuántos productos traer en el ranking. Por omisión, 5. */
+  topProductos?: number
+}
+
+// ── Cuentas corrientes ────────────────────────────────────────────────────────
+
+export type Cliente = {
+  id: number
+  nombre: string
+  telefono: string | null
+  notas: string | null
+  activo: boolean
+  creadoEn: string
+}
+
+export type ClienteInput = {
+  nombre: string
+  telefono?: string | null
+  notas?: string | null
+}
+
+/**
+ * Cliente con su saldo ya resuelto.
+ *
+ * El saldo viaja desglosado (cargos y abonos por separado) además de la suma:
+ * la vista muestra las dos columnas y el total, y si solo mandáramos el saldo
+ * no podría explicar de dónde sale.
+ */
+export type ClienteConSaldo = Cliente & {
+  totalCargos: number
+  totalAbonos: number
+  /** `totalCargos - totalAbonos`. Siempre >= 0: no se permiten sobrepagos. */
+  saldo: number
+  cantidadMovimientos: number
+  ultimoMovimiento: string | null
+}
+
+export type MovimientoCuentaCorriente = {
+  id: number
+  clienteId: number
+  tipo: TipoMovimientoCuentaCorriente
+  monto: number
+  ventaId: number | null
+  metodo: MetodoPago | null
+  cajaId: number | null
+  nota: string | null
+  fechaHora: string
+  /** Denormalizado para pintar la tabla en una sola consulta. */
+  clienteNombre: string
+  /** Total de la venta origen, cuando el cargo viene de una venta. */
+  ventaTotal: number | null
+}
+
+export type FiltrosCuentaCorriente = {
+  clienteId?: number
+  desde?: string
+  hasta?: string
+  /** Tope de filas. Sin tope, devuelve el historial completo del cliente. */
+  limit?: number
+}
+
+export type ResumenCuentasCorrientes = {
+  /** Suma de los saldos de todos los clientes: la plata que hay que cobrar. */
+  totalPorCobrar: number
+  clientesConDeuda: number
+  clientesActivos: number
+  totalCargos: number
+  totalAbonos: number
+}
+
+export type AbonoInput = {
+  clienteId: number
+  monto: number
+  metodo: MetodoPago
+  /** Gaveta donde entra la plata. El efectivo de un abono se suma al arqueo. */
+  cajaId?: number | null
+  nota?: string | null
+}
+
+/** Cargo manual: deuda que no viene de una venta del mostrador. */
+export type CargoManualInput = {
+  clienteId: number
+  monto: number
+  nota?: string | null
 }

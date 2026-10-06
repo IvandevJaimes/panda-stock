@@ -1,0 +1,1 @@
+export { CuentasCorrientesPage } from './Page'

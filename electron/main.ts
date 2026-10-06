@@ -59,11 +59,28 @@ import {
   updateNegocio,
   verifyPin,
   verificarCodigosEnUso,
+  getClientes,
+  createCliente,
+  updateCliente,
+  archivarCliente,
+  getMovimientosCuentaCorriente,
+  getResumenCuentasCorrientes,
+  registrarAbono,
+  registrarCargoManual,
 } from "./db/repository.ts";
+import {
+  borrarDatosPrueba,
+  generarDatosPrueba,
+  hayDatosPrueba,
+} from "./db/testdata.repository.ts";
 import type {
   AjusteStockInput,
+  AbonoInput,
   AperturaCajaInput,
+  CargoManualInput,
+  ClienteInput,
   CierreCajaInput,
+  FiltrosCuentaCorriente,
   FiltrosMovimientos,
   FiltrosProducto,
   FiltrosReportes,
@@ -346,6 +363,35 @@ function registerIpcHandlers() {
   ipcMain.handle("reportes:summary", (_event, filtros?: FiltrosReportes) =>
     getReportesSummary(filtros),
   );
+
+  ipcMain.handle("cuentas-corrientes:clientes", (_event, opciones?: { incluirInactivos?: boolean }) =>
+    getClientes(opciones),
+  );
+  ipcMain.handle("cuentas-corrientes:cliente-crear", (_event, data: ClienteInput) =>
+    createCliente(data),
+  );
+  ipcMain.handle("cuentas-corrientes:cliente-actualizar", (_event, id: number, data: ClienteInput) =>
+    updateCliente(id, data),
+  );
+  ipcMain.handle("cuentas-corrientes:cliente-archivar", (_event, id: number) =>
+    archivarCliente(id),
+  );
+  ipcMain.handle("cuentas-corrientes:movimientos", (_event, filtros?: FiltrosCuentaCorriente) =>
+    getMovimientosCuentaCorriente(filtros),
+  );
+  ipcMain.handle("cuentas-corrientes:resumen", () => getResumenCuentasCorrientes());
+  ipcMain.handle("cuentas-corrientes:abono", (_event, data: AbonoInput) =>
+    registrarAbono(data),
+  );
+  ipcMain.handle("cuentas-corrientes:cargo", (_event, data: CargoManualInput) =>
+    registrarCargoManual(data),
+  );
+
+  ipcMain.handle("datosPrueba:hay", () => hayDatosPrueba());
+
+  ipcMain.handle("datosPrueba:generar", () => generarDatosPrueba());
+
+  ipcMain.handle("datosPrueba:borrar", () => borrarDatosPrueba());
 
   // El renderer confirma que ya no hay caja abierta y pide salir. `app.quit()`
   // vuelve a pasar por `before-quit`, así que el flag tiene que estar puesto antes.
