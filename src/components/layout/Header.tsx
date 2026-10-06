@@ -41,8 +41,8 @@ interface MainNavItem {
 const mainNavItems: MainNavItem[] = [
   { to: "/pos", label: "Vender", icon: ShoppingBag },
   { to: "/inventory", label: "Inventario", icon: Package },
-  { to: "/accounts", label: "Cuentas corrientes", icon: BookUser, bloqueado: true },
-  { to: "/reports", label: "Reportes", icon: TrendingUp, bloqueado: true },
+  { to: "/accounts", label: "Cuentas corrientes", icon: BookUser },
+  { to: "/reports", label: "Reportes", icon: TrendingUp },
 ];
 
 export function Header() {

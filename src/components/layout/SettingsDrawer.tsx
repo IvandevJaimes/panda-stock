@@ -1,4 +1,5 @@
 import { useEffect, type ReactNode } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Briefcase,
   Sun,
@@ -67,6 +68,7 @@ function DrawerSection({ title, icon: Icon, children }: DrawerSectionProps) {
 }
 
 export function SettingsDrawer() {
+  const navegar = useNavigate();
   const isOpen = useUIStore((state) => state.isRightSidebarOpen);
   const closeRightSidebar = useUIStore((state) => state.closeRightSidebar);
   const theme = useUIStore((state) => state.theme);
@@ -77,6 +79,13 @@ export function SettingsDrawer() {
   );
   const sonidoAlertas = useSettingsStore((state) => state.sonidoAlertas);
   const setSonidoAlertas = useSettingsStore((state) => state.setSonidoAlertas);
+
+  // El drawer se cierra antes de navegar: si queda abierto, tapa la pantalla
+  // nueva apenas se monta.
+  const irAReportes = () => {
+    closeRightSidebar();
+    navegar("/reports");
+  };
 
   useEffect(() => {
     if (!isOpen) return;
@@ -165,23 +174,22 @@ export function SettingsDrawer() {
           </DrawerSection>
         </div>
 
-        {/* Acción principal — bloqueada (reportes no desarrollados) */}
+        {/* Reportes quedó habilitado; la pantalla pide el PIN maestro al entrar. */}
         <div className="border-t border-slate-200 p-5 dark:border-slate-800/80">
           <button
             type="button"
-            disabled
-            aria-disabled="true"
+            onClick={irAReportes}
             className={cn(
-              "flex h-11 w-full cursor-not-allowed items-center justify-center gap-2 rounded-xl",
-              "bg-emerald-500/40 font-display text-sm font-bold text-slate-950/50",
-              "dark:bg-emerald-500/20 dark:text-emerald-200/50",
+              "flex h-11 w-full items-center justify-center gap-2 rounded-xl",
+              "bg-emerald-500 font-display text-sm font-bold text-slate-950",
+              "transition-colors hover:bg-emerald-400",
             )}
           >
             <TrendingUp size={18} />
             Ver reportes
           </button>
           <p className="mt-2 text-center text-[11px] font-medium text-slate-400 dark:text-slate-500">
-            Próximamente
+            Ingresos, márgenes y movimientos
           </p>
         </div>
       </aside>

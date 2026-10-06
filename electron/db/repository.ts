@@ -15,11 +15,14 @@ import {
   or,
   sql,
   inArray,
+  type SQL,
 } from 'drizzle-orm'
 import { getDb, sha256 } from './index.ts'
 import {
   cajas,
   categorias,
+  clientes,
+  cuentasCorrientes,
   detalleVentas,
   empleados,
   lotes,
@@ -32,21 +35,28 @@ import {
   ventas,
 } from './schema.ts'
 import type {
+  AbonoInput,
   AjusteStockInput,
   AperturaCajaInput,
   Caja,
   CajaConResponsable,
   CajaSummary,
   Categoria,
+  CargoManualInput,
   CierreCajaInput,
+  Cliente,
+  ClienteConSaldo,
+  ClienteInput,
   ConflictoCodigo,
   Empleado,
+  FiltrosCuentaCorriente,
   FiltrosMovimientos,
   FiltrosProducto,
   FiltrosReportes,
   FiltrosVentas,
   Lote,
   Marca,
+  MovimientoCuentaCorriente,
   MovimientoStock,
   Negocio,
   NegocioInput,
@@ -55,8 +65,14 @@ import type {
   Producto,
   ProductoConLoteActivo,
   ReportesSummary,
+  ResumenCuentasCorrientes,
+  ResumenCortes,
+  ResumenMovimientos,
+  ResumenPerdidas,
+  TipoMovimientoStock,
   Venta,
   VentaCompletaInput,
+  VentaDiaria,
   VentaDetalle,
   VentaHistorial,
   VentaHistorialItem,
@@ -819,7 +835,25 @@ function montoEsperadoDeCaja(
     )
     .get()
 
-  return montoInicial + (fila?.efectivo ?? 0)
+  /*
+    El efectivo de los abonos de cuentas corrientes va aparte porque no son
+    pagos de una venta: viven en el libro mayor, no en `pagos`. Sin esta suma, un
+    cliente que salda su deuda en efectivo deja la plata en la gaveta y el
+    arqueo la reporta como faltante sin que nada en pantalla lo explique.
+  */
+  const abonos = db
+    .select({ efectivo: sql<number>`coalesce(sum(${cuentasCorrientes.monto}), 0)` })
+    .from(cuentasCorrientes)
+    .where(
+      and(
+        eq(cuentasCorrientes.cajaId, cajaId),
+        eq(cuentasCorrientes.tipo, 'abono'),
+        eq(cuentasCorrientes.metodo, 'efectivo'),
+      ),
+    )
+    .get()
+
+  return montoInicial + (fila?.efectivo ?? 0) + (abonos?.efectivo ?? 0)
 }
 
 export function getCajaSummary(cajaId: number): CajaSummary {
@@ -850,13 +884,36 @@ export function getCajaSummary(cajaId: number): CajaSummary {
     .groupBy(pagos.metodo)
     .all()
 
+  const abonosMetodo = db
+    .select({
+      metodo: cuentasCorrientes.metodo,
+      monto: sql<number>`coalesce(sum(${cuentasCorrientes.monto}), 0)`,
+    })
+    .from(cuentasCorrientes)
+    .where(and(eq(cuentasCorrientes.cajaId, cajaId), eq(cuentasCorrientes.tipo, 'abono')))
+    .groupBy(cuentasCorrientes.metodo)
+    .all()
+
   let totalEfectivo = 0
   let totalTransferencia = 0
   let totalTarjeta = 0
+  let totalCuentaCorriente = 0
 
   for (const fila of filasMetodo) {
-    if (fila.metodo === 'efectivo') totalEfectivo = fila.monto
-    else if (fila.metodo === 'transferencia') totalTransferencia = fila.monto
+    if (fila.metodo === 'efectivo') totalEfectivo += fila.monto
+    else if (fila.metodo === 'transferencia') totalTransferencia += fila.monto
+    else if (fila.metodo === 'debito' || fila.metodo === 'credito') totalTarjeta += fila.monto
+    else if (fila.metodo === 'cuenta_corriente') totalCuentaCorriente += fila.monto
+  }
+
+  /*
+    Los abonos van al bucket del método con que se pagaron. El efectivo suma al
+    arqueo (ver `montoEsperadoDeCaja`): esa plata entró a la gaveta y si no se
+    sumara, el corte reportaría un faltante sin origen visible.
+  */
+  for (const fila of abonosMetodo) {
+    if (fila.metodo === 'efectivo') totalEfectivo += fila.monto
+    else if (fila.metodo === 'transferencia') totalTransferencia += fila.monto
     else if (fila.metodo === 'debito' || fila.metodo === 'credito') totalTarjeta += fila.monto
   }
 
@@ -866,6 +923,7 @@ export function getCajaSummary(cajaId: number): CajaSummary {
     totalEfectivo,
     totalTransferencia,
     totalTarjeta,
+    totalCuentaCorriente,
     montoEsperado: montoEsperadoDeCaja(db, cajaId, filaCaja?.montoInicial ?? 0),
   }
 }
@@ -1002,6 +1060,48 @@ export function processSale(venta: VentaCompletaInput): VentaResult {
           fechaHora: ahora,
         })
         .run()
+    }
+
+    /*
+      Cobrar "en cuenta corriente" es dejar fiado: el pago existe en `pagos` para
+      que la venta cierre, y en el libro mayor queda como cargo del cliente. Van
+      en la misma transacción a propósito: si el cargo fallara y la venta quedara
+      guardada, el mostrador habría vendido sin que nadie deba nada.
+    */
+    const fiado = venta.pagos.filter((pago) => pago.metodo === 'cuenta_corriente')
+
+    if (fiado.length > 0) {
+      if (venta.clienteId == null) {
+        throw new Error(
+          'La venta tiene un pago en cuenta corriente pero no se indicó a qué cliente se le fía',
+        )
+      }
+
+      const cliente = tx
+        .select({ nombre: clientes.nombre, activo: clientes.activo })
+        .from(clientes)
+        .where(eq(clientes.id, venta.clienteId))
+        .get()
+
+      if (!cliente) throw new Error('El cliente al que se le fía no existe')
+      if (!cliente.activo) {
+        throw new Error(`El cliente ${cliente.nombre} está archivado y no puede recibir deuda`)
+      }
+
+      for (const pago of fiado) {
+        tx.insert(cuentasCorrientes)
+          .values({
+            clienteId: venta.clienteId,
+            tipo: 'cargo',
+            monto: Math.round(pago.monto * 100) / 100,
+            ventaId: idVenta,
+            metodo: null,
+            cajaId: null,
+            nota: null,
+            fechaHora: ahora,
+          })
+          .run()
+      }
     }
 
     return idVenta
@@ -1217,6 +1317,170 @@ export function createAjusteStock(data: AjusteStockInput): void {
   })
 }
 
+/** Suma `costo_unitario * cantidad` de las líneas. El costo va congelado en la línea, no en el producto. */
+const COSTO_COBRADO = sql<number>`coalesce(sum(${detalleVentas.costoUnitario} * ${detalleVentas.cantidad}), 0)`
+
+/** Ingreso de las líneas, desde el `subtotal` que `processSale` congeló al vender. */
+const MONTO_COBRADO = sql<number>`coalesce(sum(${detalleVentas.subtotal}), 0)`
+
+/**
+ * `date(..., 'localtime')` y no `substr(fecha_hora, 1, 10)`.
+ *
+ * `ventas.fecha_hora` se escribe con `toISOString()`, o sea UTC. Recortar el
+ * string agrupa por día UTC, y en Buenos Aires la venta de las 21:30 cae en el
+ * día siguiente. Los `DateInput` de la app muestran dd/mm/aaaa local, así que el
+ * filtro y el gráfico apuntarían a días distintos.
+ */
+const DIA_LOCAL = sql<string>`date(${ventas.fechaHora}, 'localtime')`
+
+/**
+ * Un resumen de ventas, sus costos y su resultado.
+ *
+ * Cada agregado va en su propia consulta. `detalle_ventas` es uno-a-varios con
+ * `ventas` y `pagos` es uno-a-uno, así que un `join` plano multiplica filas y
+ * duplica los montos; solo se une cuando hace falta una columna de la tabla
+ * unida (el nombre del producto, el método del pago).
+ */
+/**
+ * Movimientos de stock del período, agrupados por tipo.
+ *
+ * `entradas`/`salidas` cuentan MOVIMIENTOS, no unidades: para eso está `porTipo`.
+ * Cuenta todos los tipos, `venta` y `merma` incluidos: son movimientos de stock
+ * reales y el total tiene que cuadrar con el desglose que muestra la pantalla.
+ */
+function getResumenMovimientos(
+  db: ReturnType<typeof getDb>,
+  filtros: FiltrosReportes | undefined,
+): ResumenMovimientos {
+  const condiciones: ReturnType<typeof and>[] = []
+
+  if (filtros?.desde) condiciones.push(gte(movimientosStock.fechaHora, filtros.desde))
+  if (filtros?.hasta) condiciones.push(lte(movimientosStock.fechaHora, filtros.hasta))
+  const condicion = and(...condiciones)
+
+  const porTipo = db
+    .select({
+      tipo: movimientosStock.tipo,
+      cantidad: sql<number>`count(*)`,
+      unidades: sql<number>`coalesce(sum(abs(${movimientosStock.cantidad})), 0)`,
+    })
+    .from(movimientosStock)
+    .where(condicion)
+    .groupBy(movimientosStock.tipo)
+    .orderBy(asc(movimientosStock.tipo))
+    .all()
+
+  const TIPOS_ENTRADA: TipoMovimientoStock[] = ['entrada', 'ajuste_positivo', 'devolucion']
+  const porTipoMap = new Map(porTipo.map((fila) => [fila.tipo, fila]))
+
+  const entradas = TIPOS_ENTRADA.reduce(
+    (acc, tipo) => acc + (porTipoMap.get(tipo)?.cantidad ?? 0),
+    0,
+  )
+
+  return {
+    cantidad: porTipo.reduce((acc, fila) => acc + fila.cantidad, 0),
+    unidades: porTipo.reduce((acc, fila) => acc + fila.unidades, 0),
+    entradas,
+    salidas: porTipo.reduce((acc, fila) => acc + fila.cantidad, 0) - entradas,
+    porTipo,
+  }
+}
+
+/**
+ * Pérdidas por `merma`.
+ *
+ * Solo `merma`. Un `ajuste_negativo` puede ser una corrección de inventario y
+ * una `devolucion` devuelve mercadería vendible: sumarlas mezcla cosas
+ * distintas y el número deja de significar "se perdió".
+ *
+ * El costo sale de `productos.costo` y NO del lote: `movimientos_stock` no
+ * congela el costo al momento de la merma, así que esto es "a lo que hoy cuesta",
+ * no "lo que salió esa plata ese día".
+ */
+function getResumenPerdidas(
+  db: ReturnType<typeof getDb>,
+  filtros: FiltrosReportes | undefined,
+): ResumenPerdidas {
+  const condiciones: ReturnType<typeof and>[] = [eq(movimientosStock.tipo, 'merma')]
+
+  if (filtros?.desde) condiciones.push(gte(movimientosStock.fechaHora, filtros.desde))
+  if (filtros?.hasta) condiciones.push(lte(movimientosStock.fechaHora, filtros.hasta))
+
+  const porProducto = db
+    .select({
+      productoId: movimientosStock.productoId,
+      nombre: sql<string>`coalesce(${productos.nombre}, 'Producto eliminado')`,
+      unidades: sql<number>`coalesce(sum(abs(${movimientosStock.cantidad})), 0)`,
+      costoUnitario: sql<number>`coalesce(${productos.costo}, 0)`,
+      perdido: sql<number>`coalesce(sum(abs(${movimientosStock.cantidad}) * ${productos.costo}), 0)`,
+    })
+    .from(movimientosStock)
+    .leftJoin(productos, eq(movimientosStock.productoId, productos.id))
+    .where(and(...condiciones))
+    .groupBy(movimientosStock.productoId, productos.nombre, productos.costo)
+    .orderBy(desc(sql`sum(abs(${movimientosStock.cantidad}) * ${productos.costo})`))
+    .all()
+
+  const totalMermas = db
+    .select({
+      cantidad: sql<number>`count(*)`,
+      unidades: sql<number>`coalesce(sum(abs(${movimientosStock.cantidad})), 0)`,
+    })
+    .from(movimientosStock)
+    .where(and(...condiciones))
+    .get()
+
+  return {
+    cantidadMermas: totalMermas?.cantidad ?? 0,
+    unidadesPerdidas: totalMermas?.unidades ?? 0,
+    plataPerdida: porProducto.reduce((acc, fila) => acc + fila.perdido, 0),
+    porProducto,
+  }
+}
+
+/**
+ * Cortes de caja cerrados en el período.
+ *
+ * Filtra por `fecha_cierre` y no por `fecha_apertura`: un turno abierto el 31 y
+ * cerrado el 1 pertenece al día en que se cerró, que es cuando se supo cuánto
+ * entró. La caja abierta no va acá: no tiene arqueo todavía.
+ */
+function getResumenCortes(
+  db: ReturnType<typeof getDb>,
+  filtros: FiltrosReportes | undefined,
+): ResumenCortes {
+  const condiciones: ReturnType<typeof and>[] = [eq(cajas.estado, 'cerrada')]
+
+  if (filtros?.desde) condiciones.push(gte(cajas.fechaCierre, filtros.desde))
+  if (filtros?.hasta) condiciones.push(lte(cajas.fechaCierre, filtros.hasta))
+
+  const cortes = db
+    .select({
+      id: cajas.id,
+      empleadoNombre: empleados.nombre,
+      montoInicial: cajas.montoInicial,
+      montoEsperado: cajas.montoEsperado,
+      montoReal: cajas.montoReal,
+      diferencia: cajas.diferencia,
+      fechaApertura: cajas.fechaApertura,
+      fechaCierre: cajas.fechaCierre,
+      observaciones: cajas.observaciones,
+    })
+    .from(cajas)
+    .innerJoin(empleados, eq(cajas.empleadoId, empleados.id))
+    .where(and(...condiciones))
+    .orderBy(desc(cajas.fechaCierre))
+    .all()
+
+  return {
+    cantidad: cortes.length,
+    diferenciaTotal: cortes.reduce((acc, corte) => acc + (corte.diferencia ?? 0), 0),
+    conDescuadre: cortes.filter((corte) => (corte.diferencia ?? 0) !== 0).length,
+    cortes,
+  }
+}
+
 export function getReportesSummary(filtros?: FiltrosReportes): ReportesSummary {
   const db = getDb()
   const condiciones: ReturnType<typeof and>[] = [eq(ventas.estado, 'completada')]
@@ -1231,6 +1495,13 @@ export function getReportesSummary(filtros?: FiltrosReportes): ReportesSummary {
       cantidad: sql<number>`count(*)`,
     })
     .from(ventas)
+    .where(condicion)
+    .get()
+
+  const costoTotal = db
+    .select({ costo: COSTO_COBRADO })
+    .from(detalleVentas)
+    .innerJoin(ventas, eq(detalleVentas.ventaId, ventas.id))
     .where(condicion)
     .get()
 
@@ -1250,16 +1521,63 @@ export function getReportesSummary(filtros?: FiltrosReportes): ReportesSummary {
       productoId: detalleVentas.productoId,
       nombre: productos.nombre,
       cantidad: sql<number>`coalesce(sum(${detalleVentas.cantidad}), 0)`,
-      monto: sql<number>`coalesce(sum(${detalleVentas.subtotal}), 0)`,
+      monto: MONTO_COBRADO,
+      costo: COSTO_COBRADO,
+      margen: sql<number>`${MONTO_COBRADO} - ${COSTO_COBRADO}`,
     })
     .from(detalleVentas)
     .innerJoin(ventas, eq(detalleVentas.ventaId, ventas.id))
     .innerJoin(productos, eq(detalleVentas.productoId, productos.id))
     .where(condicion)
     .groupBy(detalleVentas.productoId, productos.nombre)
-    .orderBy(desc(sql`sum(${detalleVentas.cantidad})`))
-    .limit(5)
+    .orderBy(desc(sql`sum(${detalleVentas.cantidad})`), asc(productos.nombre))
+    .limit(filtros?.topProductos ?? 5)
     .all()
+
+  // La serie diaria va en DOS consultas cruzadas en JS, no en una sola con
+  // `join`. `detalle_ventas` duplica cada venta por la cantidad de sus ítems:
+  // con `join` plano, una venta de $100 con tres líneas suma $300, y `count(*)`
+  // contaría tres ventas donde hubo una. `count(distinct ventas.id)` arregla
+  // el conteo pero deja el monto inflado igual, así que el corte va por tabla.
+  const diaTotales = db
+    .select({
+      fecha: DIA_LOCAL,
+      ventas: sql<number>`count(*)`,
+      total: sql<number>`coalesce(sum(${ventas.total}), 0)`,
+    })
+    .from(ventas)
+    .where(condicion)
+    .groupBy(DIA_LOCAL)
+    .orderBy(asc(DIA_LOCAL))
+    .all()
+
+  const diaItems = db
+    .select({
+      fecha: DIA_LOCAL,
+      unidades: sql<number>`coalesce(sum(${detalleVentas.cantidad}), 0)`,
+      costo: COSTO_COBRADO,
+    })
+    .from(detalleVentas)
+    .innerJoin(ventas, eq(detalleVentas.ventaId, ventas.id))
+    .where(condicion)
+    .groupBy(DIA_LOCAL)
+    .orderBy(asc(DIA_LOCAL))
+    .all()
+
+  const itemsPorDia = new Map(diaItems.map((fila) => [fila.fecha, fila]))
+  // Los días sin ventas no salen de acá. El renderer los rellena con cero
+  // entre `desde` y `hasta`: saltearlos hace que el gráfico conecte en
+  // diagonal los dos días con venta y se lea como una caída que no ocurrió.
+  const ventasPorDia: VentaDiaria[] = diaTotales.map((fila) => ({
+    fecha: fila.fecha,
+    ventas: fila.ventas,
+    unidades: itemsPorDia.get(fila.fecha)?.unidades ?? 0,
+    total: fila.total,
+    costo: itemsPorDia.get(fila.fecha)?.costo ?? 0,
+  }))
+
+  const totalVentas = ventasTotales?.total ?? 0
+  const totalCosto = costoTotal?.costo ?? 0
 
   const cajaActiva = db
     .select()
@@ -1277,6 +1595,10 @@ export function getReportesSummary(filtros?: FiltrosReportes): ReportesSummary {
     ventas: 0,
   }
 
+  // A propósito sin `filtros`: el bloque describe la caja abierta ahora mismo,
+  // no el período. Aplicarle el rango haría que `montoEsperado` dejara de ser
+  // el número con el que `closeCaja` calcula la diferencia, y el arqueo
+  // mostraría un esperado que no cuadra con el cierre.
   if (cajaActiva) {
     const resumenCaja = db
       .select({
@@ -1301,8 +1623,14 @@ export function getReportesSummary(filtros?: FiltrosReportes): ReportesSummary {
     caja,
     ventasPorMetodo: filasMetodo,
     productosMasVendidos: masVendidos,
-    totalVentas: ventasTotales?.total ?? 0,
+    ventasPorDia,
+    totalVentas,
+    totalCosto,
+    resultado: totalVentas - totalCosto,
     cantVentas: ventasTotales?.cantidad ?? 0,
+    movimientos: getResumenMovimientos(db, filtros),
+    perdidas: getResumenPerdidas(db, filtros),
+    cortes: getResumenCortes(db, filtros),
   }
 }
 export function updateLote(
@@ -1521,4 +1849,343 @@ export function crearMovimientoStock(data: CrearMovimientoInput): void {
       })
       .run()
   })
+}
+
+// ── Cuentas corrientes ────────────────────────────────────────────────────────
+
+/**
+ * Solo la parte de la conexión que necesitan las consultas de saldos.
+ *
+ * Sirve para pasar indistintamente la base abierta o el handle de una
+ * transacción: el saldo tiene que poder leerse DENTRO de la transacción del
+ * abono, si no la validación corre contra un valor viejo y dos abonos
+ * simultáneos validan contra el mismo saldo.
+ */
+type SelectDb = Pick<ReturnType<typeof getDb>, 'select'>
+
+type ResumenSaldos = {
+  clienteId: number
+  totalCargos: number
+  totalAbonos: number
+  cantidadMovimientos: number
+  ultimoMovimiento: string | null
+}
+
+/**
+ * Saldos agregados por cliente, una fila por cliente que tenga movimientos.
+ *
+ * El saldo se arma acá y no en la vista porque tiene que ser el mismo número en
+ * las dos: si cada capa calculara su propio `cargos - abonos`, el KPI de
+ * "total por cobrar" dejaría de cuadrar con la suma de la tabla sin que ningún
+ * test se entere.
+ */
+function saldosPorCliente(db: SelectDb): Map<number, ResumenSaldos> {
+  const filas = db
+    .select({
+      clienteId: cuentasCorrientes.clienteId,
+      totalCargos: sql<number>`coalesce(sum(case when ${cuentasCorrientes.tipo} = 'cargo' then ${cuentasCorrientes.monto} else 0 end), 0)`,
+      totalAbonos: sql<number>`coalesce(sum(case when ${cuentasCorrientes.tipo} = 'abono' then ${cuentasCorrientes.monto} else 0 end), 0)`,
+      cantidadMovimientos: count(),
+      ultimoMovimiento: sql<string | null>`max(${cuentasCorrientes.fechaHora})`,
+    })
+    .from(cuentasCorrientes)
+    .groupBy(cuentasCorrientes.clienteId)
+    .all()
+
+  return new Map(filas.map((fila) => [fila.clienteId, fila]))
+}
+
+export function getClientes(opciones?: { incluirInactivos?: boolean }): ClienteConSaldo[] {
+  const db = getDb()
+  const saldos = saldosPorCliente(db)
+
+  const filas = db
+    .select()
+    .from(clientes)
+    .where(opciones?.incluirInactivos ? undefined : eq(clientes.activo, true))
+    .orderBy(asc(clientes.nombre))
+    .all()
+
+  return filas
+    .map((cliente) => {
+      const saldo = saldos.get(cliente.id)
+
+      return {
+        ...cliente,
+        totalCargos: saldo?.totalCargos ?? 0,
+        totalAbonos: saldo?.totalAbonos ?? 0,
+        saldo: (saldo?.totalCargos ?? 0) - (saldo?.totalAbonos ?? 0),
+        cantidadMovimientos: saldo?.cantidadMovimientos ?? 0,
+        ultimoMovimiento: saldo?.ultimoMovimiento ?? null,
+      }
+    })
+    .sort((a, b) => b.saldo - a.saldo || a.nombre.localeCompare(b.nombre))
+}
+
+export function createCliente(input: ClienteInput): Cliente {
+  const db = getDb()
+  const nombre = input.nombre.trim().replace(/\s+/g, ' ')
+
+  if (!nombre) throw new Error('El nombre del cliente es obligatorio')
+
+  const existente = db
+    .select()
+    .from(clientes)
+    .where(sql`lower(${clientes.nombre}) = lower(${nombre})`)
+    .get()
+
+  if (existente) {
+    if (existente.activo) throw new Error('Ya existe un cliente con ese nombre')
+
+    // El nombre estaba tomado por un cliente archivado: se reactiva en vez de
+    // violar la UNIQUE, conservando el historial de sus movimientos.
+    const reactivado = db
+      .update(clientes)
+      .set({ nombre, telefono: input.telefono ?? null, notas: input.notas ?? null, activo: true })
+      .where(eq(clientes.id, existente.id))
+      .returning()
+      .get()
+
+    return reactivado
+  }
+
+  return db
+    .insert(clientes)
+    .values({
+      nombre,
+      telefono: input.telefono ?? null,
+      notas: input.notas ?? null,
+      activo: true,
+      creadoEn: new Date().toISOString(),
+    })
+    .returning()
+    .get()
+}
+
+export function updateCliente(id: number, input: ClienteInput): void {
+  const db = getDb()
+  const nombre = input.nombre.trim().replace(/\s+/g, ' ')
+
+  if (!nombre) throw new Error('El nombre del cliente es obligatorio')
+
+  const duplicado = db
+    .select({ id: clientes.id })
+    .from(clientes)
+    .where(and(ne(clientes.id, id), sql`lower(${clientes.nombre}) = lower(${nombre})`))
+    .get()
+
+  if (duplicado) throw new Error('Ya existe otro cliente con ese nombre')
+
+  db.update(clientes)
+    .set({ nombre, telefono: input.telefono ?? null, notas: input.notas ?? null })
+    .where(eq(clientes.id, id))
+    .run()
+}
+
+/**
+ * Se archiva en vez de borrarse: los movimientos del libro mayor son la prueba
+ * de la deuda, y sin ellos el historial quedaría huérfano.
+ */
+export function archivarCliente(id: number): void {
+  getDb()
+    .update(clientes)
+    .set({ activo: false })
+    .where(eq(clientes.id, id))
+    .run()
+}
+
+export function getMovimientosCuentaCorriente(
+  filtros?: FiltrosCuentaCorriente,
+): MovimientoCuentaCorriente[] {
+  const condiciones: SQL[] = []
+
+  if (filtros?.clienteId !== undefined) {
+    condiciones.push(eq(cuentasCorrientes.clienteId, filtros.clienteId))
+  }
+  if (filtros?.desde) condiciones.push(gte(cuentasCorrientes.fechaHora, filtros.desde))
+  if (filtros?.hasta) condiciones.push(lte(cuentasCorrientes.fechaHora, filtros.hasta))
+
+  return getDb()
+    .select({
+      id: cuentasCorrientes.id,
+      clienteId: cuentasCorrientes.clienteId,
+      tipo: cuentasCorrientes.tipo,
+      monto: cuentasCorrientes.monto,
+      ventaId: cuentasCorrientes.ventaId,
+      metodo: cuentasCorrientes.metodo,
+      cajaId: cuentasCorrientes.cajaId,
+      nota: cuentasCorrientes.nota,
+      fechaHora: cuentasCorrientes.fechaHora,
+      clienteNombre: clientes.nombre,
+      ventaTotal: ventas.total,
+    })
+    .from(cuentasCorrientes)
+    .innerJoin(clientes, eq(cuentasCorrientes.clienteId, clientes.id))
+    .leftJoin(ventas, eq(cuentasCorrientes.ventaId, ventas.id))
+    .where(condiciones.length > 0 ? and(...condiciones) : undefined)
+    .orderBy(desc(cuentasCorrientes.fechaHora), desc(cuentasCorrientes.id))
+    .limit(filtros?.limit ?? 200)
+    .all()
+}
+
+export function getResumenCuentasCorrientes(): ResumenCuentasCorrientes {
+  const db = getDb()
+
+  const totales = db
+    .select({
+      totalCargos: sql<number>`coalesce(sum(case when ${cuentasCorrientes.tipo} = 'cargo' then ${cuentasCorrientes.monto} else 0 end), 0)`,
+      totalAbonos: sql<number>`coalesce(sum(case when ${cuentasCorrientes.tipo} = 'abono' then ${cuentasCorrientes.monto} else 0 end), 0)`,
+    })
+    .from(cuentasCorrientes)
+    .get()
+
+  const cantidadClientes = db
+    .select({ cantidad: count() })
+    .from(clientes)
+    .where(eq(clientes.activo, true))
+    .get()
+
+  const saldos = saldosPorCliente(db)
+  let totalPorCobrar = 0
+  let clientesConDeuda = 0
+
+  for (const fila of saldos.values()) {
+    const saldo = fila.totalCargos - fila.totalAbonos
+    if (saldo > 0) {
+      totalPorCobrar += saldo
+      clientesConDeuda += 1
+    }
+  }
+
+  return {
+    totalPorCobrar,
+    clientesConDeuda,
+    clientesActivos: cantidadClientes?.cantidad ?? 0,
+    totalCargos: totales?.totalCargos ?? 0,
+    totalAbonos: totales?.totalAbonos ?? 0,
+  }
+}
+
+/**
+ * Saldo de un cliente puntual.
+ *
+ * `saldosPorCliente()` calcula todos con un solo GROUP BY, pero acá hace falta
+ * el valor dentro de la transacción del abono.
+ */
+function saldoDeCliente(db: SelectDb, clienteId: number): number {
+  const fila = db
+    .select({
+      saldo: sql<number>`coalesce(sum(case when ${cuentasCorrientes.tipo} = 'cargo' then ${cuentasCorrientes.monto} else -${cuentasCorrientes.monto} end), 0)`,
+    })
+    .from(cuentasCorrientes)
+    .where(eq(cuentasCorrientes.clienteId, clienteId))
+    .get()
+
+  return fila?.saldo ?? 0
+}
+
+export function registrarAbono(input: AbonoInput): MovimientoCuentaCorriente {
+  const db = getDb()
+  const monto = Math.round(input.monto * 100) / 100
+
+  if (!Number.isFinite(monto) || monto <= 0) {
+    throw new Error('El monto del abono tiene que ser mayor a cero')
+  }
+
+  if (input.metodo === 'cuenta_corriente') {
+    throw new Error('Un abono no se paga en cuenta corriente: eso no saldo ninguna deuda')
+  }
+
+  const movimiento = db.transaction((tx) => {
+    const cliente = tx
+      .select({ id: clientes.id, nombre: clientes.nombre, activo: clientes.activo })
+      .from(clientes)
+      .where(eq(clientes.id, input.clienteId))
+      .get()
+
+    if (!cliente) throw new Error('El cliente no existe')
+    if (!cliente.activo) throw new Error(`El cliente ${cliente.nombre} está archivado`)
+
+    const saldo = saldoDeCliente(tx, input.clienteId)
+
+    // Sin sobrepago: el saldo nunca queda negativo, así la columna "deuda" no
+    // tiene que significar dos cosas distintas.
+    if (monto > saldo + 0.001) {
+      throw new Error(
+        `El abono supera la deuda de ${cliente.nombre}, que es ${saldo.toFixed(2)}`,
+      )
+    }
+
+    /*
+      Va acá y no antes de abrir la transacción para que un cliente inexistente o
+      una deuda ya saldada reporten su propio error y no el de la caja. El
+      efectivo del abono entra a la gaveta, así que tiene que quedar atado a una
+      caja: sin `cajaId` el arqueo no lo contaría y el cierre mostraría un
+      faltante que sí tiene explicación.
+    */
+    if (input.metodo === 'efectivo' && input.cajaId == null) {
+      throw new Error('Un abono en efectivo necesita la caja abierta donde entra la plata')
+    }
+
+    return tx
+      .insert(cuentasCorrientes)
+      .values({
+        clienteId: input.clienteId,
+        tipo: 'abono',
+        monto,
+        ventaId: null,
+        metodo: input.metodo,
+        cajaId: input.cajaId ?? null,
+        nota: input.nota?.trim() || null,
+        fechaHora: new Date().toISOString(),
+      })
+      .returning()
+      .get()
+  })
+
+  return {
+    ...movimiento,
+    clienteNombre: db
+      .select({ nombre: clientes.nombre })
+      .from(clientes)
+      .where(eq(clientes.id, input.clienteId))
+      .get()!.nombre,
+    ventaTotal: null,
+  }
+}
+
+/** Deuda que no viene de una venta del mostrador. */
+export function registrarCargoManual(input: CargoManualInput): MovimientoCuentaCorriente {
+  const db = getDb()
+  const monto = Math.round(input.monto * 100) / 100
+
+  if (!Number.isFinite(monto) || monto <= 0) {
+    throw new Error('El monto de la deuda tiene que ser mayor a cero')
+  }
+
+  const cliente = db
+    .select({ nombre: clientes.nombre, activo: clientes.activo })
+    .from(clientes)
+    .where(eq(clientes.id, input.clienteId))
+    .get()
+
+  if (!cliente) throw new Error('El cliente no existe')
+  if (!cliente.activo) throw new Error(`El cliente ${cliente.nombre} está archivado`)
+
+  const movimiento = db
+    .insert(cuentasCorrientes)
+    .values({
+      clienteId: input.clienteId,
+      tipo: 'cargo',
+      monto,
+      ventaId: null,
+      metodo: null,
+      cajaId: null,
+      nota: input.nota?.trim() || null,
+      fechaHora: new Date().toISOString(),
+    })
+    .returning()
+    .get()
+
+  return { ...movimiento, clienteNombre: cliente.nombre, ventaTotal: null }
 }

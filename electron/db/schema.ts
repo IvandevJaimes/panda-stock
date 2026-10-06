@@ -3,6 +3,7 @@ import type {
   EstadoCaja,
   EstadoVenta,
   MetodoPago,
+  TipoMovimientoCuentaCorriente,
   TipoMovimientoStock,
   TipoTarifa,
   TipoVenta,
@@ -26,6 +27,15 @@ export const negocio = sqliteTable('negocio', {
 export const empleados = sqliteTable('empleados', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   nombre: text('nombre').notNull(),
+  activo: integer('activo', { mode: 'boolean' }).notNull().default(true),
+  creadoEn: text('creado_en').notNull(),
+})
+
+export const clientes = sqliteTable('clientes', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  nombre: text('nombre').notNull().unique(),
+  telefono: text('telefono'),
+  notas: text('notas'),
   activo: integer('activo', { mode: 'boolean' }).notNull().default(true),
   creadoEn: text('creado_en').notNull(),
 })
@@ -140,6 +150,33 @@ export const pagos = sqliteTable('pagos', {
   referencia: text('referencia'),
   fechaHora: text('fecha_hora').notNull(),
 })
+
+/*
+  Libro mayor de la deuda, un renglón por movimiento de plata. El saldo NO se
+  guarda: es `sum(cargos) - sum(abonos)`, para que no pueda quedar desfasado del
+  historial. `tipo` define el signo y `monto` siempre es positivo.
+
+  `ventaId` apunta a la venta que originó el cargo; queda null en los abonos y
+  en las deudas anotadas a mano. `cajaId` y `metodo` son de los abonos: dicen en
+  qué gaveta entró la plata, que es lo que hace que el arqueo de caja la vea.
+*/
+export const cuentasCorrientes = sqliteTable(
+  'cuentas_corrientes',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    clienteId: integer('cliente_id')
+      .notNull()
+      .references(() => clientes.id),
+    tipo: text('tipo').$type<TipoMovimientoCuentaCorriente>().notNull(),
+    monto: real('monto').notNull(),
+    ventaId: integer('venta_id').references(() => ventas.id),
+    metodo: text('metodo').$type<MetodoPago>(),
+    cajaId: integer('caja_id').references(() => cajas.id),
+    nota: text('nota'),
+    fechaHora: text('fecha_hora').notNull(),
+  },
+  (table) => [index('cuentas_corrientes_cliente_id_idx').on(table.clienteId)],
+)
 
 export const movimientosStock = sqliteTable(
   'movimientos_stock',

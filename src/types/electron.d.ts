@@ -1,20 +1,27 @@
 import type {
+  AbonoInput,
   AjusteStockInput,
   AperturaCajaInput,
   Caja,
   CajaConResponsable,
   CajaSummary,
+  CargoManualInput,
   Categoria,
   CierreCajaInput,
+  Cliente,
+  ClienteConSaldo,
+  ClienteInput,
   ConflictoCodigo,
   CrearMovimientoInput,
   Empleado,
+  FiltrosCuentaCorriente,
   FiltrosMovimientos,
   FiltrosProducto,
   FiltrosReportes,
   FiltrosVentas,
   Lote,
   Marca,
+  MovimientoCuentaCorriente,
   MovimientoStock,
   Negocio,
   NegocioInput,
@@ -25,12 +32,14 @@ import type {
   ProductoConLoteActivo,
   MasVendido,
   ReportesSummary,
+  ResumenCuentasCorrientes,
   Venta,
   VentaCompletaInput,
   VentaDetalle,
   VentaHistorial,
   VentaResult,
 } from '../../electron/db/types'
+import type { ResultadoDatosPrueba } from '../../electron/db/testdata.repository'
 
 export {}
 
@@ -104,6 +113,25 @@ declare global {
       }
       reportes: {
         getSummary: (filtros?: FiltrosReportes) => Promise<ReportesSummary>
+      }
+      cuentasCorrientes: {
+        getClientes: (opciones?: {
+          incluirInactivos?: boolean
+        }) => Promise<ClienteConSaldo[]>
+        crearCliente: (data: ClienteInput) => Promise<Cliente>
+        actualizarCliente: (id: number, data: ClienteInput) => Promise<void>
+        archivarCliente: (id: number) => Promise<void>
+        getResumen: () => Promise<ResumenCuentasCorrientes>
+        getMovimientos: (
+          filtros?: FiltrosCuentaCorriente,
+        ) => Promise<MovimientoCuentaCorriente[]>
+        registrarAbono: (data: AbonoInput) => Promise<void>
+        registrarCargo: (data: CargoManualInput) => Promise<void>
+      }
+      datosPrueba: {
+        hay: () => Promise<boolean>
+        generar: () => Promise<ResultadoDatosPrueba>
+        borrar: () => Promise<ResultadoDatosPrueba>
       }
       app: {
         /** Llega cuando se intentó cerrar la app con una caja abierta. */
