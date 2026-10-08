@@ -340,7 +340,7 @@ export function DropdownMenuContent({
         dropdownPanelBase,
         "pointer-events-none",
         originClase,
-        "transition-all",
+        "transition-[opacity,transform]",
         visible
           ? "scale-100 opacity-100 pointer-events-auto duration-200 ease-out"
           : "scale-95 opacity-0 duration-150 ease-in",
