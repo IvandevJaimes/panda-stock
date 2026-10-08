@@ -174,7 +174,7 @@ export interface DropdownMenuContentProps
   children: ReactNode;
 }
 
-const EXIT_DURATION_MS = 100;
+const EXIT_DURATION_MS = 150;
 /** Margen mínimo respecto de los bordes de la ventana para no desbordar. */
 const VIEWPORT_MARGIN = 8;
 /** Separación vertical entre el disparador y el panel. */
@@ -318,13 +318,9 @@ export function DropdownMenuContent({
     return () => window.clearTimeout(timeout);
   }, [open, mounted]);
 
-  // Desmonta recién cuando el fade de salida termina. Ignora los transitionend
-  // de los items (hover: transition-colors) verificando que el origen sea el panel.
-  const handleTransitionEnd = (event: React.TransitionEvent<HTMLDivElement>) => {
-    if (open || !mounted) return;
-    if (event.target !== event.currentTarget) return;
-    setMounted(false);
-  };
+  // Desmonta recién cuando termina el timer.
+  // Quitamos onTransitionEnd porque en React a veces dispara prematuramente
+  // por otras propiedades css o desincronización, causando parpadeos.
 
   if (!mounted) return null;
 
@@ -334,7 +330,6 @@ export function DropdownMenuContent({
       role="menu"
       onPointerDown={(event) => event.stopPropagation()}
       onClick={(event) => event.stopPropagation()}
-      onTransitionEnd={handleTransitionEnd}
       style={{
         left: coords?.left ?? 0,
         top: coords?.top ?? 0,
@@ -345,10 +340,10 @@ export function DropdownMenuContent({
         dropdownPanelBase,
         "pointer-events-none",
         originClase,
-        "transition-[opacity,transform] ease",
+        "transition-all",
         visible
-          ? "scale-100 opacity-100 pointer-events-auto duration-[170ms]"
-          : "scale-95 opacity-0 duration-[100ms]",
+          ? "scale-100 opacity-100 pointer-events-auto duration-200 ease-out"
+          : "scale-95 opacity-0 duration-150 ease-in",
         className,
       )}
       {...props}
