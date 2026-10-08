@@ -34,6 +34,7 @@ beforeEach(() => {
     totalVentas: 540,
     cantidadVentas: 2,
     totalEfectivo: 400,
+    totalEgresosEfectivo: 0,
     totalTransferencia: 0,
     totalTarjeta: 140,
     montoEsperado: 5400,
@@ -49,6 +50,8 @@ function cargarTickets(conItems: boolean) {
         id: 't1',
         numero: 1,
         metodoPago: 'efectivo',
+        clienteId: null,
+        clienteNombre: null,
         items: conItems
           ? [
               {
@@ -62,7 +65,14 @@ function cargarTickets(conItems: boolean) {
             ]
           : [],
       },
-      { id: 't2', numero: 2, metodoPago: 'efectivo', items: [] },
+      {
+        id: 't2',
+        numero: 2,
+        metodoPago: 'efectivo',
+        clienteId: null,
+        clienteNombre: null,
+        items: [],
+      },
     ],
     activeTicketId: 't1',
   })

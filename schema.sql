@@ -143,6 +143,12 @@ CREATE TABLE IF NOT EXISTS "seguridad_reportes" (
 	"actualizado_en" text NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS "seguridad_cuentas" (
+	"id" integer PRIMARY KEY NOT NULL,
+	"pin_hash" text NOT NULL,
+	"actualizado_en" text NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS "negocio" (
 	"id" integer PRIMARY KEY NOT NULL,
 	"nombre" text,

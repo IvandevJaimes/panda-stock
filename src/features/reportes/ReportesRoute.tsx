@@ -1,5 +1,9 @@
-import { lazy, Suspense } from 'react'
+﻿import { lazy, Suspense } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { LoadingState } from '../../components/ui/LoadingState'
+import { seguridadService } from '../../services/seguridad.service'
+import { ModalContrasena } from '../seguridad/ModalContrasena'
+import { useGateContrasena } from '../seguridad/useGateContrasena'
 
 /**
  * Reportes entra por `lazy` porque arrastra Recharts, que son ~424 kB minificados.
@@ -15,6 +19,25 @@ const ReportesPage = lazy(() =>
 )
 
 export function ReportesRoute() {
+  const { estado, unlock } = useGateContrasena()
+  const navigate = useNavigate()
+
+  if (estado === 'chequeando') {
+    return <LoadingState title="Verificando..." />
+  }
+
+  if (estado === 'bloqueado') {
+    return (
+      <ModalContrasena
+        titulo="Reportes bloqueados"
+        subtitulo="Ingresá tu contraseña para verlos."
+        onSubmit={(contrasena) => seguridadService.verifyPin(contrasena)}
+        onSuccess={unlock}
+        onCancelar={() => navigate('/pos', { replace: true })}
+      />
+    )
+  }
+
   return (
     <Suspense fallback={<LoadingState title="Cargando reportes..." />}>
       <ReportesPage />

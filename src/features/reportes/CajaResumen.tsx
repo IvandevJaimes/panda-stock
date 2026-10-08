@@ -2,6 +2,7 @@ import { Banknote, CreditCard, Landmark, Wallet } from 'lucide-react'
 import { KpiCard } from '../../components/ui/KpiCard'
 import { SOMBRA_CARD } from './estilos'
 import { formatearMoneda } from './reportsQuery'
+import { useSettingsStore } from '../../stores/settings.store'
 import type { CajaConResponsable, CajaSummary } from '../../../electron/db/types'
 
 type CajaResumenProps = {
@@ -18,6 +19,8 @@ type CajaResumenProps = {
  * total contra los KPIs del período y lea una diferencia inexistente.
  */
 export function CajaResumen({ caja, resumen }: CajaResumenProps) {
+  const ventasPorCajas = useSettingsStore((estado) => estado.ventasPorCajas)
+
   if (caja === null) {
     return (
       <section className={`w-full rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800/80 dark:bg-[#111827] ${SOMBRA_CARD}`}>
@@ -25,7 +28,9 @@ export function CajaResumen({ caja, resumen }: CajaResumenProps) {
           Caja activa
         </h3>
         <p className="mt-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-          No hay ninguna caja abierta. Abrila desde la sección Caja para poder cobrar ventas.
+          {ventasPorCajas
+            ? 'No hay ninguna caja abierta. Abrila desde el encabezado para poder cobrar ventas.'
+            : 'Las ventas por caja están desactivadas en Configuración. Se cobra directamente desde el POS.'}
         </p>
       </section>
     )
@@ -66,9 +71,13 @@ export function CajaResumen({ caja, resumen }: CajaResumenProps) {
         <KpiCard
           icon={<Banknote size={17} />}
           iconBgClass="bg-sky-100 text-sky-600 dark:bg-sky-950/40 dark:text-sky-400"
-          title="Efectivo"
+          title="Efectivo neto"
           value={formatearMoneda(resumen?.totalEfectivo ?? 0)}
-          subtitle="Cobrado en el mostrador"
+          subtitle={
+            resumen?.totalEgresosEfectivo
+              ? `${formatearMoneda(resumen.totalEgresosEfectivo)} reintegrados`
+              : 'Cobros netos en efectivo'
+          }
           className={SOMBRA_CARD}
         />
         <KpiCard
@@ -94,7 +103,7 @@ export function CajaResumen({ caja, resumen }: CajaResumenProps) {
         <span className="font-display font-semibold tabular-nums text-slate-900 dark:text-white">
           {formatearMoneda(resumen?.montoEsperado ?? caja.montoInicial)}
         </span>
-        . Es el fondo inicial más el efectivo cobrado; el arqueo lo confirma al cerrar el turno.
+        . Incluye el fondo inicial, cobros en efectivo y egresos por devoluciones; el arqueo lo confirma al cerrar el turno.
       </p>
     </section>
   )

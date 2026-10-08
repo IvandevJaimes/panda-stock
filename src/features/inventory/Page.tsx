@@ -26,6 +26,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useSearchParams } from "react-router-dom";
 import { cn } from "../../lib/cn";
 import { Button } from "../../components/ui/Button";
 import { ConfirmModal } from "../../components/ui/ConfirmModal";
@@ -277,6 +278,23 @@ export function InventoryPage() {
   const [marcas, setMarcas] = useState<Marca[]>([]);
   const [cargandoProductos, setCargandoProductos] = useState(true);
   const [errorProductos, setErrorProductos] = useState<string | null>(null);
+
+  // Handoff desde la campanita de notificaciones: `?q=<producto>` acota la
+  // grilla a ese único producto. El ajuste va en render (patrón "state desde
+  // props"): set-state-in-effect prohíbe el setState síncrono en un effect.
+  // El parámetro no se consume: queda en la URL como deep link de refresh.
+  const [params] = useSearchParams();
+  const qDesdeUrl = params.get("q");
+  const [qAplicado, setQAplicado] = useState<string | null>(null);
+  if (qDesdeUrl !== null && qDesdeUrl !== qAplicado) {
+    setQAplicado(qDesdeUrl);
+    setBusqueda(qDesdeUrl);
+    setBarcodeEscaneado(null);
+    setActiveKpiFilter("all");
+    setSelectedCategory("all");
+    setPaginaActual(1);
+    setCardFoco(null);
+  }
 
   const obtenerProductos = useCallback(async (): Promise<
     ProductoConLoteActivo[]

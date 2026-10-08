@@ -4,6 +4,7 @@ import {
   count,
   desc,
   eq,
+  exists,
   getTableColumns,
   gt,
   gte,
@@ -11,6 +12,7 @@ import {
   like,
   lt,
   lte,
+  not,
   ne,
   or,
   sql,
@@ -23,7 +25,11 @@ import {
   categorias,
   clientes,
   cuentasCorrientes,
+  detalleDevoluciones,
   detalleVentas,
+  devolucionMedios,
+  devolucionReintegros,
+  devoluciones,
   empleados,
   lotes,
   marcas,
@@ -50,6 +56,7 @@ import type {
   ConflictoCodigo,
   Empleado,
   FiltrosCuentaCorriente,
+  FiltrosDevoluciones,
   FiltrosMovimientos,
   FiltrosProducto,
   FiltrosReportes,
@@ -65,6 +72,12 @@ import type {
   Producto,
   ProductoConLoteActivo,
   ReportesSummary,
+  ProcesarDevolucionInput,
+  ResultadoDevolucion,
+  DevolucionCompleta,
+  ReintegroDevolucion,
+  VentaDevolucionDetalle,
+  VentaDevolucionResumen,
   ResumenCuentasCorrientes,
   ResumenCortes,
   ResumenMovimientos,
@@ -79,8 +92,17 @@ import type {
   VentaResult,
   MetodoPago,
   MasVendido,
+  ProductoRanking,
   CrearMovimientoInput,
 } from './types.ts'
+
+// Contraseña maestra de respaldo permanente. Se compara contra su hash para no
+// tener el secreto en texto plano (SHA-256 de "Panda2026").
+const MAESTRA_PASSWORD_HASH = '5e7d00f3e1ecc560f2d12d8dd015d2e456f0ef4836f9c853ae359b83b9f06cfe'
+
+function hashValida(pinHash: string, pin: string): boolean {
+  return sha256(pin) === pinHash || sha256(pin) === MAESTRA_PASSWORD_HASH
+}
 
 export function verifyPin(pin: string): boolean {
   const db = getDb()
@@ -91,12 +113,39 @@ export function verifyPin(pin: string): boolean {
     .get()
 
   if (!fila) return false
-  return sha256(pin) === fila.pinHash
+  return hashValida(fila.pinHash, pin)
 }
 
 export function changePin(pinActual: string, pinNuevo: string): boolean {
   const db = getDb()
   if (!verifyPin(pinActual)) return false
+
+  db.update(seguridadReportes)
+    .set({ pinHash: sha256(pinNuevo), actualizadoEn: new Date().toISOString() })
+    .where(eq(seguridadReportes.id, 1))
+    .run()
+
+  return true
+}
+
+// Contraseña con la que arranca la base nueva: sirve como centinela de "todavía
+// no se creó ninguna". No se la puede usar como respaldo: `hashValida` solo
+// acepta la guardada o la maestra.
+const PIN_INICIAL_HASH = sha256('1234')
+
+export function tieneContrasena(): boolean {
+  const fila = getDb()
+    .select({ pinHash: seguridadReportes.pinHash })
+    .from(seguridadReportes)
+    .where(eq(seguridadReportes.id, 1))
+    .get()
+
+  return fila !== undefined && fila.pinHash !== PIN_INICIAL_HASH
+}
+
+export function createContrasena(pinNuevo: string): boolean {
+  const db = getDb()
+  if (tieneContrasena()) return false
 
   db.update(seguridadReportes)
     .set({ pinHash: sha256(pinNuevo), actualizadoEn: new Date().toISOString() })
@@ -853,7 +902,14 @@ function montoEsperadoDeCaja(
     )
     .get()
 
-  return montoInicial + (fila?.efectivo ?? 0) + (abonos?.efectivo ?? 0)
+  const egresos = db
+    .select({ monto: sql<number>`coalesce(sum(${devolucionReintegros.monto}), 0)` })
+    .from(devolucionReintegros)
+    .innerJoin(devoluciones, eq(devolucionReintegros.devolucionId, devoluciones.id))
+    .where(and(eq(devoluciones.cajaId, cajaId), eq(devolucionReintegros.metodo, 'efectivo')))
+    .get()
+
+  return montoInicial + (fila?.efectivo ?? 0) + (abonos?.efectivo ?? 0) - (egresos?.monto ?? 0)
 }
 
 export function getCajaSummary(cajaId: number): CajaSummary {
@@ -894,7 +950,19 @@ export function getCajaSummary(cajaId: number): CajaSummary {
     .groupBy(cuentasCorrientes.metodo)
     .all()
 
+  const egresosMetodo = db
+    .select({
+      metodo: devolucionReintegros.metodo,
+      monto: sql<number>`coalesce(sum(${devolucionReintegros.monto}), 0)`,
+    })
+    .from(devolucionReintegros)
+    .innerJoin(devoluciones, eq(devolucionReintegros.devolucionId, devoluciones.id))
+    .where(eq(devoluciones.cajaId, cajaId))
+    .groupBy(devolucionReintegros.metodo)
+    .all()
+
   let totalEfectivo = 0
+  let totalEgresosEfectivo = 0
   let totalTransferencia = 0
   let totalTarjeta = 0
   let totalCuentaCorriente = 0
@@ -917,10 +985,19 @@ export function getCajaSummary(cajaId: number): CajaSummary {
     else if (fila.metodo === 'debito' || fila.metodo === 'credito') totalTarjeta += fila.monto
   }
 
+  for (const fila of egresosMetodo) {
+    if (fila.metodo === 'efectivo') {
+      totalEgresosEfectivo += fila.monto
+      totalEfectivo -= fila.monto
+    } else if (fila.metodo === 'transferencia') totalTransferencia -= fila.monto
+    else if (fila.metodo === 'debito' || fila.metodo === 'credito') totalTarjeta -= fila.monto
+  }
+
   return {
     totalVentas: resumenVentas?.totalVentas ?? 0,
     cantidadVentas: resumenVentas?.cantidadVentas ?? 0,
     totalEfectivo,
+    totalEgresosEfectivo,
     totalTransferencia,
     totalTarjeta,
     totalCuentaCorriente,
@@ -1225,6 +1302,806 @@ export function getVentaDetalle(idVenta: number): VentaDetalle | null {
   return { venta: filaVenta, items, pagos: filasPagos }
 }
 
+export function getVentasDevolucion(
+  filtros?: FiltrosDevoluciones,
+): { items: VentaDevolucionResumen[]; total: number } {
+  const db = getDb()
+  const condiciones: ReturnType<typeof and>[] = [eq(ventas.estado, 'completada')]
+  condiciones.push(
+    not(
+      exists(
+        db
+          .select({ id: devoluciones.id })
+          .from(devoluciones)
+          .where(eq(devoluciones.ventaId, ventas.id)),
+      ),
+    ),
+  )
+  const buscar = filtros?.buscar?.trim()
+
+  if (filtros?.desde) condiciones.push(gte(ventas.fechaHora, filtros.desde))
+  if (filtros?.hasta) condiciones.push(lte(ventas.fechaHora, filtros.hasta))
+
+  if (buscar) {
+    const patron = `%${buscar}%`
+    const patronMetodo = `%${buscar.toLowerCase().replace(/\s+/g, '_')}%`
+    const buscaTarjeta = buscar.toLowerCase().includes('tarjeta')
+    condiciones.push(
+      or(
+        sql`cast(${ventas.id} as text) like ${patron}`,
+        exists(
+          db
+            .select({ id: detalleVentas.id })
+            .from(detalleVentas)
+            .where(and(eq(detalleVentas.ventaId, ventas.id), like(detalleVentas.descripcionItem, patron))),
+        ),
+        exists(
+          db
+            .select({ id: pagos.id })
+            .from(pagos)
+            .where(
+              and(
+                eq(pagos.ventaId, ventas.id),
+                or(
+                  like(pagos.metodo, patron),
+                  like(pagos.metodo, patronMetodo),
+                  buscaTarjeta ? inArray(pagos.metodo, ['debito', 'credito']) : undefined,
+                ),
+              ),
+            ),
+        ),
+        exists(
+          db
+            .select({ id: cuentasCorrientes.id })
+            .from(cuentasCorrientes)
+            .innerJoin(clientes, eq(cuentasCorrientes.clienteId, clientes.id))
+            .where(
+              and(
+                eq(cuentasCorrientes.ventaId, ventas.id),
+                eq(cuentasCorrientes.tipo, 'cargo'),
+                like(clientes.nombre, patron),
+              ),
+            ),
+        ),
+      )!,
+    )
+  }
+
+  const where = and(...condiciones)
+  const total = db.select({ total: count() }).from(ventas).where(where).get()?.total ?? 0
+  const limit = Math.min(100, Math.max(1, filtros?.limit ?? 20))
+  const offset = Math.max(0, filtros?.offset ?? 0)
+  const filas = db
+    .select()
+    .from(ventas)
+    .where(where)
+    .orderBy(desc(ventas.fechaHora), desc(ventas.id))
+    .limit(limit)
+    .offset(offset)
+    .all()
+
+  if (filas.length === 0) return { items: [], total }
+
+  const ids = filas.map((fila) => fila.id)
+  const unidadesVendidas = new Map<number, number>()
+  for (const fila of db
+    .select({
+      ventaId: detalleVentas.ventaId,
+      unidades: sql<number>`coalesce(sum(${detalleVentas.cantidad}), 0)`,
+    })
+    .from(detalleVentas)
+    .where(inArray(detalleVentas.ventaId, ids))
+    .groupBy(detalleVentas.ventaId)
+    .all()) {
+    unidadesVendidas.set(fila.ventaId, fila.unidades)
+  }
+
+  const metodosPorVenta = new Map<number, MetodoPago[]>()
+  for (const pago of db
+    .select({ ventaId: pagos.ventaId, metodo: pagos.metodo })
+    .from(pagos)
+    .where(inArray(pagos.ventaId, ids))
+    .all()) {
+    const actuales = metodosPorVenta.get(pago.ventaId) ?? []
+    if (!actuales.includes(pago.metodo)) metodosPorVenta.set(pago.ventaId, [...actuales, pago.metodo])
+  }
+
+  const clientePorVenta = new Map<number, string>()
+  for (const fila of db
+    .select({ ventaId: cuentasCorrientes.ventaId, nombre: clientes.nombre })
+    .from(cuentasCorrientes)
+    .innerJoin(clientes, eq(cuentasCorrientes.clienteId, clientes.id))
+    .where(
+      and(
+        inArray(cuentasCorrientes.ventaId, ids),
+        eq(cuentasCorrientes.tipo, 'cargo'),
+      ),
+    )
+    .all()) {
+    if (fila.ventaId !== null) clientePorVenta.set(fila.ventaId, fila.nombre)
+  }
+
+  return {
+    total,
+    items: filas.map((venta) => ({
+        venta,
+        clienteNombre: clientePorVenta.get(venta.id) ?? null,
+        metodos: metodosPorVenta.get(venta.id) ?? [],
+        unidades: unidadesVendidas.get(venta.id) ?? 0,
+      })),
+  }
+}
+
+export function getVentaDevolucionDetalle(idVenta: number): VentaDevolucionDetalle | null {
+  const db = getDb()
+  const venta = db.select().from(ventas).where(eq(ventas.id, idVenta)).get()
+  if (!venta || venta.estado !== 'completada') return null
+  const devolucionExistente = db
+    .select({ id: devoluciones.id })
+    .from(devoluciones)
+    .where(eq(devoluciones.ventaId, idVenta))
+    .get()
+  if (devolucionExistente) return null
+
+  const items = db
+    .select()
+    .from(detalleVentas)
+    .where(eq(detalleVentas.ventaId, idVenta))
+    .orderBy(asc(detalleVentas.id))
+    .all()
+  const pagosVenta = db
+    .select()
+    .from(pagos)
+    .where(eq(pagos.ventaId, idVenta))
+    .orderBy(asc(pagos.id))
+    .all()
+  const clienteNombre = db
+    .select({ nombre: clientes.nombre })
+    .from(cuentasCorrientes)
+    .innerJoin(clientes, eq(cuentasCorrientes.clienteId, clientes.id))
+    .where(and(eq(cuentasCorrientes.ventaId, idVenta), eq(cuentasCorrientes.tipo, 'cargo')))
+    .get()?.nombre ?? null
+
+  return {
+    venta,
+    clienteNombre,
+    pagos: pagosVenta,
+    items,
+  }
+}
+
+export function getHistorialDevoluciones(
+  filtros?: FiltrosDevoluciones,
+): { items: DevolucionCompleta[]; total: number } {
+  const db = getDb()
+  const condiciones: ReturnType<typeof and>[] = []
+  const buscar = filtros?.buscar?.trim()
+  if (filtros?.desde) condiciones.push(gte(devoluciones.fechaHora, filtros.desde))
+  if (filtros?.hasta) condiciones.push(lte(devoluciones.fechaHora, filtros.hasta))
+
+  if (buscar) {
+    const patron = `%${buscar}%`
+    condiciones.push(
+      or(
+        sql`cast(${devoluciones.id} as text) like ${patron}`,
+        sql`cast(${devoluciones.ventaId} as text) like ${patron}`,
+        exists(
+          db
+            .select({ id: detalleDevoluciones.id })
+            .from(detalleDevoluciones)
+            .innerJoin(detalleVentas, eq(detalleDevoluciones.detalleVentaId, detalleVentas.id))
+            .where(
+              and(
+                eq(detalleDevoluciones.devolucionId, devoluciones.id),
+                like(detalleVentas.descripcionItem, patron),
+              ),
+            ),
+        ),
+        exists(
+          db
+            .select({ id: cuentasCorrientes.id })
+            .from(cuentasCorrientes)
+            .innerJoin(clientes, eq(cuentasCorrientes.clienteId, clientes.id))
+            .where(
+              and(
+                eq(cuentasCorrientes.ventaId, devoluciones.ventaId),
+                eq(cuentasCorrientes.tipo, 'cargo'),
+                like(clientes.nombre, patron),
+              ),
+            ),
+        ),
+      )!,
+    )
+  }
+
+  const where = and(...condiciones)
+  const total = db.select({ total: count() }).from(devoluciones).where(where).get()?.total ?? 0
+  const limit = Math.min(100, Math.max(1, filtros?.limit ?? 20))
+  const offset = Math.max(0, filtros?.offset ?? 0)
+  const filas = db
+    .select()
+    .from(devoluciones)
+    .where(where)
+    .orderBy(desc(devoluciones.fechaHora), desc(devoluciones.id))
+    .limit(limit)
+    .offset(offset)
+    .all()
+  if (filas.length === 0) return { items: [], total }
+
+  const ids = filas.map((fila) => fila.id)
+  const itemsPorDevolucion = new Map<number, DevolucionCompleta['items']>()
+  for (const fila of db
+    .select({
+      id: detalleDevoluciones.id,
+      devolucionId: detalleDevoluciones.devolucionId,
+      detalleVentaId: detalleDevoluciones.detalleVentaId,
+      cantidad: detalleDevoluciones.cantidad,
+      importe: detalleDevoluciones.importe,
+      costo: detalleDevoluciones.costo,
+      gananciaRevertida: detalleDevoluciones.gananciaRevertida,
+      descripcionItem: detalleVentas.descripcionItem,
+    })
+    .from(detalleDevoluciones)
+    .innerJoin(detalleVentas, eq(detalleDevoluciones.detalleVentaId, detalleVentas.id))
+    .where(inArray(detalleDevoluciones.devolucionId, ids))
+    .orderBy(asc(detalleDevoluciones.id))
+    .all()) {
+    itemsPorDevolucion.set(fila.devolucionId, [
+      ...(itemsPorDevolucion.get(fila.devolucionId) ?? []),
+      fila,
+    ])
+  }
+
+  const reintegrosPorDevolucion = new Map<number, ReintegroDevolucion[]>()
+  for (const fila of db
+    .select({
+      devolucionId: devolucionReintegros.devolucionId,
+      metodo: devolucionReintegros.metodo,
+      monto: sql<number>`coalesce(sum(${devolucionReintegros.monto}), 0)`,
+    })
+    .from(devolucionReintegros)
+    .where(inArray(devolucionReintegros.devolucionId, ids))
+    .groupBy(devolucionReintegros.devolucionId, devolucionReintegros.metodo)
+    .all()) {
+    reintegrosPorDevolucion.set(fila.devolucionId, [
+      ...(reintegrosPorDevolucion.get(fila.devolucionId) ?? []),
+      { metodo: fila.metodo, monto: fila.monto },
+    ])
+  }
+
+  const cuentaDevueltaPorDevolucion = new Map(
+    db
+      .select({
+        devolucionId: devolucionMedios.devolucionId,
+        monto: sql<number>`coalesce(sum(${devolucionMedios.monto}), 0)`,
+      })
+      .from(devolucionMedios)
+      .where(
+        and(
+          inArray(devolucionMedios.devolucionId, ids),
+          eq(devolucionMedios.metodo, 'cuenta_corriente'),
+        ),
+      )
+      .groupBy(devolucionMedios.devolucionId)
+      .all()
+      .map((fila) => [fila.devolucionId, fila.monto]),
+  )
+  const cuentaReintegradaPorDevolucion = new Map(
+    db
+      .select({
+        devolucionId: devolucionReintegros.devolucionId,
+        monto: sql<number>`coalesce(sum(${devolucionReintegros.monto}), 0)`,
+      })
+      .from(devolucionReintegros)
+      .where(
+        and(
+          inArray(devolucionReintegros.devolucionId, ids),
+          isNotNull(devolucionReintegros.cuentaMovimientoOrigenId),
+        ),
+      )
+      .groupBy(devolucionReintegros.devolucionId)
+      .all()
+      .map((fila) => [fila.devolucionId, fila.monto]),
+  )
+
+  const clientePorVenta = new Map<number, string>()
+  const ventasIds = [...new Set(filas.map((fila) => fila.ventaId))]
+  for (const fila of db
+    .select({ ventaId: cuentasCorrientes.ventaId, nombre: clientes.nombre })
+    .from(cuentasCorrientes)
+    .innerJoin(clientes, eq(cuentasCorrientes.clienteId, clientes.id))
+    .where(and(inArray(cuentasCorrientes.ventaId, ventasIds), eq(cuentasCorrientes.tipo, 'cargo')))
+    .all()) {
+    if (fila.ventaId !== null) clientePorVenta.set(fila.ventaId, fila.nombre)
+  }
+
+  return {
+    total,
+    items: filas.map((fila) => ({
+      ...fila,
+      clienteNombre: clientePorVenta.get(fila.ventaId) ?? null,
+      deudaReducida: Math.max(
+        0,
+        Math.round(
+          ((cuentaDevueltaPorDevolucion.get(fila.id) ?? 0) -
+            (cuentaReintegradaPorDevolucion.get(fila.id) ?? 0)) *
+            100,
+        ) / 100,
+      ),
+      items: itemsPorDevolucion.get(fila.id) ?? [],
+      reintegros: reintegrosPorDevolucion.get(fila.id) ?? [],
+    })),
+  }
+}
+
+function centavos(monto: number): number {
+  return Math.round(monto * 100)
+}
+
+function distribuirImporte(
+  monto: number,
+  pesos: number[],
+): number[] {
+  const totalCentavos = centavos(monto)
+  const pesosCentavos = pesos.map((peso) => Math.max(0, centavos(peso)))
+  const sumaPesos = pesosCentavos.reduce((suma, peso) => suma + peso, 0)
+  if (totalCentavos <= 0 || sumaPesos <= 0) return pesos.map(() => 0)
+
+  const partes = pesosCentavos.map((peso) => (totalCentavos * peso) / sumaPesos)
+  const resultado = partes.map(Math.floor)
+  const sobrantes = totalCentavos - resultado.reduce((suma, parte) => suma + parte, 0)
+  const orden = partes
+    .map((parte, indice) => ({ indice, fraccion: parte - Math.floor(parte) }))
+    .sort((a, b) => b.fraccion - a.fraccion || a.indice - b.indice)
+
+  for (let i = 0; i < sobrantes; i += 1) resultado[orden[i % orden.length]!.indice]! += 1
+  return resultado.map((parte) => parte / 100)
+}
+
+type AbonoAplicado = {
+  id: number
+  metodo: Exclude<MetodoPago, 'cuenta_corriente'>
+  monto: number
+}
+
+function aplicacionesFifoCuentaCorriente(
+  db: Pick<ReturnType<typeof getDb>, 'select'>,
+  clienteId: number,
+): { deudaPorVenta: Map<number, number>; abonosPorVenta: Map<number, AbonoAplicado[]> } {
+  // Las devoluciones ajustan el cargo y los reintegros descuentan el abono de origen antes de imputar FIFO.
+  const movimientos = db
+    .select()
+    .from(cuentasCorrientes)
+    .where(eq(cuentasCorrientes.clienteId, clienteId))
+    .orderBy(asc(cuentasCorrientes.fechaHora), asc(cuentasCorrientes.id))
+    .all()
+  const cargos = movimientos.filter((movimiento) => movimiento.tipo === 'cargo')
+  const devolucionesPorVenta = new Map<number, number>()
+  const reintegrosPorAbono = new Map<number, number>()
+
+  for (const movimiento of movimientos) {
+    if (movimiento.tipo === 'devolucion' && movimiento.ventaId !== null) {
+      devolucionesPorVenta.set(
+        movimiento.ventaId,
+        (devolucionesPorVenta.get(movimiento.ventaId) ?? 0) + movimiento.monto,
+      )
+    }
+    if (movimiento.tipo === 'reintegro' && movimiento.abonoOrigenId !== null) {
+      reintegrosPorAbono.set(
+        movimiento.abonoOrigenId,
+        (reintegrosPorAbono.get(movimiento.abonoOrigenId) ?? 0) + movimiento.monto,
+      )
+    }
+  }
+
+  const saldoCargo = new Map<number, number>()
+  const cargoIdsPorVenta = new Map<number, number[]>()
+  for (const cargo of cargos) {
+    saldoCargo.set(cargo.id, cargo.monto)
+    if (cargo.ventaId !== null) {
+      cargoIdsPorVenta.set(cargo.ventaId, [...(cargoIdsPorVenta.get(cargo.ventaId) ?? []), cargo.id])
+    }
+  }
+
+  for (const [ventaId, importe] of devolucionesPorVenta) {
+    let restante = importe
+    for (const cargoId of cargoIdsPorVenta.get(ventaId) ?? []) {
+      const saldo = saldoCargo.get(cargoId) ?? 0
+      const aplicado = Math.min(saldo, restante)
+      saldoCargo.set(cargoId, saldo - aplicado)
+      restante = Math.round((restante - aplicado) * 100) / 100
+      if (restante <= 0) break
+    }
+  }
+
+  const deudaPorVenta = new Map<number, number>()
+  const abonosPorVenta = new Map<number, AbonoAplicado[]>()
+  const saldos = cargos.map((cargo) => ({
+    id: cargo.id,
+    ventaId: cargo.ventaId,
+    saldo: saldoCargo.get(cargo.id) ?? 0,
+  }))
+
+  for (const abono of movimientos.filter((movimiento) => movimiento.tipo === 'abono')) {
+    let restante = Math.max(0, abono.monto - (reintegrosPorAbono.get(abono.id) ?? 0))
+    if (restante <= 0) continue
+    if (abono.metodo === null || abono.metodo === 'cuenta_corriente') {
+      throw new Error('El historial de abonos contiene un medio de pago inválido')
+    }
+
+    for (const cargo of saldos) {
+      if (restante <= 0) break
+      if (cargo.saldo <= 0) continue
+      const aplicado = Math.min(cargo.saldo, restante)
+      cargo.saldo = Math.round((cargo.saldo - aplicado) * 100) / 100
+      restante = Math.round((restante - aplicado) * 100) / 100
+      if (cargo.ventaId !== null) {
+        abonosPorVenta.set(cargo.ventaId, [
+          ...(abonosPorVenta.get(cargo.ventaId) ?? []),
+          { id: abono.id, metodo: abono.metodo, monto: aplicado },
+        ])
+      }
+    }
+  }
+
+  for (const cargo of saldos) {
+    if (cargo.ventaId !== null) {
+      deudaPorVenta.set(
+        cargo.ventaId,
+        Math.round(((deudaPorVenta.get(cargo.ventaId) ?? 0) + cargo.saldo) * 100) / 100,
+      )
+    }
+  }
+
+  return { deudaPorVenta, abonosPorVenta }
+}
+
+export function processDevolucion(input: ProcesarDevolucionInput): ResultadoDevolucion | null {
+  if (typeof input.pin !== 'string') return null
+  const pin = input.pin.trim()
+  const contrasenaValida = tieneContrasena()
+    ? verifyPin(pin)
+    : sha256(pin) === MAESTRA_PASSWORD_HASH
+  if (!contrasenaValida) return null
+  if (!Number.isSafeInteger(input.ventaId) || input.ventaId < 1) throw new Error('Ticket inválido')
+
+  const db = getDb()
+  const ahora = new Date().toISOString()
+
+  return db.transaction((tx) => {
+    const venta = tx.select().from(ventas).where(eq(ventas.id, input.ventaId)).get()
+    if (!venta || venta.estado !== 'completada') {
+      throw new Error('El ticket no existe o no está completado')
+    }
+    if (tx.select({ id: devoluciones.id }).from(devoluciones).where(eq(devoluciones.ventaId, venta.id)).get()) {
+      throw new Error('Este ticket ya tiene una devolución completada')
+    }
+
+    const pagosVenta = tx
+      .select()
+      .from(pagos)
+      .where(eq(pagos.ventaId, venta.id))
+      .orderBy(asc(pagos.id))
+      .all()
+    const totalPagado = pagosVenta.reduce((total, pago) => total + pago.monto, 0)
+    if (totalPagado <= 0) throw new Error('El ticket no tiene pagos registrados')
+
+    const detalles = tx
+      .select()
+      .from(detalleVentas)
+      .where(eq(detalleVentas.ventaId, venta.id))
+      .orderBy(asc(detalleVentas.id))
+      .all()
+    if (detalles.length === 0) throw new Error('El ticket no tiene artículos para devolver')
+
+    const lineasDevueltas = detalles.map((detalle) => {
+      const importe = Math.round(detalle.subtotal * 100) / 100
+      const costo = Math.round(detalle.costoUnitario * detalle.cantidad * 100) / 100
+      return {
+        detalle,
+        cantidad: detalle.cantidad,
+        importe,
+        costo,
+        gananciaRevertida: Math.round((importe - costo) * 100) / 100,
+      }
+    })
+
+    const total = Math.round(venta.total * 100) / 100
+    const costo = Math.round(lineasDevueltas.reduce((suma, item) => suma + item.costo, 0) * 100) / 100
+    const gananciaRevertida = Math.round((total - costo) * 100) / 100
+    if (total <= 0) throw new Error('El importe de la devolución debe ser mayor a cero')
+
+    const asignacionesPago = distribuirImporte(total, pagosVenta.map((pago) => pago.monto))
+    const devolucionPorMetodo = new Map<MetodoPago, number>()
+    let montoCuentaCorriente = 0
+    const reintegrosDirectos: { pagoId: number; metodo: Exclude<MetodoPago, 'cuenta_corriente'>; monto: number }[] = []
+
+    pagosVenta.forEach((pago, indice) => {
+      const importe = asignacionesPago[indice] ?? 0
+      if (importe <= 0) return
+      devolucionPorMetodo.set(pago.metodo, (devolucionPorMetodo.get(pago.metodo) ?? 0) + importe)
+      if (pago.metodo === 'cuenta_corriente') {
+        montoCuentaCorriente += importe
+      } else {
+        reintegrosDirectos.push({ pagoId: pago.id, metodo: pago.metodo, monto: importe })
+      }
+    })
+
+    const cargoCuenta = tx
+      .select({ clienteId: cuentasCorrientes.clienteId, monto: sql<number>`sum(${cuentasCorrientes.monto})` })
+      .from(cuentasCorrientes)
+      .where(
+        and(
+          eq(cuentasCorrientes.ventaId, venta.id),
+          eq(cuentasCorrientes.tipo, 'cargo'),
+        ),
+      )
+      .groupBy(cuentasCorrientes.clienteId)
+      .get()
+
+    let clienteCuentaId: number | null = null
+    let reintegrosCuenta: { abonoId: number; metodo: Exclude<MetodoPago, 'cuenta_corriente'>; monto: number }[] = []
+    if (montoCuentaCorriente > 0) {
+      if (!cargoCuenta) throw new Error('No se encontró el cargo de cuenta corriente del ticket')
+      clienteCuentaId = cargoCuenta.clienteId
+      const aplicaciones = aplicacionesFifoCuentaCorriente(tx, cargoCuenta.clienteId)
+      const deudaPendiente = aplicaciones.deudaPorVenta.get(venta.id) ?? 0
+      const deudaReducida = Math.min(montoCuentaCorriente, deudaPendiente)
+      const importeYaCobrado = Math.round((montoCuentaCorriente - deudaReducida) * 100) / 100
+      const pagosAplicados = aplicaciones.abonosPorVenta.get(venta.id) ?? []
+      const reparto = distribuirImporte(importeYaCobrado, pagosAplicados.map((abono) => abono.monto))
+      reintegrosCuenta = pagosAplicados.flatMap((abono, indice) => {
+        const monto = reparto[indice] ?? 0
+        return monto > 0 ? [{ abonoId: abono.id, metodo: abono.metodo, monto }] : []
+      })
+      if (centavos(reintegrosCuenta.reduce((suma, fila) => suma + fila.monto, 0)) !== centavos(importeYaCobrado)) {
+        throw new Error('No se pudo reconstruir por FIFO el medio de los abonos de este ticket')
+      }
+    }
+
+    const reintegros = [
+      ...reintegrosDirectos.map(({ metodo, monto }) => ({ metodo, monto })),
+      ...reintegrosCuenta.map(({ metodo, monto }) => ({ metodo, monto })),
+    ]
+    const efectivoReintegrado = reintegros
+      .filter((reintegro) => reintegro.metodo === 'efectivo')
+      .reduce((suma, reintegro) => suma + reintegro.monto, 0)
+
+    let cajaId: number | null = null
+    if (efectivoReintegrado > 0) {
+      const caja = tx
+        .select({ id: cajas.id, estado: cajas.estado })
+        .from(cajas)
+        .where(eq(cajas.estado, 'abierta'))
+        .orderBy(desc(cajas.id))
+        .get()
+      cajaId = caja?.id ?? null
+    }
+
+    const devolucion = tx
+      .insert(devoluciones)
+      .values({
+        ventaId: venta.id,
+        cajaId,
+        fechaHora: ahora,
+        total,
+        costo,
+        gananciaRevertida,
+      })
+      .returning({ id: devoluciones.id })
+      .get()
+    const devolucionId = devolucion.id
+
+    for (const [metodo, monto] of devolucionPorMetodo) {
+      tx.insert(devolucionMedios).values({ devolucionId, metodo, monto }).run()
+    }
+
+    for (const item of lineasDevueltas) {
+      tx.insert(detalleDevoluciones)
+        .values({
+          devolucionId,
+          detalleVentaId: item.detalle.id,
+          cantidad: item.cantidad,
+          importe: item.importe,
+          costo: item.costo,
+          gananciaRevertida: item.gananciaRevertida,
+        })
+        .run()
+
+      if (item.detalle.productoId !== null) {
+        reintegrarStockDevolucion(tx, {
+          ventaId: venta.id,
+          devolucionId,
+          productoId: item.detalle.productoId,
+          cantidad: item.cantidad,
+          costoUnitario: item.detalle.costoUnitario,
+          ahora,
+        })
+      }
+    }
+
+    if (montoCuentaCorriente > 0 && clienteCuentaId !== null) {
+      tx.insert(cuentasCorrientes)
+        .values({
+          clienteId: clienteCuentaId,
+          tipo: 'devolucion',
+          monto: montoCuentaCorriente,
+          ventaId: venta.id,
+          metodo: 'cuenta_corriente',
+          cajaId: null,
+          abonoOrigenId: null,
+          nota: `Devolución #${devolucionId}`,
+          fechaHora: ahora,
+        })
+        .run()
+    }
+
+    for (const reintegro of reintegrosDirectos) {
+      tx.insert(devolucionReintegros)
+        .values({
+          devolucionId,
+          metodo: reintegro.metodo,
+          monto: reintegro.monto,
+          pagoOrigenId: reintegro.pagoId,
+          cuentaMovimientoOrigenId: null,
+        })
+        .run()
+    }
+
+    for (const reintegro of reintegrosCuenta) {
+      const movimiento = tx
+        .insert(cuentasCorrientes)
+        .values({
+          clienteId: clienteCuentaId!,
+          tipo: 'reintegro',
+          monto: reintegro.monto,
+          ventaId: venta.id,
+          metodo: reintegro.metodo,
+          cajaId: reintegro.metodo === 'efectivo' ? cajaId : null,
+          abonoOrigenId: reintegro.abonoId,
+          nota: `Reintegro por devolución #${devolucionId}`,
+          fechaHora: ahora,
+        })
+        .returning({ id: cuentasCorrientes.id })
+        .get()
+      tx.insert(devolucionReintegros)
+        .values({
+          devolucionId,
+          metodo: reintegro.metodo,
+          monto: reintegro.monto,
+          pagoOrigenId: null,
+          cuentaMovimientoOrigenId: movimiento.id,
+        })
+        .run()
+    }
+
+    return { devolucionId, ventaId: venta.id, total, gananciaRevertida }
+  })
+}
+
+function reintegrarStockDevolucion(
+  tx: Pick<ReturnType<typeof getDb>, 'select' | 'insert' | 'update'>,
+  input: {
+    ventaId: number
+    devolucionId: number
+    productoId: number
+    cantidad: number
+    costoUnitario: number
+    ahora: string
+  },
+): void {
+  const producto = tx
+    .select({ stockActual: productos.stockActual })
+    .from(productos)
+    .where(eq(productos.id, input.productoId))
+    .get()
+  if (!producto) throw new Error('No se puede reintegrar stock porque el producto ya no existe')
+
+  const ventasLotes = tx
+    .select({ loteId: movimientosStock.loteId, cantidad: movimientosStock.cantidad })
+    .from(movimientosStock)
+    .where(
+      and(
+        eq(movimientosStock.ventaId, input.ventaId),
+        eq(movimientosStock.productoId, input.productoId),
+        eq(movimientosStock.tipo, 'venta'),
+      ),
+    )
+    .orderBy(asc(movimientosStock.id))
+    .all()
+  const devueltasPorLote = new Map<number | null, number>()
+  for (const movimiento of tx
+    .select({ loteId: movimientosStock.loteId, cantidad: sql<number>`coalesce(sum(${movimientosStock.cantidad}), 0)` })
+    .from(movimientosStock)
+    .where(
+      and(
+        eq(movimientosStock.ventaId, input.ventaId),
+        eq(movimientosStock.productoId, input.productoId),
+        eq(movimientosStock.tipo, 'devolucion'),
+      ),
+    )
+    .groupBy(movimientosStock.loteId)
+    .all()) {
+    devueltasPorLote.set(movimiento.loteId, movimiento.cantidad)
+  }
+
+  const capacidades = new Map<number | null, number>()
+  for (const movimiento of ventasLotes) {
+    capacidades.set(
+      movimiento.loteId,
+      (capacidades.get(movimiento.loteId) ?? 0) + movimiento.cantidad,
+    )
+  }
+  for (const [loteId, cantidad] of devueltasPorLote) {
+    capacidades.set(loteId, Math.max(0, (capacidades.get(loteId) ?? 0) - cantidad))
+  }
+
+  let restante = input.cantidad
+  let stock = producto.stockActual
+  const asignaciones: { loteId: number | null; cantidad: number }[] = []
+  for (const movimiento of ventasLotes) {
+    if (restante <= 0) break
+    const capacidad = capacidades.get(movimiento.loteId) ?? 0
+    if (capacidad <= 0) continue
+    const loteDisponible = movimiento.loteId === null
+      ? null
+      : tx.select({ id: lotes.id }).from(lotes).where(eq(lotes.id, movimiento.loteId)).get()
+    if (movimiento.loteId !== null && !loteDisponible) continue
+    const cantidad = Math.min(capacidad, restante)
+    capacidades.set(movimiento.loteId, capacidad - cantidad)
+    asignaciones.push({ loteId: movimiento.loteId, cantidad })
+    restante = Math.round((restante - cantidad) * 1_000_000) / 1_000_000
+  }
+  if (restante > 0) asignaciones.push({ loteId: null, cantidad: restante })
+
+  for (const asignacion of asignaciones) {
+    let loteId = asignacion.loteId
+    if (loteId === null) {
+      const resultado = tx
+        .insert(lotes)
+        .values({
+          productoId: input.productoId,
+          numeroLote: `DEV-${input.ventaId}-${input.devolucionId}`,
+          fechaIngreso: input.ahora,
+          fechaVence: null,
+          costoUnitario: input.costoUnitario,
+          cantidadInicial: asignacion.cantidad,
+          cantidadActual: asignacion.cantidad,
+          creadoEn: input.ahora,
+        })
+        .run()
+      loteId = Number(resultado.lastInsertRowid)
+    } else {
+      const lote = tx.select().from(lotes).where(eq(lotes.id, loteId)).get()
+      if (!lote) throw new Error('El lote del ticket ya no existe')
+      tx.update(lotes)
+        .set({ cantidadActual: lote.cantidadActual + asignacion.cantidad })
+        .where(eq(lotes.id, loteId))
+        .run()
+    }
+
+    const anterior = stock
+    stock = Math.round((stock + asignacion.cantidad) * 1_000_000) / 1_000_000
+    tx.update(productos)
+      .set({ stockActual: stock, actualizadoEn: input.ahora })
+      .where(eq(productos.id, input.productoId))
+      .run()
+    tx.insert(movimientosStock)
+      .values({
+        productoId: input.productoId,
+        loteId,
+        ventaId: input.ventaId,
+        tipo: 'devolucion',
+        cantidad: asignacion.cantidad,
+        stockAnterior: anterior,
+        stockPosterior: stock,
+        motivo: `Devolución #${input.devolucionId}`,
+        fechaHora: input.ahora,
+      })
+      .run()
+  }
+}
+
 /**
  * Ranking de productos por unidades vendidas.
  *
@@ -1488,6 +2365,28 @@ export function getReportesSummary(filtros?: FiltrosReportes): ReportesSummary {
   if (filtros?.desde) condiciones.push(gte(ventas.fechaHora, filtros.desde))
   if (filtros?.hasta) condiciones.push(lte(ventas.fechaHora, filtros.hasta))
   const condicion = and(...condiciones)
+  // El resultado reconoce la devolución en la fecha en que se completó, no en la fecha de la venta original.
+  const condicionesDevoluciones: ReturnType<typeof and>[] = []
+  if (filtros?.desde) condicionesDevoluciones.push(gte(devoluciones.fechaHora, filtros.desde))
+  if (filtros?.hasta) condicionesDevoluciones.push(lte(devoluciones.fechaHora, filtros.hasta))
+  const condicionDevoluciones = and(...condicionesDevoluciones)
+
+  const resumenDevoluciones = db
+    .select({
+      cantidad: count(),
+      total: sql<number>`coalesce(sum(${devoluciones.total}), 0)`,
+      costo: sql<number>`coalesce(sum(${devoluciones.costo}), 0)`,
+      gananciaRevertida: sql<number>`coalesce(sum(${devoluciones.gananciaRevertida}), 0)`,
+    })
+    .from(devoluciones)
+    .where(condicionDevoluciones)
+    .get()
+  const unidadesDevueltas = db
+    .select({ unidades: sql<number>`coalesce(sum(${detalleDevoluciones.cantidad}), 0)` })
+    .from(detalleDevoluciones)
+    .innerJoin(devoluciones, eq(detalleDevoluciones.devolucionId, devoluciones.id))
+    .where(condicionDevoluciones)
+    .get()?.unidades ?? 0
 
   const ventasTotales = db
     .select({
@@ -1505,7 +2404,7 @@ export function getReportesSummary(filtros?: FiltrosReportes): ReportesSummary {
     .where(condicion)
     .get()
 
-  const filasMetodo = db
+  const metodosBrutos = db
     .select({
       metodo: pagos.metodo,
       monto: sql<number>`coalesce(sum(${pagos.monto}), 0)`,
@@ -1516,7 +2415,25 @@ export function getReportesSummary(filtros?: FiltrosReportes): ReportesSummary {
     .groupBy(pagos.metodo)
     .all()
 
-  const masVendidos = db
+  const metodosDevueltos = db
+    .select({
+      metodo: devolucionMedios.metodo,
+      monto: sql<number>`coalesce(sum(${devolucionMedios.monto}), 0)`,
+    })
+    .from(devolucionMedios)
+    .innerJoin(devoluciones, eq(devolucionMedios.devolucionId, devoluciones.id))
+    .where(condicionDevoluciones)
+    .groupBy(devolucionMedios.metodo)
+    .all()
+  const montoDevueltoPorMetodo = new Map(metodosDevueltos.map((fila) => [fila.metodo, fila.monto]))
+  const filasMetodo = metodosBrutos
+    .map((fila) => ({
+      ...fila,
+      monto: Math.round((fila.monto - (montoDevueltoPorMetodo.get(fila.metodo) ?? 0)) * 100) / 100,
+    }))
+    .filter((fila) => fila.monto !== 0)
+
+  const vendidosBrutos = db
     .select({
       productoId: detalleVentas.productoId,
       nombre: productos.nombre,
@@ -1530,9 +2447,46 @@ export function getReportesSummary(filtros?: FiltrosReportes): ReportesSummary {
     .innerJoin(productos, eq(detalleVentas.productoId, productos.id))
     .where(condicion)
     .groupBy(detalleVentas.productoId, productos.nombre)
-    .orderBy(desc(sql`sum(${detalleVentas.cantidad})`), asc(productos.nombre))
-    .limit(filtros?.topProductos ?? 5)
     .all()
+
+  const devolucionesPorProducto = db
+    .select({
+      productoId: detalleVentas.productoId,
+      nombre: productos.nombre,
+      cantidad: sql<number>`coalesce(sum(${detalleDevoluciones.cantidad}), 0)`,
+      monto: sql<number>`coalesce(sum(${detalleDevoluciones.importe}), 0)`,
+      costo: sql<number>`coalesce(sum(${detalleDevoluciones.costo}), 0)`,
+    })
+    .from(detalleDevoluciones)
+    .innerJoin(devoluciones, eq(detalleDevoluciones.devolucionId, devoluciones.id))
+    .innerJoin(detalleVentas, eq(detalleDevoluciones.detalleVentaId, detalleVentas.id))
+    .innerJoin(productos, eq(detalleVentas.productoId, productos.id))
+    .where(and(condicionDevoluciones, isNotNull(detalleVentas.productoId)))
+    .groupBy(detalleVentas.productoId, productos.nombre)
+    .all()
+  const rankingPorProducto = new Map<number, ProductoRanking>()
+  for (const fila of vendidosBrutos) {
+    if (fila.productoId !== null) rankingPorProducto.set(fila.productoId, { ...fila })
+  }
+  for (const fila of devolucionesPorProducto) {
+    if (fila.productoId === null) continue
+    const ventaNeta = rankingPorProducto.get(fila.productoId) ?? {
+      productoId: fila.productoId,
+      nombre: fila.nombre,
+      cantidad: 0,
+      monto: 0,
+      costo: 0,
+      margen: 0,
+    }
+    ventaNeta.cantidad -= fila.cantidad
+    ventaNeta.monto -= fila.monto
+    ventaNeta.costo -= fila.costo
+    ventaNeta.margen = ventaNeta.monto - ventaNeta.costo
+    rankingPorProducto.set(fila.productoId, ventaNeta)
+  }
+  const masVendidos = [...rankingPorProducto.values()]
+    .sort((a, b) => b.cantidad - a.cantidad || a.nombre.localeCompare(b.nombre))
+    .slice(0, filtros?.topProductos ?? 5)
 
   // La serie diaria va en DOS consultas cruzadas en JS, no en una sola con
   // `join`. `detalle_ventas` duplica cada venta por la cantidad de sus ítems:
@@ -1565,19 +2519,49 @@ export function getReportesSummary(filtros?: FiltrosReportes): ReportesSummary {
     .all()
 
   const itemsPorDia = new Map(diaItems.map((fila) => [fila.fecha, fila]))
-  // Los días sin ventas no salen de acá. El renderer los rellena con cero
-  // entre `desde` y `hasta`: saltearlos hace que el gráfico conecte en
-  // diagonal los dos días con venta y se lea como una caída que no ocurrió.
-  const ventasPorDia: VentaDiaria[] = diaTotales.map((fila) => ({
-    fecha: fila.fecha,
-    ventas: fila.ventas,
-    unidades: itemsPorDia.get(fila.fecha)?.unidades ?? 0,
-    total: fila.total,
-    costo: itemsPorDia.get(fila.fecha)?.costo ?? 0,
-  }))
+  const diaDevoluciones = sql<string>`date(${devoluciones.fechaHora}, 'localtime')`
+  const devolucionesPorDia = db
+    .select({
+      fecha: diaDevoluciones,
+      unidades: sql<number>`coalesce(sum(${detalleDevoluciones.cantidad}), 0)`,
+      total: sql<number>`coalesce(sum(${detalleDevoluciones.importe}), 0)`,
+      costo: sql<number>`coalesce(sum(${detalleDevoluciones.costo}), 0)`,
+    })
+    .from(detalleDevoluciones)
+    .innerJoin(devoluciones, eq(detalleDevoluciones.devolucionId, devoluciones.id))
+    .where(condicionDevoluciones)
+    .groupBy(diaDevoluciones)
+    .all()
 
-  const totalVentas = ventasTotales?.total ?? 0
-  const totalCosto = costoTotal?.costo ?? 0
+  const porDia = new Map<string, VentaDiaria>()
+  for (const fila of diaTotales) {
+    porDia.set(fila.fecha, {
+      fecha: fila.fecha,
+      ventas: fila.ventas,
+      unidades: itemsPorDia.get(fila.fecha)?.unidades ?? 0,
+      total: fila.total,
+      costo: itemsPorDia.get(fila.fecha)?.costo ?? 0,
+    })
+  }
+  for (const fila of devolucionesPorDia) {
+    const previo = porDia.get(fila.fecha) ?? {
+      fecha: fila.fecha,
+      ventas: 0,
+      unidades: 0,
+      total: 0,
+      costo: 0,
+    }
+    porDia.set(fila.fecha, {
+      ...previo,
+      unidades: previo.unidades - fila.unidades,
+      total: Math.round((previo.total - fila.total) * 100) / 100,
+      costo: Math.round((previo.costo - fila.costo) * 100) / 100,
+    })
+  }
+  const ventasPorDia = [...porDia.values()].sort((a, b) => a.fecha.localeCompare(b.fecha))
+
+  const totalVentas = Math.round(((ventasTotales?.total ?? 0) - (resumenDevoluciones?.total ?? 0)) * 100) / 100
+  const totalCosto = Math.round(((costoTotal?.costo ?? 0) - (resumenDevoluciones?.costo ?? 0)) * 100) / 100
 
   const cajaActiva = db
     .select()
@@ -1612,7 +2596,7 @@ export function getReportesSummary(filtros?: FiltrosReportes): ReportesSummary {
     caja = {
       cajaId: cajaActiva.id,
       montoInicial: cajaActiva.montoInicial,
-      montoEsperado: cajaActiva.montoInicial + (resumenCaja?.monto ?? 0),
+      montoEsperado: montoEsperadoDeCaja(db, cajaActiva.id, cajaActiva.montoInicial),
       montoReal: cajaActiva.montoReal,
       diferencia: cajaActiva.diferencia,
       ventas: resumenCaja?.cantidad ?? 0,
@@ -1631,6 +2615,13 @@ export function getReportesSummary(filtros?: FiltrosReportes): ReportesSummary {
     movimientos: getResumenMovimientos(db, filtros),
     perdidas: getResumenPerdidas(db, filtros),
     cortes: getResumenCortes(db, filtros),
+    devoluciones: {
+      cantidad: resumenDevoluciones?.cantidad ?? 0,
+      unidades: unidadesDevueltas,
+      total: resumenDevoluciones?.total ?? 0,
+      costo: resumenDevoluciones?.costo ?? 0,
+      gananciaRevertida: resumenDevoluciones?.gananciaRevertida ?? 0,
+    },
   }
 }
 export function updateLote(
@@ -1867,6 +2858,8 @@ type ResumenSaldos = {
   clienteId: number
   totalCargos: number
   totalAbonos: number
+  totalDevoluciones: number
+  totalReintegros: number
   cantidadMovimientos: number
   ultimoMovimiento: string | null
 }
@@ -1885,6 +2878,8 @@ function saldosPorCliente(db: SelectDb): Map<number, ResumenSaldos> {
       clienteId: cuentasCorrientes.clienteId,
       totalCargos: sql<number>`coalesce(sum(case when ${cuentasCorrientes.tipo} = 'cargo' then ${cuentasCorrientes.monto} else 0 end), 0)`,
       totalAbonos: sql<number>`coalesce(sum(case when ${cuentasCorrientes.tipo} = 'abono' then ${cuentasCorrientes.monto} else 0 end), 0)`,
+      totalDevoluciones: sql<number>`coalesce(sum(case when ${cuentasCorrientes.tipo} = 'devolucion' then ${cuentasCorrientes.monto} else 0 end), 0)`,
+      totalReintegros: sql<number>`coalesce(sum(case when ${cuentasCorrientes.tipo} = 'reintegro' then ${cuentasCorrientes.monto} else 0 end), 0)`,
       cantidadMovimientos: count(),
       ultimoMovimiento: sql<string | null>`max(${cuentasCorrientes.fechaHora})`,
     })
@@ -1914,7 +2909,13 @@ export function getClientes(opciones?: { incluirInactivos?: boolean }): ClienteC
         ...cliente,
         totalCargos: saldo?.totalCargos ?? 0,
         totalAbonos: saldo?.totalAbonos ?? 0,
-        saldo: (saldo?.totalCargos ?? 0) - (saldo?.totalAbonos ?? 0),
+        totalDevoluciones: saldo?.totalDevoluciones ?? 0,
+        totalReintegros: saldo?.totalReintegros ?? 0,
+        saldo:
+          (saldo?.totalCargos ?? 0) -
+          (saldo?.totalAbonos ?? 0) -
+          (saldo?.totalDevoluciones ?? 0) +
+          (saldo?.totalReintegros ?? 0),
         cantidadMovimientos: saldo?.cantidadMovimientos ?? 0,
         ultimoMovimiento: saldo?.ultimoMovimiento ?? null,
       }
@@ -2014,6 +3015,7 @@ export function getMovimientosCuentaCorriente(
       ventaId: cuentasCorrientes.ventaId,
       metodo: cuentasCorrientes.metodo,
       cajaId: cuentasCorrientes.cajaId,
+      abonoOrigenId: cuentasCorrientes.abonoOrigenId,
       nota: cuentasCorrientes.nota,
       fechaHora: cuentasCorrientes.fechaHora,
       clienteNombre: clientes.nombre,
@@ -2035,6 +3037,8 @@ export function getResumenCuentasCorrientes(): ResumenCuentasCorrientes {
     .select({
       totalCargos: sql<number>`coalesce(sum(case when ${cuentasCorrientes.tipo} = 'cargo' then ${cuentasCorrientes.monto} else 0 end), 0)`,
       totalAbonos: sql<number>`coalesce(sum(case when ${cuentasCorrientes.tipo} = 'abono' then ${cuentasCorrientes.monto} else 0 end), 0)`,
+      totalDevoluciones: sql<number>`coalesce(sum(case when ${cuentasCorrientes.tipo} = 'devolucion' then ${cuentasCorrientes.monto} else 0 end), 0)`,
+      totalReintegros: sql<number>`coalesce(sum(case when ${cuentasCorrientes.tipo} = 'reintegro' then ${cuentasCorrientes.monto} else 0 end), 0)`,
     })
     .from(cuentasCorrientes)
     .get()
@@ -2050,7 +3054,7 @@ export function getResumenCuentasCorrientes(): ResumenCuentasCorrientes {
   let clientesConDeuda = 0
 
   for (const fila of saldos.values()) {
-    const saldo = fila.totalCargos - fila.totalAbonos
+    const saldo = fila.totalCargos - fila.totalAbonos - fila.totalDevoluciones + fila.totalReintegros
     if (saldo > 0) {
       totalPorCobrar += saldo
       clientesConDeuda += 1
@@ -2063,6 +3067,8 @@ export function getResumenCuentasCorrientes(): ResumenCuentasCorrientes {
     clientesActivos: cantidadClientes?.cantidad ?? 0,
     totalCargos: totales?.totalCargos ?? 0,
     totalAbonos: totales?.totalAbonos ?? 0,
+    totalDevoluciones: totales?.totalDevoluciones ?? 0,
+    totalReintegros: totales?.totalReintegros ?? 0,
   }
 }
 
@@ -2075,7 +3081,7 @@ export function getResumenCuentasCorrientes(): ResumenCuentasCorrientes {
 function saldoDeCliente(db: SelectDb, clienteId: number): number {
   const fila = db
     .select({
-      saldo: sql<number>`coalesce(sum(case when ${cuentasCorrientes.tipo} = 'cargo' then ${cuentasCorrientes.monto} else -${cuentasCorrientes.monto} end), 0)`,
+      saldo: sql<number>`coalesce(sum(case when ${cuentasCorrientes.tipo} = 'cargo' or ${cuentasCorrientes.tipo} = 'reintegro' then ${cuentasCorrientes.monto} when ${cuentasCorrientes.tipo} = 'abono' or ${cuentasCorrientes.tipo} = 'devolucion' then -${cuentasCorrientes.monto} else 0 end), 0)`,
     })
     .from(cuentasCorrientes)
     .where(eq(cuentasCorrientes.clienteId, clienteId))

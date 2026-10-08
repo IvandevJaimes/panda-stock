@@ -11,6 +11,23 @@ import { normalizar } from '../inventory/inventoryQuery'
 export const UMBRAL_MAYOREO = 3
 export const FACTOR_MAYOREO = 0.9
 
+/**
+ * Regla de descuento por cantidad. El POS la arma desde Configuración; el
+ * default conserva la regla histórica (10% desde 3 unidades).
+ */
+export type ReglaMayoreo = {
+  habilitado: boolean
+  umbral: number
+  /** Multiplicador sobre `precioVenta` (0.9 = 10% de descuento). */
+  factor: number
+}
+
+export const REGLA_MAYOREO_POR_DEFECTO: ReglaMayoreo = {
+  habilitado: true,
+  umbral: UMBRAL_MAYOREO,
+  factor: FACTOR_MAYOREO,
+}
+
 /** Mismo umbral que el default de `evaluateExpiry` (14 días). */
 export const DIAS_POR_VENCER = 14
 
@@ -431,23 +448,66 @@ export function contarBloqueados(productos: ProductoPOS[]): ConteoBloqueados {
   return { agotados, vencidos }
 }
 
-export type MetodoPagoPOS = 'efectivo' | 'transferencia' | 'tarjeta'
+export type MetodoPagoPOS =
+  | 'efectivo'
+  | 'transferencia'
+  | 'tarjeta'
+  | 'cuenta_corriente'
 
 /** El orden es de la app, no del enum: `F4` rota sobre esta lista. */
 export const METODOS_PAGO: readonly MetodoPagoPOS[] = [
   'efectivo',
   'transferencia',
   'tarjeta',
+  'cuenta_corriente',
 ]
 
-export function siguienteMetodoPago(actual: MetodoPagoPOS): MetodoPagoPOS {
-  const i = METODOS_PAGO.indexOf(actual)
-  return METODOS_PAGO[(i + 1) % METODOS_PAGO.length]
+export type MetodosPagoConfig = {
+  tarjetaHabilitada: boolean
+  cuentaCorrienteHabilitada: boolean
 }
 
 /**
- * La base distingue `debito` de `credito` y el selector del ticket no llega a esa
- * granularidad, así que "tarjeta" se guarda como `debito`.
+ * Efectivo y transferencia siempre están: son el piso del cobro. Solo tarjeta
+ * y cuenta corriente dependen de ajustes, y el resultado conserva el orden de
+ * `METODOS_PAGO` porque `F4` y el selector comparten esa lista.
+ */
+export function metodosHabilitados(config: MetodosPagoConfig): MetodoPagoPOS[] {
+  return METODOS_PAGO.filter((metodo) => {
+    if (metodo === 'tarjeta') return config.tarjetaHabilitada
+    if (metodo === 'cuenta_corriente') return config.cuentaCorrienteHabilitada
+    return true
+  })
+}
+
+/**
+ * Un ticket persistido o abierto puede quedarse con un método que después se
+ * desactivó en ajustes: sin este fallback el selector mostraría una opción que
+ * ya no existe y `F4` se quedaría trabado fuera de la lista.
+ */
+export function normalizarMetodoPago(
+  actual: MetodoPagoPOS,
+  habilitados: readonly MetodoPagoPOS[],
+): MetodoPagoPOS {
+  return habilitados.includes(actual) ? actual : 'efectivo'
+}
+
+export function siguienteMetodoPago(
+  actual: MetodoPagoPOS,
+  habilitados: readonly MetodoPagoPOS[] = METODOS_PAGO,
+): MetodoPagoPOS {
+  const lista = habilitados.length > 0 ? habilitados : METODOS_PAGO
+  // Si `actual` quedó fuera de la lista (ajuste recién cambiado), el ciclo
+  // arranca desde el primer habilitado y no desde una posición inexistente.
+  if (!lista.includes(actual)) return lista[0]
+  const i = lista.indexOf(actual)
+  return lista[(i + 1) % lista.length]
+}
+
+/**
+ * La base distingue `debito` de `credito` y el selector del ticket no llega a
+ * esa granularidad, así que "tarjeta" se guarda como `debito`.
+ * `cuenta_corriente` pasa tal cual: `processSale` la reconoce y exige `clienteId`.
  */
 export function metodoPagoARegistro(metodo: MetodoPagoPOS): MetodoPago {
   if (metodo === 'tarjeta') return 'debito'
@@ -480,16 +540,21 @@ export type ResumenTicket = {
   total: number
 }
 
-export function tipoTarifaPorCantidad(cantidad: number): TipoTarifa {
-  return cantidad >= UMBRAL_MAYOREO ? 'mayoreo' : 'minorista'
+export function tipoTarifaPorCantidad(
+  cantidad: number,
+  regla: ReglaMayoreo = REGLA_MAYOREO_POR_DEFECTO,
+): TipoTarifa {
+  if (!regla.habilitado) return 'minorista'
+  return cantidad >= regla.umbral ? 'mayoreo' : 'minorista'
 }
 
 export function precioUnitarioPorCantidad(
   precioVenta: number,
   cantidad: number,
+  regla: ReglaMayoreo = REGLA_MAYOREO_POR_DEFECTO,
 ): number {
-  return tipoTarifaPorCantidad(cantidad) === 'mayoreo'
-    ? redondearMoneda(precioVenta * FACTOR_MAYOREO)
+  return tipoTarifaPorCantidad(cantidad, regla) === 'mayoreo'
+    ? redondearMoneda(precioVenta * regla.factor)
     : redondearMoneda(precioVenta)
 }
 
@@ -626,10 +691,26 @@ export type TicketSession = {
   numero: number
   items: ItemTicket[]
   metodoPago: MetodoPagoPOS
+  /**
+   * Cliente al que se le fía la venta. Solo tiene sentido con
+   * `metodoPago === 'cuenta_corriente'`; `cambiarMetodoPagoTicket` lo limpia
+   * al salir de ese método para que no quede un cliente huérfano asociado a un
+   * ticket en efectivo. El nombre es cosmético (para el botón del ticket): la
+   * base re-valida que el cliente exista y esté activo al cobrar.
+   */
+  clienteId: number | null
+  clienteNombre: string | null
 }
 
 export function crearTicket(id: string, numero: number): TicketSession {
-  return { id, numero, items: [], metodoPago: 'efectivo' }
+  return {
+    id,
+    numero,
+    items: [],
+    metodoPago: 'efectivo',
+    clienteId: null,
+    clienteNombre: null,
+  }
 }
 
 export function puedeAbrirTicket(tickets: TicketSession[]): boolean {
@@ -686,7 +767,33 @@ export function cambiarMetodoPagoTicket(
   metodoPago: MetodoPagoPOS,
 ): TicketSession[] {
   return tickets.map((ticket) =>
-    ticket.id === idActivo ? { ...ticket, metodoPago } : ticket,
+    ticket.id === idActivo
+      ? {
+          ...ticket,
+          metodoPago,
+          // Cambiar de método suelta al cliente: cobrar en efectivo con un
+          // cliente todavía cargado dejaría rastro confuso en la UI.
+          clienteId: metodoPago === 'cuenta_corriente' ? ticket.clienteId : null,
+          clienteNombre:
+            metodoPago === 'cuenta_corriente' ? ticket.clienteNombre : null,
+        }
+      : ticket,
+  )
+}
+
+export function asignarClienteTicket(
+  tickets: TicketSession[],
+  idActivo: string,
+  cliente: { id: number; nombre: string } | null,
+): TicketSession[] {
+  return tickets.map((ticket) =>
+    ticket.id === idActivo
+      ? {
+          ...ticket,
+          clienteId: cliente?.id ?? null,
+          clienteNombre: cliente?.nombre ?? null,
+        }
+      : ticket,
   )
 }
 
@@ -755,13 +862,22 @@ export function ticketActivo(
       numero: 0,
       items: [],
       metodoPago: 'efectivo',
+      clienteId: null,
+      clienteNombre: null,
     }
   )
 }
 
-export function calcularLinea(item: ItemTicket): LineaTicket {
-  const tipoTarifa = tipoTarifaPorCantidad(item.cantidad)
-  const precioUnitario = precioUnitarioPorCantidad(item.precioVenta, item.cantidad)
+export function calcularLinea(
+  item: ItemTicket,
+  regla: ReglaMayoreo = REGLA_MAYOREO_POR_DEFECTO,
+): LineaTicket {
+  const tipoTarifa = tipoTarifaPorCantidad(item.cantidad, regla)
+  const precioUnitario = precioUnitarioPorCantidad(
+    item.precioVenta,
+    item.cantidad,
+    regla,
+  )
   const importeMinorista = redondearMoneda(item.precioVenta * item.cantidad)
   const importe = redondearMoneda(precioUnitario * item.cantidad)
 
@@ -775,8 +891,11 @@ export function calcularLinea(item: ItemTicket): LineaTicket {
   }
 }
 
-export function resumirTicket(items: ItemTicket[]): ResumenTicket {
-  const lineas = items.map(calcularLinea)
+export function resumirTicket(
+  items: ItemTicket[],
+  regla: ReglaMayoreo = REGLA_MAYOREO_POR_DEFECTO,
+): ResumenTicket {
+  const lineas = items.map((item) => calcularLinea(item, regla))
   const subtotal = redondearMoneda(
     lineas.reduce((acc, linea) => acc + linea.importeMinorista, 0),
   )

@@ -1,4 +1,5 @@
 import type { ResultadoDatosPrueba } from '../../electron/db/testdata.repository'
+import type { ExportarExcelInput } from '../../electron/exportaciones.types'
 import type { FiltrosReportes, ReportesSummary } from '../../electron/db/types'
 import { toErrorMessage } from './errors'
 
@@ -6,6 +7,15 @@ export const reportesService = {
   async getSummary(filtros?: FiltrosReportes): Promise<ReportesSummary> {
     try {
       return await window.electronAPI.reportes.getSummary(filtros)
+    } catch (error) {
+      throw new Error(toErrorMessage(error), { cause: error })
+    }
+  },
+
+  /** Guarda la pestaña activa como `.xlsx` y devuelve la ruta, o `null` si se canceló la elección de carpeta. */
+  async exportarExcel(input: ExportarExcelInput): Promise<string | null> {
+    try {
+      return await window.electronAPI.reportes.exportarExcel(input)
     } catch (error) {
       throw new Error(toErrorMessage(error), { cause: error })
     }

@@ -44,15 +44,23 @@ const COMPLETO: ReportesSummary = {
   },
   perdidas: { cantidadMermas: 2, unidadesPerdidas: 13, plataPerdida: 3400, porProducto: [] },
   cortes: { cantidad: 7, diferenciaTotal: -125, conDescuadre: 3, cortes: [] },
+  devoluciones: {
+    cantidad: 3,
+    unidades: 7,
+    total: 4200,
+    costo: 2800,
+    gananciaRevertida: 1400,
+  },
 }
 
 describe('PESTANAS_REPORTES', () => {
-  it('son cuatro y en el orden pedido', () => {
+  it('incluye devoluciones junto a las pestañas actuales', () => {
     expect(PESTANAS_REPORTES.map((p) => p.valor)).toEqual([
       'ventas',
       'movimientos',
       'perdidas',
       'cortes',
+      'devoluciones',
     ])
   })
 
@@ -72,11 +80,11 @@ describe('metricasDePestana', () => {
   })
 
   it('cada pestaña muestra un juego distinto de títulos', () => {
-    const juegos = PESTANAS_REPORTES.map(
-      (p) => metricasDePestana(p.valor, COMPLETO).map((m) => m.titulo).join(' | '),
+    const juegos = (['ventas', 'movimientos', 'perdidas', 'cortes', 'devoluciones'] as const).map((p) =>
+      metricasDePestana(p, COMPLETO).map((m) => m.titulo),
     )
 
-    expect(new Set(juegos).size).toBe(4)
+    expect(new Set(juegos).size).toBe(5)
   })
 
   it('ninguna métrica se repite dentro de la misma pestaña', () => {

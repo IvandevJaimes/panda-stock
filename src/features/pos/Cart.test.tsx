@@ -43,6 +43,9 @@ function montarCart(over: { resumen?: ResumenTicket; activeTicketId?: string; nu
   const props = {
     resumen: over.resumen ?? resumen(),
     metodoPago: "efectivo" as MetodoPagoPOS,
+    metodosPago: ["efectivo", "transferencia", "tarjeta"] as MetodoPagoPOS[],
+    cliente: null as { id: number; nombre: string } | null,
+    onAsignarCliente: vi.fn(),
     lineaSeleccionada: -1,
     onSeleccionarLinea: vi.fn(),
     refLista: { current: null } as React.RefObject<HTMLDivElement | null>,
@@ -253,6 +256,9 @@ describe("Cart: totales", () => {
       refLista={{ current: null }}
         resumen={nuevoResumen}
         metodoPago="efectivo"
+        metodosPago={["efectivo", "transferencia", "tarjeta"]}
+        cliente={null}
+        onAsignarCliente={vi.fn()}
         activeTicketId="t1"
         numeroTicket={1}
         onCambiarMetodoPago={vi.fn()}

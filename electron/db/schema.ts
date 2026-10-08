@@ -1,4 +1,5 @@
 import { sqliteTable, integer, text, real, uniqueIndex, index } from 'drizzle-orm/sqlite-core'
+import type { AnySQLiteColumn } from 'drizzle-orm/sqlite-core'
 import type {
   EstadoCaja,
   EstadoVenta,
@@ -11,6 +12,12 @@ import type {
 } from './types.ts'
 
 export const seguridadReportes = sqliteTable('seguridad_reportes', {
+  id: integer('id').primaryKey(),
+  pinHash: text('pin_hash').notNull(),
+  actualizadoEn: text('actualizado_en').notNull(),
+})
+
+export const seguridadCuentas = sqliteTable('seguridad_cuentas', {
   id: integer('id').primaryKey(),
   pinHash: text('pin_hash').notNull(),
   actualizadoEn: text('actualizado_en').notNull(),
@@ -172,6 +179,9 @@ export const cuentasCorrientes = sqliteTable(
     ventaId: integer('venta_id').references(() => ventas.id),
     metodo: text('metodo').$type<MetodoPago>(),
     cajaId: integer('caja_id').references(() => cajas.id),
+    abonoOrigenId: integer('abono_origen_id').references(
+      (): AnySQLiteColumn => cuentasCorrientes.id,
+    ),
     nota: text('nota'),
     fechaHora: text('fecha_hora').notNull(),
   },
@@ -193,4 +203,71 @@ export const movimientosStock = sqliteTable(
     fechaHora: text('fecha_hora').notNull(),
   },
   (table) => [index('movimientos_stock_producto_id_idx').on(table.productoId)],
+)
+
+export const devoluciones = sqliteTable(
+  'devoluciones',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    ventaId: integer('venta_id')
+      .notNull()
+      .references(() => ventas.id),
+    cajaId: integer('caja_id').references(() => cajas.id),
+    fechaHora: text('fecha_hora').notNull(),
+    total: real('total').notNull(),
+    costo: real('costo').notNull(),
+    gananciaRevertida: real('ganancia_revertida').notNull(),
+  },
+  (table) => [
+    index('devoluciones_venta_id_idx').on(table.ventaId),
+    index('devoluciones_fecha_hora_idx').on(table.fechaHora),
+  ],
+)
+
+export const detalleDevoluciones = sqliteTable(
+  'detalle_devoluciones',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    devolucionId: integer('devolucion_id')
+      .notNull()
+      .references(() => devoluciones.id),
+    detalleVentaId: integer('detalle_venta_id')
+      .notNull()
+      .references(() => detalleVentas.id),
+    cantidad: real('cantidad').notNull(),
+    importe: real('importe').notNull(),
+    costo: real('costo').notNull(),
+    gananciaRevertida: real('ganancia_revertida').notNull(),
+  },
+  (table) => [index('detalle_devoluciones_devolucion_id_idx').on(table.devolucionId)],
+)
+
+export const devolucionMedios = sqliteTable(
+  'devolucion_medios',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    devolucionId: integer('devolucion_id')
+      .notNull()
+      .references(() => devoluciones.id),
+    metodo: text('metodo').$type<MetodoPago>().notNull(),
+    monto: real('monto').notNull(),
+  },
+  (table) => [index('devolucion_medios_devolucion_id_idx').on(table.devolucionId)],
+)
+
+export const devolucionReintegros = sqliteTable(
+  'devolucion_reintegros',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    devolucionId: integer('devolucion_id')
+      .notNull()
+      .references(() => devoluciones.id),
+    metodo: text('metodo').$type<Exclude<MetodoPago, 'cuenta_corriente'>>().notNull(),
+    monto: real('monto').notNull(),
+    pagoOrigenId: integer('pago_origen_id').references(() => pagos.id),
+    cuentaMovimientoOrigenId: integer('cuenta_movimiento_origen_id').references(
+      () => cuentasCorrientes.id,
+    ),
+  },
+  (table) => [index('devolucion_reintegros_devolucion_id_idx').on(table.devolucionId)],
 )

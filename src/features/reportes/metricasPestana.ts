@@ -1,7 +1,13 @@
 import type { ReportesSummary, TipoMovimientoStock } from '../../../electron/db/types'
 import { formatearMoneda, formatearUnidades, margenEsNegativo, porcentaje } from './reportsQuery'
 
-export type PestanaReportes = 'ventas' | 'movimientos' | 'perdidas' | 'cortes'
+export type PestanaReportes =
+  | 'ventas'
+  | 'movimientos'
+  | 'perdidas'
+  | 'cortes'
+  | 'anulaciones'
+  | 'devoluciones'
 
 export const PESTANAS_REPORTES: {
   valor: PestanaReportes
@@ -13,6 +19,7 @@ export const PESTANAS_REPORTES: {
   { valor: 'movimientos', etiqueta: 'Movimientos', resumen: 'Entradas y salidas de mercadería' },
   { valor: 'perdidas', etiqueta: 'Pérdidas', resumen: 'Mermas y plata perdida' },
   { valor: 'cortes', etiqueta: 'Cortes de caja', resumen: 'Arqueos de los turnos cerrados' },
+  { valor: 'devoluciones', etiqueta: 'Devoluciones', resumen: 'Reintegros y stock devuelto' },
 ]
 
 /** Semántica del color, para que el componente elija el icono y las clases. */
@@ -156,6 +163,67 @@ export function metricasDePestana(
         valor: formatearMoneda(cantidad > 0 ? diferencia / cantidad : 0),
         subtitulo: 'Por corte',
         tono: diferencia < 0 ? 'rose' : 'emerald',
+      },
+    ]
+  }
+
+  if (pestana === 'anulaciones') {
+    const anuladas = resumen?.ventasAnuladas?.cantidad ?? 0
+    const montoAnulado = resumen?.ventasAnuladas?.monto ?? 0
+    return [
+      {
+        titulo: 'Tickets emitidos',
+        valor: cantVentas + anuladas,
+        subtitulo: 'Del período',
+        tono: 'sky',
+      },
+      {
+        titulo: 'Vigentes',
+        valor: cantVentas,
+        subtitulo: 'Completadas',
+        tono: 'emerald',
+      },
+      {
+        titulo: 'Anuladas',
+        valor: anuladas,
+        subtitulo: anuladas === 1 ? 'venta anulada' : 'ventas anuladas',
+        tono: anuladas > 0 ? 'rose' : 'emerald',
+      },
+      {
+        titulo: 'Monto anulado',
+        valor: formatearMoneda(montoAnulado),
+        subtitulo: 'Sumatoria de anuladas',
+        tono: anuladas > 0 ? 'rose' : 'emerald',
+      },
+    ]
+  }
+
+  if (pestana === 'devoluciones') {
+    const devoluciones = resumen?.devoluciones
+    return [
+      {
+        titulo: 'Devoluciones',
+        valor: devoluciones?.cantidad ?? 0,
+        subtitulo: 'Completadas en el período',
+        tono: 'rose',
+      },
+      {
+        titulo: 'Unidades devueltas',
+        valor: formatearUnidades(devoluciones?.unidades ?? 0),
+        subtitulo: 'Reintegradas al stock',
+        tono: 'sky',
+      },
+      {
+        titulo: 'Importe devuelto',
+        valor: formatearMoneda(devoluciones?.total ?? 0),
+        subtitulo: 'A valor histórico del ticket',
+        tono: 'amber',
+      },
+      {
+        titulo: 'Ganancia revertida',
+        valor: formatearMoneda(devoluciones?.gananciaRevertida ?? 0),
+        subtitulo: 'Según costo y precio del ticket',
+        tono: 'rose',
       },
     ]
   }

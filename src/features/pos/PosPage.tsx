@@ -50,7 +50,9 @@ import { useAtajosPOS } from './useAtajosPOS'
 import { useBarcodeScanner } from '../../hooks/useBarcodeScanner'
 import { usePosTicketsStore } from '../../stores/pos-tickets.store'
 import { useCajaStore } from '../../stores/caja.store'
+import { useSettingsStore } from '../../stores/settings.store'
 import { ventasService } from '../../services/ventas.service'
+import { resolverEmpleadoDelComercio } from '../../services/empleado-comercio'
 import {
   siguienteMetodoPago,
   construirCategorias,
@@ -62,6 +64,8 @@ import {
   idsDesactivados as idsDesactivadosDeCatalogo,
   mapearProductosPOS,
   metodoPagoARegistro,
+  metodosHabilitados,
+  normalizarMetodoPago,
   motivoStockInsuficiente,
   puedeSumarUno,
   resumirTicket,
@@ -114,9 +118,37 @@ export function PosPage() {
   const activeTicketId = usePosTicketsStore((estado) => estado.activeTicketId)
   const rehidratar = usePosTicketsStore((estado) => estado.rehidratar)
 
-  // Sin caja abierta no hay venta: la fila de `ventas` exige `caja_id` y
-  // `empleado_id`, y sin esa fila una venta cobrada no se puede imputar a nadie
-  // ni contarla en ningún cierre. Por eso el cobro se bloquea, no se "avisa".
+  const tarjetaHabilitada = useSettingsStore((estado) => estado.tarjetaHabilitada)
+  const cuentaCorrienteHabilitada = useSettingsStore(
+    (estado) => estado.cuentaCorrienteHabilitada,
+  )
+  const ventasPorCajas = useSettingsStore((estado) => estado.ventasPorCajas)
+  const descuentoAutomatico = useSettingsStore(
+    (estado) => estado.descuentoAutomatico,
+  )
+  const descuentoPorcentaje = useSettingsStore(
+    (estado) => estado.descuentoPorcentaje,
+  )
+  const descuentoDesdeUnidades = useSettingsStore(
+    (estado) => estado.descuentoDesdeUnidades,
+  )
+
+  // Los métodos disponibles salen de ajustes: cambiar un switch mientras hay
+  // tickets abiertos tiene que ocultar el botón y sacar a F4 del método, sin
+  // esperar reinicio.
+  const metodosPago = useMemo(
+    () =>
+      metodosHabilitados({
+        tarjetaHabilitada,
+        cuentaCorrienteHabilitada,
+      }),
+    [tarjetaHabilitada, cuentaCorrienteHabilitada],
+  )
+
+  // Con control por caja activo, sin caja abierta no hay venta: el empleado
+  // sale de la caja y sin fila de caja la venta no se imputa a nadie ni entra
+  // en ningún cierre. Por eso el cobro se bloquea, no se "avisa". Con el
+  // control desactivado el cobro no depende de caja.
   const caja = useCajaStore((estado) => estado.caja)
   const cajaCargada = useCajaStore((estado) => estado.cargado)
   const [cobrando, setCobrando] = useState(false)
@@ -288,7 +320,35 @@ export function PosPage() {
     [tickets, activeTicketId],
   )
 
-  const resumen = useMemo(() => resumirTicket(ticket.items), [ticket])
+  const reglaMayoreo = useMemo(
+    () => ({
+      habilitado: descuentoAutomatico,
+      umbral: descuentoDesdeUnidades,
+      factor: 1 - descuentoPorcentaje / 100,
+    }),
+    [descuentoAutomatico, descuentoPorcentaje, descuentoDesdeUnidades],
+  )
+
+  const resumen = useMemo(
+    () => resumirTicket(ticket.items, reglaMayoreo),
+    [ticket, reglaMayoreo],
+  )
+
+  // Un ticket persistido o abierto puede tener un método que ahora está
+  // desactivado: sin normalizar, el selector quedaría sin radio marcado y F4
+  // rotaría sobre una lista que ya no lo incluye. No se escribe en el store
+  // para que reactivar el switch recupere la elección original.
+  const metodoPagoActivo = useMemo(
+    () => normalizarMetodoPago(ticket.metodoPago, metodosPago),
+    [ticket.metodoPago, metodosPago],
+  )
+
+  const clienteTicket =
+    metodoPagoActivo === 'cuenta_corriente' &&
+    ticket.clienteId !== null &&
+    ticket.clienteNombre !== null
+      ? { id: ticket.clienteId, nombre: ticket.clienteNombre }
+      : null
 
   const ticketColapsable = useMediaQuery(`(max-width: ${ANCHO_MOBILE}px)`)
 
@@ -323,6 +383,7 @@ export function PosPage() {
     quitar: quitarDelTicketActivo,
     vaciarActivo,
     cambiarMetodoPago: cambiarMetodoPagoTicketActivo,
+    asignarCliente: asignarClienteTicketActivo,
     seleccionarTicket,
     nuevoTicket: abrirTicket,
     cerrar: cerrarTicketDelStore,
@@ -483,15 +544,23 @@ export function PosPage() {
 
   const handleIrAlTicket = irAlTicket
 
-  // El orden importa: sin caja el motivo es la caja aunque el ticket también
-  // esté vacío, porque es la causa raíz. La caja manda.
-  const motivoCobroBloqueado = !cajaCargada
-    ? 'Verificando la caja…'
-    : !caja
-      ? 'Abrí la caja desde el encabezado para poder cobrar'
-      : ticket.items.length === 0
-        ? 'Cargá al menos un producto al ticket para cobrar'
+  const motivoTicketBloqueado =
+    ticket.items.length === 0
+      ? 'Cargá al menos un producto al ticket para cobrar'
+      : metodoPagoActivo === 'cuenta_corriente' && ticket.clienteId === null
+        ? 'Elegí el cliente al que le fías la venta'
         : null
+
+  // El orden importa: sin caja el motivo es la caja aunque el ticket también
+  // esté vacío, porque es la causa raíz. La caja manda. Después el cliente:
+  // fiar sin cliente es un cargo que ningún saldo va a reclamar.
+  const motivoCobroBloqueado = !ventasPorCajas
+    ? motivoTicketBloqueado
+    : !cajaCargada
+      ? 'Verificando la caja…'
+      : !caja
+        ? 'Abrí la caja desde el encabezado para poder cobrar'
+        : motivoTicketBloqueado
 
   /**
    * Candado del cobro en un ref y no en el estado: dos Enters en el mismo tick
@@ -508,8 +577,15 @@ export function PosPage() {
     // pasa por el `onClick` del `Cobrar`.
     if (cobroEnVuelo.current) return
 
-    if (!caja) {
+    if (ventasPorCajas && !caja) {
       if (cajaCargada) toast.error('Abrí la caja desde el encabezado para poder cobrar')
+      return
+    }
+
+    // Mismo guard que el tooltip: `Enter` no pasa por el botón, y sin cliente
+    // `processSale` rechazaría la venta igual — avisar antes evita el viaje.
+    if (metodoPagoActivo === 'cuenta_corriente' && ticket.clienteId === null) {
+      toast.error('Elegí el cliente al que le fías la venta')
       return
     }
 
@@ -520,8 +596,11 @@ export function PosPage() {
       // el 10% de descuento por cantidad. Mandar `precioVenta` y dejar que la
       // base lo recalcule duplicaría la regla del mayoreo en dos lugares.
       const venta = await ventasService.process({
-        cajaId: caja.id,
-        empleadoId: caja.empleadoId,
+        cajaId: caja?.id ?? null,
+        empleadoId:
+          caja?.empleadoId ?? (await resolverEmpleadoDelComercio()),
+        clienteId:
+          metodoPagoActivo === 'cuenta_corriente' ? ticket.clienteId : null,
         subtotal: resumen.subtotal,
         descuento: resumen.descuento,
         impuesto: resumen.impuesto,
@@ -534,7 +613,7 @@ export function PosPage() {
           precioUnitario: linea.precioUnitario,
           costoUnitario: linea.costo,
         })),
-        pagos: [{ metodo: metodoPagoARegistro(ticket.metodoPago), monto: resumen.total }],
+        pagos: [{ metodo: metodoPagoARegistro(metodoPagoActivo), monto: resumen.total }],
       })
 
       cerrarTicketDelStore(activeTicketId)
@@ -559,7 +638,9 @@ export function PosPage() {
     }
   }, [
     ticket.items.length,
-    ticket.metodoPago,
+    ticket.clienteId,
+    metodoPagoActivo,
+    ventasPorCajas,
     caja,
     cajaCargada,
     resumen,
@@ -587,7 +668,9 @@ export function PosPage() {
     onIrAlTicket: handleIrAlTicket,
     onAbrirMarcas: () => setMarcasAbiertas(true),
     onCambiarMetodoPago: () =>
-      handleCambiarMetodoPago(siguienteMetodoPago(ticket.metodoPago)),
+      handleCambiarMetodoPago(
+        siguienteMetodoPago(metodoPagoActivo, metodosPago),
+      ),
     onSalirDeBusqueda: () => setBusqueda(''),
     onSinEfecto: (mensaje) => toast.warning(mensaje),
   })
@@ -878,7 +961,10 @@ export function PosPage() {
 
           <Cart
             resumen={resumen}
-            metodoPago={ticket.metodoPago}
+            metodoPago={metodoPagoActivo}
+            metodosPago={metodosPago}
+            cliente={clienteTicket}
+            onAsignarCliente={asignarClienteTicketActivo}
             activeTicketId={ticket.id}
             numeroTicket={ticket.numero}
             lineaSeleccionada={lineaSeleccionada}

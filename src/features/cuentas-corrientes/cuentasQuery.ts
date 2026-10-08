@@ -45,6 +45,10 @@ export function origenMovimiento(movimiento: MovimientoCuentaCorriente): string 
   if (movimiento.tipo === 'cargo') {
     return movimiento.ventaId ? `Venta #${movimiento.ventaId}` : 'Carga manual'
   }
+  if (movimiento.tipo === 'devolucion') return `Devolución de venta #${movimiento.ventaId ?? '—'}`
+  if (movimiento.tipo === 'reintegro') {
+    return `Reintegro de venta #${movimiento.ventaId ?? '—'} · ${metodoDeAbonoEtiqueta(movimiento.metodo)}`
+  }
   return metodoDeAbonoEtiqueta(movimiento.metodo)
 }
 

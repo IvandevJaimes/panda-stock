@@ -4,6 +4,7 @@ import {
   actualizarTicketActivo,
   agregarAlTicket,
   agregarTicket,
+  asignarClienteTicket,
   cambiarCantidadTicket,
   cambiarMetodoPagoTicket,
   cerrarTicket,
@@ -39,6 +40,11 @@ export type EstadoTickets = {
   quitar: (productoId: number) => void
   vaciarActivo: () => void
   cambiarMetodoPago: (metodo: MetodoPagoPOS) => void
+  /**
+   * Ata (o suelta, con `null`) el cliente de la venta a cuenta corriente del
+   * ticket activo.
+   */
+  asignarCliente: (cliente: { id: number; nombre: string } | null) => void
   nuevoTicket: () => void
   seleccionarTicket: (id: string) => void
   moverTicket: (delta: number) => void
@@ -66,6 +72,8 @@ type TicketPersistido = {
   id: string
   numero: number
   metodoPago: MetodoPagoPOS
+  clienteId: number | null
+  clienteNombre: string | null
   items: Pick<ItemTicket, 'productoId' | 'cantidad'>[]
 }
 
@@ -107,6 +115,8 @@ function aPersistido(tickets: TicketSession[]): TicketPersistido[] {
     id: ticket.id,
     numero: ticket.numero,
     metodoPago: ticket.metodoPago,
+    clienteId: ticket.clienteId,
+    clienteNombre: ticket.clienteNombre,
     items: ticket.items.map((item) => ({
       productoId: item.productoId,
       cantidad: item.cantidad,
@@ -151,6 +161,9 @@ function desdePersistido(
       id: ticket.id,
       numero: typeof ticket.numero === 'number' ? ticket.numero : validos.length + 1,
       metodoPago: ticket.metodoPago ?? 'efectivo',
+      // Persistidos antiguos no traen cliente: `null` es el default correcto.
+      clienteId: typeof ticket.clienteId === 'number' ? ticket.clienteId : null,
+      clienteNombre: typeof ticket.clienteNombre === 'string' ? ticket.clienteNombre : null,
       items,
     })
   }
@@ -200,6 +213,11 @@ export const usePosTicketsStore = create<EstadoTickets>()(
       cambiarMetodoPago: (metodoPago) =>
         set((estado) => ({
           tickets: cambiarMetodoPagoTicket(estado.tickets, estado.activeTicketId, metodoPago),
+        })),
+
+      asignarCliente: (cliente) =>
+        set((estado) => ({
+          tickets: asignarClienteTicket(estado.tickets, estado.activeTicketId, cliente),
         })),
 
       nuevoTicket: () =>

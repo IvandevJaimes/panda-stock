@@ -16,4 +16,20 @@ export const seguridadService = {
       throw new Error(toErrorMessage(error), { cause: error })
     }
   },
+
+  async tieneContrasena(): Promise<boolean> {
+    try {
+      return await window.electronAPI.seguridad.tieneContrasena()
+    } catch (error) {
+      throw new Error(toErrorMessage(error), { cause: error })
+    }
+  },
+
+  async crearContrasena(pinNuevo: string): Promise<boolean> {
+    try {
+      return await window.electronAPI.seguridad.crearContrasena(pinNuevo.trim())
+    } catch (error) {
+      throw new Error(toErrorMessage(error), { cause: error })
+    }
+  },
 }
