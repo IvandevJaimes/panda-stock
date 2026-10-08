@@ -338,11 +338,10 @@ export function DropdownMenuContent({
       }}
       className={cn(
         dropdownPanelBase,
-        "pointer-events-none",
         originClase,
-        "transition-[opacity,transform]",
+        "transition",
         visible
-          ? "scale-100 opacity-100 pointer-events-auto duration-200 ease-out"
+          ? "scale-100 opacity-100 duration-200 ease-out"
           : "scale-95 opacity-0 duration-150 ease-in",
         className,
       )}
