@@ -531,7 +531,6 @@ export function PosPage() {
   // producto: viene del ticket y por definición está en él.
   const handleAumentarUno = useCallback(
     (linea: LineaTicket) => {
-      console.log('Aumentar uno', linea)
       if (idsDesactivados.has(linea.productoId)) {
         toast.warning(`No se puede agregar más: el producto está desactivado`)
         return
@@ -550,7 +549,6 @@ export function PosPage() {
 
   const handleRestarUno = useCallback(
     (linea: LineaTicket) => {
-      console.log('Restar uno', linea)
       handleCambiarCantidad(linea.productoId, linea.cantidad - 1)
     },
     [handleCambiarCantidad],
