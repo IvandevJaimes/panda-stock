@@ -105,6 +105,8 @@ declare global {
       }
       cajas: {
         getActive: () => Promise<CajaConResponsable | null>
+        getUltimosResponsables: () => Promise<string[]>
+        getUltima: () => Promise<(CajaConResponsable & { montoInicial: number }) | null>
         open: (data: AperturaCajaInput) => Promise<CajaConResponsable>
         getSummary: (cajaId: number) => Promise<CajaSummary>
         close: (data: CierreCajaInput) => Promise<Caja>

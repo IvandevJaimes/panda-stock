@@ -1,7 +1,9 @@
+import { useRef } from 'react'
 import { AlertCircle, FilterX, PackageSearch, PackageX } from 'lucide-react'
 import { cn } from '../../lib/cn'
 import { Button } from '../../components/ui/Button'
 import { EmptyState } from '../../components/ui/EmptyState'
+import { Pagination } from '../../components/ui/Pagination'
 import { PosProductCard } from './PosProductCard'
 import type { ProductoPOS } from './posQuery'
 
@@ -13,6 +15,8 @@ type ProductGridProps = {
   error: string | null
   terminoConsulta: string
   onLimpiarFiltros?: () => void
+  paginaActual?: number
+  onPageChange?: (page: number) => void
 }
 
 const contenedor = 'flex w-full min-h-0 flex-1 flex-col'
@@ -24,7 +28,21 @@ export function ProductGrid({
   error,
   terminoConsulta,
   onLimpiarFiltros,
+  paginaActual = 1,
+  onPageChange,
 }: ProductGridProps) {
+  const LIMITE_PAGINA = 50
+  const totalPages = Math.max(1, Math.ceil(productos.length / LIMITE_PAGINA))
+  const paginados = productos.slice((paginaActual - 1) * LIMITE_PAGINA, paginaActual * LIMITE_PAGINA)
+  const desde = (paginaActual - 1) * LIMITE_PAGINA + 1
+  const hasta = Math.min(paginaActual * LIMITE_PAGINA, productos.length)
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  const handlePageChange = (nuevaPagina: number) => {
+    onPageChange?.(nuevaPagina)
+    scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
   if (error) {
     return (
       <div className={cn(contenedor, 'justify-center')}>
@@ -84,34 +102,45 @@ export function ProductGrid({
 
   return (
     <div
+      ref={scrollRef}
       className={cn(
         contenedor,
-        // `pb-32` hasta 1024: el pill del ticket se apila debajo del badge de no
-        // vendibles y sin el padding extra la última fila no se puede despejar.
-        //
-        // Las columnas suben y BAJAN. Suben 3 → 4 → 5 mientras el ticket está
-        // colapsado, y vuelven a 3 en 1025 porque a partir de ahí el ticket se
-        // come 520px de grilla. De 1025 para arriba sí escalan 3 → 4 → 5.
-        //
-        // Todas las bandas van como RANGO, nunca como `min-width` pelada. Las
-        // reglas de una banda se pisan con las de la siguiente y ahí gana la
-        // que Tailwind emite última, no la que uno supondría: se verificó
-        // compilando el CSS que `min-[1025px]` sale ANTES que `md`, así que un
-        // `md:grid-cols-5` a secas se comía la banda de 1025. Con rangos no hay
-        // solape y el orden deja de importar. Los `max-*` de v4 son estrictos
-        // (`< 1025px`, no `<=`), de ahí el 1025 y no el 1024.
-        'grid auto-rows-min px-1 pb-16 pt-1 grid-cols-3 content-start gap-2 overflow-y-auto max-[1024px]:pb-32',
-        'sm:gap-3 sm:max-[767px]:grid-cols-4 md:max-[1025px]:grid-cols-5 min-[1025px]:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5',
+        'relative overflow-y-auto px-1 pt-1 pb-16 max-[1024px]:pb-32',
       )}
     >
-      {productos.map((producto) => (
-        <PosProductCard
-          key={producto.id}
-          producto={producto}
-          onAgregar={onAgregar}
-          terminoConsulta={terminoConsulta}
-        />
-      ))}
+      <div
+        className={cn(
+          'grid auto-rows-min grid-cols-3 content-start gap-2',
+          'sm:gap-3 sm:max-[767px]:grid-cols-4 md:max-[1025px]:grid-cols-5 min-[1025px]:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5',
+        )}
+      >
+        {paginados.map((producto) => (
+          <PosProductCard
+            key={producto.id}
+            producto={producto}
+            onAgregar={onAgregar}
+            terminoConsulta={terminoConsulta}
+          />
+        ))}
+      </div>
+
+      <div className="flex flex-col items-center justify-between gap-2 pt-6 pb-2 sm:flex-row px-1">
+        <span className="text-xs font-medium text-slate-400 dark:text-slate-500">
+          Mostrando{' '}
+          <span className="font-semibold text-slate-600 dark:text-slate-300">
+            {desde}–{hasta}
+          </span>{' '}
+          de {productos.length} productos vendibles
+        </span>
+
+        {totalPages > 1 && onPageChange && (
+          <Pagination
+            currentPage={paginaActual}
+            totalPages={totalPages}
+            onPageChange={handlePageChange}
+          />
+        )}
+      </div>
     </div>
   )
 }

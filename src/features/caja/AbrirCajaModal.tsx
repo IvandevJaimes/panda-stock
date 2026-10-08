@@ -1,30 +1,32 @@
-import { useForm } from 'react-hook-form'
-import { ShieldCheck } from 'lucide-react'
-import { toast } from 'sonner'
-import { Button } from '../../components/ui/Button'
-import { CapitalizedInput } from '../../components/ui/CapitalizedInput'
-import { FieldError } from '../../components/ui/FieldError'
-import { Input } from '../../components/ui/Input'
-import { Modal } from '../../components/ui/Modal'
-import { cajasService } from '../../services/cajas.service'
-import { noSpinnersClass } from '../inventory/quick-actions/types'
-import { useCajaStore } from '../../stores/caja.store'
+import React, { useEffect, useRef, useState } from "react";
+import { useForm, useWatch } from "react-hook-form";
+import { ShieldCheck, Repeat } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "../../components/ui/Button";
+import { CapitalizedInput } from "../../components/ui/CapitalizedInput";
+import { FieldError } from "../../components/ui/FieldError";
+import { Input } from "../../components/ui/Input";
+import { Modal } from "../../components/ui/Modal";
+import { cajasService } from "../../services/cajas.service";
+import { noSpinnersClass } from "../inventory/quick-actions/types";
+import { useCajaStore } from "../../stores/caja.store";
+import { Tooltip } from "../../components/ui/Tooltip";
 
 type AbrirCajaValues = {
-  responsable: string
-  montoInicial: string
-}
+  responsable: string;
+  montoInicial: string;
+};
 
 const VALORES_INICIALES: AbrirCajaValues = {
-  responsable: '',
-  montoInicial: '0',
-}
+  responsable: "",
+  montoInicial: "",
+};
 
-const FORM_ID = 'form-abrir-caja'
+const FORM_ID = "form-abrir-caja";
 
 interface AbrirCajaModalProps {
-  isOpen: boolean
-  onClose: () => void
+  isOpen: boolean;
+  onClose: () => void;
 }
 
 /**
@@ -32,38 +34,90 @@ interface AbrirCajaModalProps {
  * abrir la caja, puede vender con ella.
  */
 export function AbrirCajaModal({ isOpen, onClose }: AbrirCajaModalProps) {
-  const setCaja = useCajaStore((state) => state.setCaja)
+  const setCaja = useCajaStore((state) => state.setCaja);
+
+  const [responsables, setResponsables] = useState<string[]>([]);
+  const [responsablesDropdown, setResponsablesDropdown] = useState(false);
+  const [ultimaCaja, setUltimaCaja] = useState<
+    | (import("../../../electron/db/types").CajaConResponsable & {
+        montoInicial: number;
+      })
+    | null
+  >(null);
+  const responsablesRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      cajasService
+        .getUltimosResponsables()
+        .then(setResponsables)
+        .catch(console.error);
+      cajasService.getUltima().then(setUltimaCaja).catch(console.error);
+    }
+  }, [isOpen]);
 
   const {
     register,
     handleSubmit,
     reset,
     setValue,
+    control,
     formState: { errors, isSubmitting },
-  } = useForm<AbrirCajaValues>({ defaultValues: VALORES_INICIALES })
+  } = useForm<AbrirCajaValues>({ defaultValues: VALORES_INICIALES });
 
-  const registroMontoInicial = register('montoInicial', {
-    required: 'El monto inicial es obligatorio',
+  const valorResponsable = useWatch({ control, name: "responsable" }) ?? "";
+
+  const responsablesSugeridos = React.useMemo(() => {
+    if (!responsablesDropdown) return [];
+    const termino = valorResponsable.trim().toLowerCase();
+    return termino
+      ? responsables.filter((r) => r.toLowerCase().includes(termino))
+      : responsables;
+  }, [responsables, responsablesDropdown, valorResponsable]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        responsablesRef.current &&
+        !responsablesRef.current.contains(event.target as Node)
+      ) {
+        setResponsablesDropdown(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isOpen]);
+
+  const registroMontoInicial = register("montoInicial", {
+    required: "El monto inicial es obligatorio",
     validate: {
-      numeroValido: (valor) => !Number.isNaN(Number(valor)) || 'Debe ser un número válido',
-      noNegativo: (valor) => Number(valor) >= 0 || 'No puede ser negativo',
+      numeroValido: (valor) =>
+        !Number.isNaN(Number(valor)) || "Debe ser un número válido",
+      noNegativo: (valor) => Number(valor) >= 0 || "No puede ser negativo",
     },
-  })
+  });
 
   const onSubmit = async (data: AbrirCajaValues) => {
     try {
       const caja = await cajasService.open({
         responsable: data.responsable,
         montoInicial: Number(data.montoInicial),
-      })
-      setCaja(caja)
-      toast.success(`Caja abierta · ${caja.empleadoNombre}`)
-      reset(VALORES_INICIALES)
-      onClose()
+      });
+      setCaja(caja);
+      toast.success(`Caja abierta · ${caja.empleadoNombre}`);
+      reset(VALORES_INICIALES);
+      onClose();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'No se pudo abrir la caja')
+      toast.error(
+        error instanceof Error ? error.message : "No se pudo abrir la caja",
+      );
     }
-  }
+  };
 
   return (
     <Modal
@@ -84,7 +138,12 @@ export function AbrirCajaModal({ isOpen, onClose }: AbrirCajaModalProps) {
         </>
       }
     >
-      <form id={FORM_ID} noValidate onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+      <form
+        id={FORM_ID}
+        noValidate
+        onSubmit={handleSubmit(onSubmit)}
+        className="space-y-4"
+      >
         <div className="flex flex-col gap-1.5">
           <label
             htmlFor="responsable"
@@ -92,20 +151,95 @@ export function AbrirCajaModal({ isOpen, onClose }: AbrirCajaModalProps) {
           >
             Responsable
           </label>
-          <CapitalizedInput
-            id="responsable"
-            placeholder="Ej: Juan Pérez"
-            autoFocus
-            disabled={isSubmitting}
-            onClear={() => setValue('responsable', '')}
-            {...register('responsable', {
-              required: 'El nombre del responsable es obligatorio',
-              validate: {
-                noSoloEspacios: (valor) =>
-                  valor.trim().length > 0 || 'El nombre del responsable es obligatorio',
-              },
-            })}
-          />
+          <div className="relative" ref={responsablesRef}>
+            <div className="flex items-center gap-2">
+              <CapitalizedInput
+                id="responsable"
+                placeholder="Ej: Juan Pérez"
+                autoFocus
+                disabled={isSubmitting}
+                value={valorResponsable}
+                aria-expanded={responsablesDropdown}
+                aria-autocomplete="list"
+                onFocus={() => setResponsablesDropdown(true)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    setResponsablesDropdown(false);
+                  }
+                }}
+                onClear={() => {
+                  setValue("responsable", "", {
+                    shouldValidate: true,
+                    shouldDirty: true,
+                  });
+                  setResponsablesDropdown(false);
+                }}
+                {...register("responsable", {
+                  required: "El nombre del responsable es obligatorio",
+                  validate: {
+                    noSoloEspacios: (valor) =>
+                      valor.trim().length > 0 ||
+                      "El nombre del responsable es obligatorio",
+                  },
+                })}
+              />
+              {ultimaCaja && (
+                <Tooltip content="Repetir ultima caja">
+                  <button
+                    type="button"
+                    className="text-lg font-medium duration-200 bg-none transition-all hover:text-emerald-400 cursor-pointer text-emerald-500 "
+                    onClick={() => {
+                      setValue("responsable", ultimaCaja.empleadoNombre, {
+                        shouldDirty: true,
+                        shouldValidate: true,
+                      });
+                      setValue(
+                        "montoInicial",
+                        ultimaCaja.montoInicial.toString(),
+                        {
+                          shouldDirty: true,
+                          shouldValidate: true,
+                        },
+                      );
+                      setResponsablesDropdown(false);
+                    }}
+                    disabled={isSubmitting}
+                  >
+                    <Repeat size={19} />
+                  </button>
+                </Tooltip>
+              )}
+            </div>
+
+            {responsablesDropdown && responsablesSugeridos.length > 0 && (
+              <div
+                role="listbox"
+                className="custom-scrollbar absolute left-0 top-[calc(100%+6px)] z-[100] max-h-56 w-full animate-entry-up overflow-y-auto rounded-xl border border-slate-200 bg-white py-1.5 shadow-xl dark:border-slate-800 dark:bg-[#0B1120]"
+              >
+                {responsablesSugeridos.map((r) => (
+                  <button
+                    key={r}
+                    type="button"
+                    role="option"
+                    aria-selected={r === valorResponsable}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      setValue("responsable", r, {
+                        shouldDirty: true,
+                        shouldValidate: true,
+                      });
+                      setResponsablesDropdown(false);
+                    }}
+                    className="flex w-full cursor-pointer items-center px-3 py-2 text-left text-sm text-slate-700 transition-colors hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800/60"
+                  >
+                    <span className="truncate">{r}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           <FieldError error={errors.responsable?.message} />
         </div>
 
@@ -120,28 +254,38 @@ export function AbrirCajaModal({ isOpen, onClose }: AbrirCajaModalProps) {
           className={noSpinnersClass}
           {...registroMontoInicial}
           onChange={(evento) => {
-            const valor = evento.currentTarget.value
+            const valor = evento.currentTarget.value;
             if (/^0\d/.test(valor)) {
-              setValue('montoInicial', valor.replace(/^0+(?=\d)/, ''), {
+              setValue("montoInicial", valor.replace(/^0+(?=\d)/, ""), {
                 shouldDirty: true,
                 shouldValidate: true,
-              })
-              return
+              });
+              return;
             }
-            void registroMontoInicial.onChange(evento)
+            void registroMontoInicial.onChange(evento);
           }}
         />
 
-        <p className="text-xs text-slate-500 dark:text-slate-400">
-          Al cerrar la caja vas a poder contar el efectivo y ver la diferencia contra este monto.
-        </p>
-
-        {/*
-          Las observaciones solo importan al cerrar el turno, no al abrirlo: la
-          primera lectura útil es la del arqueo. Quitar el campo acá baja ruido
-          y deja el flujo más corto para el cajero.
-        */}
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {[1000, 2000, 5000, 10000, 20000, 50000, 100000].map((monto) => (
+            <Button
+              key={monto}
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="rounded-lg border border-slate-200/80 bg-white/90 px-2.5 py-1 text-xs font-medium shadow-sm transition-all hover:bg-slate-50 focus-visible:ring-slate-300 dark:border-slate-700/80 dark:bg-slate-800/90 dark:hover:bg-slate-700"
+              onClick={() => {
+                setValue("montoInicial", monto.toString(), {
+                  shouldDirty: true,
+                  shouldValidate: true,
+                });
+              }}
+            >
+              $ {monto.toLocaleString("es-AR")}
+            </Button>
+          ))}
+        </div>
       </form>
     </Modal>
-  )
+  );
 }

@@ -101,9 +101,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
   },
   cajas: {
     getActive: () => ipcRenderer.invoke("cajas:get-active"),
+    getUltimosResponsables: () => ipcRenderer.invoke("cajas:get-ultimos-responsables"),
+    getUltima: () => ipcRenderer.invoke("cajas:get-ultima"),
     open: (data: AperturaCajaInput) => ipcRenderer.invoke("cajas:open", data),
-    getSummary: (cajaId: number) =>
-      ipcRenderer.invoke("cajas:get-summary", cajaId),
+    getSummary: (cajaId: number) => ipcRenderer.invoke("cajas:get-summary", cajaId),
     close: (data: CierreCajaInput) => ipcRenderer.invoke("cajas:close", data),
   },
   ventas: {

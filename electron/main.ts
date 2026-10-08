@@ -31,6 +31,8 @@ import {
   deleteMarca,
   deleteProducto,
   getActiveCaja,
+  getUltimosResponsables,
+  getUltimaCaja,
   getAlertasStock,
   getCajaSummary,
   getCategorias,
@@ -339,6 +341,8 @@ function registerIpcHandlers() {
   ipcMain.handle("lotes:delete", (_event, id: number) => deleteLote(id));
 
   ipcMain.handle("cajas:get-active", () => getActiveCaja());
+  ipcMain.handle("cajas:get-ultimos-responsables", () => getUltimosResponsables());
+  ipcMain.handle("cajas:get-ultima", () => getUltimaCaja());
   ipcMain.handle("cajas:open", (_event, data: AperturaCajaInput) =>
     openCaja(data),
   );

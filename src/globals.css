@@ -5,7 +5,7 @@
 @utility scrollbar-none {
   scrollbar-width: none; /* Firefox */
   -ms-overflow-style: none; /* IE/Edge legacy */
-  &::-webkit-scrollbar {
+  &*::-webkit-scrollbar {
     display: none; /* Chromium/WebKit */
   }
 }
@@ -55,51 +55,51 @@ h6 {
   font-family: var(--font-display);
 }
 
-* {
-  ::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
-    cursor: pointer;
-  }
-
-  ::-webkit-scrollbar-track,
-  ::-webkit-scrollbar-corner {
-    background: transparent;
-  }
-
-  ::-webkit-scrollbar-thumb {
-    background-color: transparent;
-    border-radius: 9999px;
-    /* El borde transparente agranda el área de agarre sin encoger el thumb */
-    border: 2px solid transparent;
-    background-clip: padding-box;
-  }
-
-  ::-webkit-scrollbar-thumb:hover {
-    background-color: rgba(100, 116, 139, 0.65);
-  }
+/* Scrollbar for Webkit (Chrome/Edge/Safari) */
+*::-webkit-scrollbar {
+  width: 2px;
+  height: 2px;
 }
 
-/* La barra aparece solo cuando el mouse ronda el área scrolleable o la propia
-   barra; en reposo queda invisible para no estorbar contra los bordes. */
-*:hover::-webkit-scrollbar-thumb {
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  /* Visible but subtle by default */
   background-color: rgba(148, 163, 184, 0.4);
+  border-radius: 9999px;
 }
 
-.dark * {
-  scrollbar-color: rgba(71, 85, 105, 0.45) transparent;
+*::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(100, 116, 139, 0.65);
 }
 
 .dark *::-webkit-scrollbar-thumb {
-  background-color: transparent;
-}
-
-.dark *:hover::-webkit-scrollbar-thumb {
   background-color: rgba(71, 85, 105, 0.5);
 }
 
 .dark *::-webkit-scrollbar-thumb:hover {
   background-color: rgba(100, 116, 139, 0.7);
+}
+
+/* Fallback for Firefox */
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+    transition: scrollbar-color 0.2s;
+  }
+  *:hover {
+    scrollbar-color: rgba(148, 163, 184, 0.4) transparent;
+  }
+  .dark * {
+    scrollbar-color: transparent transparent;
+  }
+  .dark *:hover {
+    scrollbar-color: rgba(71, 85, 105, 0.5) transparent;
+  }
 }
 
 /* ==========================================================================

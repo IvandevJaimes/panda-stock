@@ -206,10 +206,7 @@ export function Header() {
             <Settings size={18} />
           </button>
         </Tooltip>
-           <div
-              aria-hidden="true"
-              className=" h-8 w-px shrink-0 bg-slate-200 dark:bg-slate-700/60 "
-            />
+
                {/* Información del negocio */}
         {hayNegocio && (
           <>

@@ -111,6 +111,7 @@ function debug(...args: unknown[]): void {
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 function isPrintableKey(event: KeyboardEvent): boolean {
+  if (event.key === '+' || event.key === '-') return false
   if (event.key.length !== 1) return false
   if (event.ctrlKey || event.metaKey || event.altKey) return false
   if (event.repeat) return false

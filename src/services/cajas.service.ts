@@ -8,6 +8,22 @@ import type {
 import { toErrorMessage } from './errors'
 
 export const cajasService = {
+  async getUltimosResponsables(): Promise<string[]> {
+    try {
+      return await window.electronAPI.cajas.getUltimosResponsables()
+    } catch (error) {
+      throw new Error(toErrorMessage(error), { cause: error })
+    }
+  },
+
+  async getUltima(): Promise<(import('../../electron/db/types').CajaConResponsable & { montoInicial: number }) | null> {
+    try {
+      return await window.electronAPI.cajas.getUltima()
+    } catch (error) {
+      throw new Error(toErrorMessage(error), { cause: error })
+    }
+  },
+
   async getActive(): Promise<CajaConResponsable | null> {
     try {
       return await window.electronAPI.cajas.getActive()

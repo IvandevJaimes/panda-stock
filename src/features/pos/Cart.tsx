@@ -1,5 +1,5 @@
 import { useState, type RefObject } from 'react'
-import { BookUser, History, ShoppingBag, Ticket, Trash2, UserRound } from 'lucide-react'
+import { BookUser, Calculator, History, ShoppingBag, Ticket, Trash2, UserRound } from 'lucide-react'
 import { cn } from '../../lib/cn'
 import { Button } from '../../components/ui/Button'
 import { ConfirmModal } from '../../components/ui/ConfirmModal'
@@ -64,6 +64,88 @@ type CartProps = {
   motivoCobroBloqueado: string | null
   /** La venta se está guardando: el botón se bloquea para no cobrar dos veces. */
   cobrando: boolean
+}
+
+type CalculadoraVueltoProps = {
+  total: number
+  onCobrar: () => void
+  bloqueado: boolean
+}
+
+function CalculadoraVuelto({ total, onCobrar, bloqueado }: CalculadoraVueltoProps) {
+  const [pagaCon, setPagaCon] = useState('')
+
+  const valorNumerico = Number(pagaCon.replace(/,/g, '.'))
+  const tieneValor = pagaCon.trim() !== '' && !Number.isNaN(valorNumerico) && valorNumerico > 0
+  const vuelto = tieneValor ? valorNumerico - total : null
+
+  return (
+    <div className="shrink-0 border-t border-slate-200 bg-slate-50/75 px-[22px] py-2.5 dark:border-slate-800 dark:bg-secondary/20">
+      <div className="mb-1.5 flex items-center justify-between gap-2">
+        <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 dark:text-slate-400">
+          <Calculator size={14} className="text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+          Calculadora de vuelto
+          <span className="text-[11px] font-normal text-slate-400 dark:text-slate-500">(opcional)</span>
+        </span>
+        {pagaCon && (
+          <button
+            type="button"
+            onClick={() => setPagaCon('')}
+            className="cursor-pointer text-[11px] font-medium text-slate-400 transition-colors hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"
+          >
+            Limpiar
+          </button>
+        )}
+      </div>
+
+      <div className="relative">
+        <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 font-semibold text-slate-400 dark:text-slate-500">
+          $
+        </span>
+        <input
+          type="text"
+          inputMode="decimal"
+          value={pagaCon}
+          onChange={(e) => setPagaCon(e.target.value.replace(/[^0-9.,]/g, ''))}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              e.stopPropagation()
+              if (!bloqueado) onCobrar()
+            }
+          }}
+          placeholder="Con cuánto abona…"
+          aria-label="Monto con el que abona el cliente"
+          className="h-9 w-full rounded-xl border border-slate-200 bg-white pl-7 pr-3 font-display text-sm font-semibold tabular-nums text-slate-800 placeholder-slate-400 transition-colors focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:border-slate-800 dark:bg-[#111827] dark:text-slate-100 dark:placeholder-slate-500"
+        />
+      </div>
+
+      {vuelto !== null && (
+        <div
+          className={cn(
+            'mt-2 flex items-center justify-between rounded-xl border px-3 py-1.5 transition-colors',
+            vuelto >= 0
+              ? 'border-emerald-500/30 bg-emerald-500/10 dark:border-emerald-500/20 dark:bg-emerald-500/10'
+              : 'border-amber-500/30 bg-amber-500/10 dark:border-amber-500/20 dark:bg-amber-500/10',
+          )}
+        >
+          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
+            {vuelto >= 0 ? 'Vuelto a entregar:' : 'Falta abonar:'}
+          </span>
+          <span
+            className={cn(
+              'font-display text-base font-extrabold tabular-nums',
+              vuelto >= 0
+                ? 'text-emerald-700 dark:text-emerald-400'
+                : 'text-amber-700 dark:text-amber-400',
+            )}
+          >
+            {formatearMoneda(Math.abs(vuelto))}
+          </span>
+        </div>
+      )}
+    </div>
+  )
 }
 
 export function Cart({
@@ -226,22 +308,61 @@ export function Cart({
       <PaymentMethodSelector
         valor={metodoPago}
         onChange={onCambiarMetodoPago}
-        metodos={metodosPago}
+        metodos={metodosPago.filter((m) => m !== 'cuenta_corriente')}
       />
+
+      {/* Calculadora de vuelto opcional: solo activa cuando se paga en efectivo */}
+      {metodoPago === 'efectivo' && !vacio && (
+        <CalculadoraVuelto
+          key={`calc-${activeTicketId}`}
+          total={resumen.total}
+          onCobrar={onCobrar}
+          bloqueado={cobroBloqueado || cobrando}
+        />
+      )}
+
+      {/* Toggle de cuenta corriente, fuera del selector de métodos */}
+      {metodosPago.includes('cuenta_corriente') && (
+        <div className="shrink-0 border-t border-slate-200 bg-slate-50 px-[22px] py-2.5 dark:border-slate-800 dark:bg-secondary/30">
+          <label className="group relative flex w-full cursor-pointer">
+            <input
+              type="checkbox"
+              checked={esCuentaCorriente}
+              onChange={(e) =>
+                onCambiarMetodoPago(e.target.checked ? 'cuenta_corriente' : 'efectivo')
+              }
+              className="peer sr-only"
+            />
+            <span
+              className={cn(
+                'flex w-full items-center justify-center gap-2 rounded-xl border px-3 py-2 text-[13px] font-display font-semibold transition-[color,background-color,border-color,transform] duration-150',
+                'peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-emerald-500',
+                !esCuentaCorriente &&
+                  'border-slate-200 bg-white text-slate-600 group-hover:-translate-y-px group-hover:border-slate-300 group-hover:bg-slate-100 group-hover:text-slate-900 dark:border-slate-800 dark:bg-[#111827] dark:text-slate-400 dark:group-hover:border-slate-600 dark:group-hover:bg-secondary/50 dark:group-hover:text-slate-100',
+                esCuentaCorriente &&
+                  'border-emerald-500/40 bg-emerald-500/10 text-emerald-600 group-hover:-translate-y-px group-hover:border-emerald-500/60 group-hover:bg-emerald-500/20 dark:text-emerald-400',
+              )}
+            >
+              <BookUser size={16} aria-hidden="true" />
+              Vender a cuenta corriente
+            </span>
+          </label>
+        </div>
+      )}
 
       {/* La fila del cliente solo existe con cuenta corriente: en efectivo o
           tarjeta no hay nadie a quien imputar la venta, y mostrar un selector
           vacío invitaría a elegir un cliente sin motivo. */}
       {esCuentaCorriente && (
-        <div className="shrink-0 border-t border-slate-200 bg-slate-50 px-[22px] py-2.5 dark:border-slate-800 dark:bg-secondary/30">
+        <div className="shrink-0 bg-slate-50 px-[22px] pb-2 dark:border-slate-800 dark:bg-secondary/30">
           <button
             type="button"
             onClick={() => setSelectorClienteAbierto(true)}
             className={cn(
               'flex w-full cursor-pointer items-center gap-2.5 rounded-xl border px-3 py-2 text-left transition-colors duration-150',
               cliente
-                ? 'border-emerald-500/40 bg-emerald-500/10 hover:border-emerald-500/60 hover:bg-emerald-500/15'
-                : 'border-dashed border-slate-300 bg-white hover:border-emerald-400 hover:bg-emerald-50/50 dark:border-slate-700 dark:bg-[#111827] dark:hover:border-emerald-500/50',
+                ? 'border-emerald-500/40 bg-emerald-500/10 hover:border-emerald-500/60 hover:bg-emerald-500/15 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:hover:border-emerald-500/40 dark:hover:bg-emerald-500/20'
+                : 'border-dashed border-slate-300 bg-white hover:border-emerald-400 hover:bg-emerald-50/50 dark:border-slate-700 dark:bg-[#111827] dark:hover:border-emerald-500/50 dark:hover:bg-emerald-500/10',
             )}
           >
             <span
@@ -305,7 +426,7 @@ export function Cart({
           <span className="flex w-full">
             <Button
               variant="primary"
-              icon={<ShoppingBag size={19} />}
+              icon={esCuentaCorriente ? <BookUser size={19} /> : <ShoppingBag size={19} />}
               onClick={() => {
                 if (!cobroBloqueado && !cobrando) onCobrar()
               }}
@@ -317,7 +438,7 @@ export function Cart({
                 (cobroBloqueado || cobrando) && 'pointer-events-none opacity-50',
               )}
             >
-              {cobrando ? 'Guardando…' : 'Cobrar'}
+              {cobrando ? 'Guardando…' : esCuentaCorriente ? 'Anotar en cuenta' : 'Cobrar'}
             </Button>
           </span>
         </Tooltip>
@@ -339,6 +460,7 @@ export function Cart({
         isOpen={selectorClienteAbierto}
         onClose={() => setSelectorClienteAbierto(false)}
         onSeleccionar={onAsignarCliente}
+        clienteSeleccionadoId={cliente?.id}
       />
     </aside>
   )

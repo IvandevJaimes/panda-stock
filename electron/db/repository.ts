@@ -772,6 +772,47 @@ export function getLotesPorVencer(diasLimite: number): Lote[] {
     .all()
 }
 
+
+export function getUltimosResponsables(limite: number = 5): string[] {
+  const db = getDb()
+  const rows = db
+    .select({ nombre: empleados.nombre })
+    .from(cajas)
+    .innerJoin(empleados, eq(cajas.empleadoId, empleados.id))
+    .orderBy(desc(cajas.fechaApertura))
+    .limit(20)
+    .all()
+
+  // Filtramos duplicados manteniendo el orden del más reciente al más antiguo
+  const unicos = Array.from(new Set(rows.map((r) => r.nombre)))
+  return unicos.slice(0, limite)
+}
+
+export function getUltimaCaja(): (CajaConResponsable & { montoInicial: number }) | null {
+  const db = getDb()
+  const ultima = db
+    .select({
+      id: cajas.id,
+      empleadoId: cajas.empleadoId,
+      empleadoNombre: empleados.nombre,
+      montoInicial: cajas.montoInicial,
+      montoEsperado: cajas.montoEsperado,
+      montoReal: cajas.montoReal,
+      diferencia: cajas.diferencia,
+      estado: cajas.estado,
+      fechaApertura: cajas.fechaApertura,
+      fechaCierre: cajas.fechaCierre,
+      observaciones: cajas.observaciones,
+    })
+    .from(cajas)
+    .innerJoin(empleados, eq(empleados.id, cajas.empleadoId))
+    .orderBy(desc(cajas.fechaApertura), desc(cajas.id))
+    .limit(1)
+    .get()
+
+  return ultima ?? null
+}
+
 export function getActiveCaja(): CajaConResponsable | null {
   return getDb()
     .select({

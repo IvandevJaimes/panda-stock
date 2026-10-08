@@ -20,12 +20,13 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '../../lib/cn'
-import { CajaCerradaOverlay } from '../../components/ui/CajaCerradaOverlay'
 import { CustomSelect } from '../../components/ui/CustomSelect'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { LoadingState } from '../../components/ui/LoadingState'
 import { EmptyState } from '../../components/ui/EmptyState'
+import { CajaCerradaOverlay } from '../../components/ui/CajaCerradaOverlay'
+import { AbrirCajaModal } from '../caja/AbrirCajaModal'
 import { Tooltip } from '../../components/ui/Tooltip'
 import { MarcasModal, type ConteoMarca } from '../../components/inventory/MarcasModal'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
@@ -106,6 +107,7 @@ export function PosPage() {
 
   const [busqueda, setBusqueda] = useState('')
   const [paginaActual, setPaginaActual] = useState(1)
+  const [abrirCajaAbierto, setAbrirCajaAbierto] = useState(false)
   const [categoriaId, setCategoriaId] = useState('all')
   const [vista, setVista] = useState<VistaCatalogo>(VISTA_POR_DEFECTO)
   const [viendoMasVendidos, setViendoMasVendidos] = useState(false)
@@ -156,6 +158,7 @@ export function PosPage() {
   const [cobrando, setCobrando] = useState(false)
 
   const busquedaDiferida = useDeferredValue(busqueda)
+
   // Conteo por marca para el selector: el número que el cajero necesita es el de
   // los productos que se pueden cobrar, no el de todos los asignados. Se cuenta
   // sobre los crudos porque ahí está `activo`, que `mapearProductosPOS` ya no
@@ -527,12 +530,29 @@ export function PosPage() {
   // `+`, `-` y `Delete` reciben la línea seleccionada, así que no buscan el
   // producto: viene del ticket y por definición está en él.
   const handleAumentarUno = useCallback(
-    (linea: LineaTicket) => handleCambiarCantidad(linea.productoId, linea.cantidad + 1),
-    [handleCambiarCantidad],
+    (linea: LineaTicket) => {
+      console.log('Aumentar uno', linea)
+      if (idsDesactivados.has(linea.productoId)) {
+        toast.warning(`No se puede agregar más: el producto está desactivado`)
+        return
+      }
+
+      const limite = stockPorId.get(linea.productoId)
+      if (limite !== undefined && limite !== null && linea.cantidad >= limite) {
+        toast.error(motivoStockInsuficiente(linea.nombre, limite))
+        return
+      }
+
+      handleCambiarCantidad(linea.productoId, linea.cantidad + 1)
+    },
+    [handleCambiarCantidad, idsDesactivados, stockPorId],
   )
 
   const handleRestarUno = useCallback(
-    (linea: LineaTicket) => handleCambiarCantidad(linea.productoId, linea.cantidad - 1),
+    (linea: LineaTicket) => {
+      console.log('Restar uno', linea)
+      handleCambiarCantidad(linea.productoId, linea.cantidad - 1)
+    },
     [handleCambiarCantidad],
   )
 
@@ -562,6 +582,8 @@ export function PosPage() {
       : !caja
         ? 'Abrí la caja desde el encabezado para poder cobrar'
         : motivoTicketBloqueado
+
+  const grillaCerrada = ventasPorCajas && cajaCargada && !caja
 
   /**
    * Candado del cobro en un ref y no en el estado: dos Enters en el mismo tick
@@ -670,7 +692,7 @@ export function PosPage() {
     onAbrirMarcas: () => setMarcasAbiertas(true),
     onCambiarMetodoPago: () =>
       handleCambiarMetodoPago(
-        siguienteMetodoPago(metodoPagoActivo, metodosPago.filter(m => m !== 'cuenta_corriente')),
+        siguienteMetodoPago(metodoPagoActivo, metodosPago),
       ),
     onSalirDeBusqueda: () => setBusqueda(''),
     onSinEfecto: (mensaje) => toast.warning(mensaje),
@@ -705,219 +727,219 @@ export function PosPage() {
       */}
       <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)] gap-6 min-[1025px]:grid-cols-[minmax(0,1fr)_520px]">
         <section className="relative flex min-w-0 min-h-0 flex-col overflow-hidden">
-          {ventasPorCajas && cajaCargada && !caja ? (
-            <CajaCerradaOverlay />
+          {grillaCerrada ? (
+            <CajaCerradaOverlay onAbrirCaja={() => setAbrirCajaAbierto(true)} />
           ) : (
             <>
               <div className="mb-4 flex shrink-0 flex-col gap-3">
-            {/* El botón de marcas va en la fila del título, a la derecha, igual
-                que en Inventario: el título y la acción que cambia el
-                filtro conviven, y el buscador queda abajo como la caja donde
-                aterriza la marca elegida. */}
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex min-w-0 items-center gap-2">
-                  {/* El título cambia porque el cajero tiene que saber si está
-                      mirando el catálogo entero o el ranking. El botón vuelve a
-                      ser el camino de salida, y no solo apagar el highlight del
-                      botón de más vendidos: el catálogo completo tiene que
-                      quedar siempre a un clic de vuelta. */}
-                  {viendoMasVendidos && (
-                    <Tooltip content="Volver a todo el catálogo" placement="bottom">
+                {/* El botón de marcas va en la fila del título, a la derecha, igual
+                    que en Inventario: el título y la acción que cambia el
+                    filtro conviven, y el buscador queda abajo como la caja donde
+                    aterriza la marca elegida. */}
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-2">
+                      {/* El título cambia porque el cajero tiene que saber si está
+                          mirando el catálogo entero o el ranking. El botón vuelve a
+                          ser el camino de salida, y no solo apagar el highlight del
+                          botón de más vendidos: el catálogo completo tiene que
+                          quedar siempre a un clic de vuelta. */}
+                      {viendoMasVendidos && (
+                        <Tooltip content="Volver a todo el catálogo" placement="bottom">
+                          <Button
+                            variant="ghost"
+                            onClick={() => void toggleMasVendidos()}
+                            aria-label="Volver a todo el catálogo"
+                            className="h-9 w-9 shrink-0 rounded-xl p-0 text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/60 dark:hover:text-white"
+                          >
+                            <ArrowLeft size={18} className="shrink-0" aria-hidden />
+                          </Button>
+                        </Tooltip>
+                      )}
+
+                      <h2 className="truncate font-display font-semibold text-2xl tracking-tight text-slate-900 dark:text-white">
+                        {viendoMasVendidos ? 'Más vendidos' : 'Vender'}
+                      </h2>
+
+                      {/* Icono solo, al lado del título. `alternarAyuda` y no un
+                          estado propio: el atajo F1 ya abre y cierra este mismo
+                          modal, y con dos fuentes de verdad el botón podía quedar
+                          desincronizado del teclado. */}
+                      <Tooltip content="Atajos de teclado · F1" placement="bottom">
+                        <button
+                          type="button"
+                          onClick={alternarAyuda}
+                          aria-label="Ver los atajos de teclado"
+                          className="grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-xl text-slate-400 transition-colors duration-150 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                        >
+                          <Info size={18} aria-hidden="true" />
+                        </button>
+                      </Tooltip>
+                    </div>
+
+                  <div className="flex items-center gap-2">
+                    <Tooltip
+                      content={`Abrir marcas · ${MOD_TEXTO}+M`}
+                      placement="bottom"
+                    >
+                      <Button
+                        variant="outline"
+                        onClick={() => setMarcasAbiertas(true)}
+                        aria-keyshortcuts={modAtajo('M')}
+                        className="whitespace-nowrap rounded-2xl px-2 py-2 text-xs sm:text-sm"
+                      >
+                        Marcas
+                        <span className="select-none rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600 sm:text-xs dark:border-slate-700/80 dark:bg-slate-800 dark:text-slate-300">
+                          {marcasActivas}
+                        </span>
+                      </Button>
+                    </Tooltip>
+
+                    {/* Modo "más vendidos": cambia lo que muestra la grilla, no el orden de la
+                        grilla entera.
+                        `ghost` trae sus propios slate y se pisan con los de acá vía
+                        `cn`, pero igual se declaran los dos estados completos
+                        (reposo y hover) con su par claro/oscuro: dejar el hover solo
+                        en claro hacía que en oscuro el botón se apagara al pasar el
+                        mouse y pareciera deshabilitado.
+                        Fondo verde suave para distinguirse del outline de Marcas sin
+                        competir con el `Cobrar`, que es el único botón sólido de la
+                        pantalla. Activo se llena y suma un check, porque el estado
+                        vive acá y no se deduce del color. */}
+                    <Tooltip
+                      content={
+                        viendoMasVendidos
+                          ? 'Volver a todo el catálogo'
+                          : 'Ver los productos más vendidos'
+                      }
+                      placement="bottom"
+                    >
                       <Button
                         variant="ghost"
                         onClick={() => void toggleMasVendidos()}
-                        aria-label="Volver a todo el catálogo"
-                        className="h-9 w-9 shrink-0 rounded-xl p-0 text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/60 dark:hover:text-white"
+                        aria-pressed={viendoMasVendidos}
+                        aria-label="Ver los productos más vendidos"
+                        aria-busy={cargandoMasVendidos}
+                        className={cn(
+                          'whitespace-nowrap rounded-2xl border text-sm font-semibold',
+                          viendoMasVendidos
+                            ? 'border-emerald-500 bg-emerald-500/25 text-emerald-800 hover:bg-emerald-500/30 hover:text-emerald-900 dark:border-emerald-500/60 dark:bg-emerald-500/25 dark:text-emerald-200 dark:hover:bg-emerald-500/35 dark:hover:text-white'
+                            : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/20 hover:text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-500/15 dark:text-emerald-400 dark:hover:bg-emerald-500/25 dark:hover:text-emerald-200',
+                        )}
                       >
-                        <ArrowLeft size={18} className="shrink-0" aria-hidden />
+                        {cargandoMasVendidos ? (
+                          <Loader2 size={15} className="shrink-0 animate-spin" aria-hidden />
+                        ) : viendoMasVendidos ? (
+                          <Check size={15} className="shrink-0" aria-hidden />
+                        ) : (
+                          <TrendingUp size={15} className="shrink-0" aria-hidden />
+                        )}
+                        Más vendidos
                       </Button>
                     </Tooltip>
+                  </div>
+                </div>
+
+                <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                  <Input
+                    ref={busquedaRef}
+                    value={busqueda}
+                    onChange={(event) => {
+                      setBusqueda(event.target.value)
+                      setPaginaActual(1)
+                    }}
+                    placeholder="Buscar por producto, marca, variante o código..."
+                    aria-label="Buscar producto"
+                    leftIcon={<Search size={16} />}
+                    className="h-11"
+                    wrapperClassName="min-w-[200px] flex-1"
+                  />
+
+                  {/* En modo más vendidos el selector se OCULTA, no se deshabilita. Mostrar un
+                    orden activo que no va a pasar nada es peor que no mostrarlo: el
+                    cajero lo lee como el criterio real de la grilla. El filtro de
+                    avisos tampoco se arrastra al ranking (`conjuntoGrilla` entra con
+                    'all'); queda guardado para cuando vuelva al catálogo. */}
+                  {!viendoMasVendidos && (
+                    <CustomSelect
+                      options={OPCIONES_VISTA}
+                      value={valorVistaActiva(vista)}
+                      onChange={(valor) => {
+                        setVista(aplicarValorVista(vista, String(valor)))
+                        setPaginaActual(1)
+                      }}
+                      displayLabel={etiquetaVista(vista)}
+                      className="w-50 shrink-0"
+                      buttonClassName="h-11"
+                    />
                   )}
 
-                  <h2 className="truncate font-display font-semibold text-2xl tracking-tight text-slate-900 dark:text-white">
-                    {viendoMasVendidos ? 'Más vendidos' : 'Vender'}
-                  </h2>
-
-                  {/* Icono solo, al lado del título. `alternarAyuda` y no un
-                      estado propio: el atajo F1 ya abre y cierra este mismo
-                      modal, y con dos fuentes de verdad el botón podía quedar
-                      desincronizado del teclado. */}
-                  <Tooltip content="Atajos de teclado · F1" placement="bottom">
+                  <Tooltip
+                    content={hayFiltrosActivos ? 'Limpiar todos los filtros' : undefined}
+                    placement="top"
+                  >
                     <button
                       type="button"
-                      onClick={alternarAyuda}
-                      aria-label="Ver los atajos de teclado"
-                      className="grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-xl text-slate-400 transition-colors duration-150 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                      onClick={handleLimpiarFiltros}
+                      disabled={!hayFiltrosActivos}
+                      aria-label="Limpiar todos los filtros"
+                      className={cn(
+                        'shrink-0 cursor-pointer rounded-xl p-2 transition-colors duration-150',
+                        hayFiltrosActivos
+                          ? 'text-slate-400 hover:text-red-600 dark:text-slate-500 dark:hover:text-red-400'
+                          : 'cursor-not-allowed text-slate-400 opacity-25 dark:text-slate-600',
+                      )}
                     >
-                      <Info size={18} aria-hidden="true" />
+                      <FilterX className="h-5 w-5" />
                     </button>
                   </Tooltip>
                 </div>
 
-              <div className="flex items-center gap-2">
-                <Tooltip
-                  content={`Abrir marcas · ${MOD_TEXTO}+M`}
-                  placement="bottom"
-                >
-                  <Button
-                    variant="outline"
-                    onClick={() => setMarcasAbiertas(true)}
-                    aria-keyshortcuts={modAtajo('M')}
-                    className="whitespace-nowrap rounded-2xl px-2 py-2 text-xs sm:text-sm"
-                  >
-                    Marcas
-                    <span className="select-none rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600 sm:text-xs dark:border-slate-700/80 dark:bg-slate-800 dark:text-slate-300">
-                      {marcasActivas}
-                    </span>
-                  </Button>
-                </Tooltip>
-
-                {/* Modo "más vendidos": cambia lo que muestra la grilla, no el orden de la
-                    grilla entera.
-                    `ghost` trae sus propios slate y se pisan con los de acá vía
-                    `cn`, pero igual se declaran los dos estados completos
-                    (reposo y hover) con su par claro/oscuro: dejar el hover solo
-                    en claro hacía que en oscuro el botón se apagara al pasar el
-                    mouse y pareciera deshabilitado.
-                    Fondo verde suave para distinguirse del outline de Marcas sin
-                    competir con el `Cobrar`, que es el único botón sólido de la
-                    pantalla. Activo se llena y suma un check, porque el estado
-                    vive acá y no se deduce del color. */}
-                <Tooltip
-                  content={
-                    viendoMasVendidos
-                      ? 'Volver a todo el catálogo'
-                      : 'Ver los productos más vendidos'
-                  }
-                  placement="bottom"
-                >
-                  <Button
-                    variant="ghost"
-                    onClick={() => void toggleMasVendidos()}
-                    aria-pressed={viendoMasVendidos}
-                    aria-label="Ver los productos más vendidos"
-                    aria-busy={cargandoMasVendidos}
-                    className={cn(
-                      'whitespace-nowrap rounded-2xl border text-sm font-semibold',
-                      viendoMasVendidos
-                        ? 'border-emerald-500 bg-emerald-500/25 text-emerald-800 hover:bg-emerald-500/30 hover:text-emerald-900 dark:border-emerald-500/60 dark:bg-emerald-500/25 dark:text-emerald-200 dark:hover:bg-emerald-500/35 dark:hover:text-white'
-                        : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/20 hover:text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-500/15 dark:text-emerald-400 dark:hover:bg-emerald-500/25 dark:hover:text-emerald-200',
-                    )}
-                  >
-                    {cargandoMasVendidos ? (
-                      <Loader2 size={15} className="shrink-0 animate-spin" aria-hidden />
-                    ) : viendoMasVendidos ? (
-                      <Check size={15} className="shrink-0" aria-hidden />
-                    ) : (
-                      <TrendingUp size={15} className="shrink-0" aria-hidden />
-                    )}
-                    Más vendidos
-                  </Button>
-                </Tooltip>
-              </div>
-            </div>
-
-            <div className="flex min-w-0 flex-1 items-center gap-1.5">
-              <Input
-                ref={busquedaRef}
-                value={busqueda}
-                onChange={(event) => {
-                  setBusqueda(event.target.value)
-                  setPaginaActual(1)
-                }}
-                placeholder="Buscar por producto, marca, variante o código..."
-                aria-label="Buscar producto"
-                leftIcon={<Search size={16} />}
-                className="h-11"
-                wrapperClassName="min-w-[200px] flex-1"
-              />
-
-              {/* En modo más vendidos el selector se OCULTA, no se deshabilita. Mostrar un
-                orden activo que no va a pasar nada es peor que no mostrarlo: el
-                cajero lo lee como el criterio real de la grilla. El filtro de
-                avisos tampoco se arrastra al ranking (`conjuntoGrilla` entra con
-                'all'); queda guardado para cuando vuelva al catálogo. */}
-              {!viendoMasVendidos && (
-                <CustomSelect
-                  options={OPCIONES_VISTA}
-                  value={valorVistaActiva(vista)}
-                  onChange={(valor) => {
-                    setVista(aplicarValorVista(vista, String(valor)))
+                <CategoryFilter
+                  categorias={categoriasCatalogo}
+                  total={vendiblesDeBusqueda.length}
+                  valor={categoriaId}
+                  onChange={(id) => {
+                    setCategoriaId(id)
                     setPaginaActual(1)
                   }}
-                  displayLabel={etiquetaVista(vista)}
-                  className="w-50 shrink-0"
-                  buttonClassName="h-11"
+                />
+              </div>
+
+              {/* Sin historial no hay ranking que mostrar, y el mensaje de
+                  `ProductGrid` ("no hay productos que coincidan con la búsqueda")
+                  sería falso: no se buscó nada. El modo solo nace después de la
+                  primera venta. */}
+              {viendoMasVendidos && !cargandoMasVendidos && masVendidos.length === 0 ? (
+                <div className="flex w-full min-h-0 flex-1 flex-col justify-center">
+                  <EmptyState
+                    icon={
+                      <TrendingUp
+                        className="h-12 w-12 stroke-[1.5] text-emerald-500"
+                      />
+                    }
+                    title="Todavía no hay ventas"
+                    description="Los más vendidos se arma con las ventas que ya hiciste. Registrá la primera y la lista se arma sola."
+                  />
+                </div>
+              ) : (
+                <ProductGrid
+                  productos={vendibles}
+                  sinStock={noVendibles}
+                  onAgregar={handleAgregar}
+                  error={errorProductos}
+                  terminoConsulta={busquedaDiferida}
+                  onLimpiarFiltros={
+                    hayFiltrosActivos ? handleLimpiarFiltros : undefined
+                  }
+                  paginaActual={paginaActual}
+                  onPageChange={setPaginaActual}
                 />
               )}
 
-              <Tooltip
-                content={hayFiltrosActivos ? 'Limpiar todos los filtros' : undefined}
-                placement="top"
-              >
-                <button
-                  type="button"
-                  onClick={handleLimpiarFiltros}
-                  disabled={!hayFiltrosActivos}
-                  aria-label="Limpiar todos los filtros"
-                  className={cn(
-                    'shrink-0 cursor-pointer rounded-xl p-2 transition-colors duration-150',
-                    hayFiltrosActivos
-                      ? 'text-slate-400 hover:text-red-600 dark:text-slate-500 dark:hover:text-red-400'
-                      : 'cursor-not-allowed text-slate-400 opacity-25 dark:text-slate-600',
-                  )}
-                >
-                  <FilterX className="h-5 w-5" />
-                </button>
-              </Tooltip>
-            </div>
-
-            <CategoryFilter
-              categorias={categoriasCatalogo}
-              total={vendiblesDeBusqueda.length}
-              valor={categoriaId}
-              onChange={(id) => {
-              setCategoriaId(id)
-              setPaginaActual(1)
-            }}
-            />
-          </div>
-
-          {/* Sin historial no hay ranking que mostrar, y el mensaje de
-              `ProductGrid` ("no hay productos que coincidan con la búsqueda")
-              sería falso: no se buscó nada. El modo solo nace después de la
-              primera venta. */}
-          {viendoMasVendidos && !cargandoMasVendidos && masVendidos.length === 0 ? (
-            <div className="flex w-full min-h-0 flex-1 flex-col justify-center">
-              <EmptyState
-                icon={
-                  <TrendingUp
-                    className="h-12 w-12 stroke-[1.5] text-emerald-500"
-                  />
-                }
-                title="Todavía no hay ventas"
-                description="Los más vendidos se arma con las ventas que ya hiciste. Registrá la primera y la lista se arma sola."
-              />
-            </div>
-          ) : (
-            <ProductGrid
-              productos={vendibles}
-              sinStock={noVendibles}
-              onAgregar={handleAgregar}
-              error={errorProductos}
-              terminoConsulta={busquedaDiferida}
-              onLimpiarFiltros={
-                hayFiltrosActivos ? handleLimpiarFiltros : undefined
-              }
-              paginaActual={paginaActual}
-              onPageChange={setPaginaActual}
-            />
-          )}
-
-          {/* El badge cuenta el bloqueo del catálogo COMPLETO, no del ranking:
-              en modo más vendidos un producto sin stock puede no estar en la
-              grilla, pero sigue pesando en el total que ve el cajero. */}
-          {!errorProductos && <NoVendiblesBadge conteo={bloqueo} />}
+              {/* El badge cuenta el bloqueo del catálogo COMPLETO, no del ranking:
+                  en modo más vendidos un producto sin stock puede no estar en la
+                  grilla, pero sigue pesando en el total que ve el cajero. */}
+              {!errorProductos && <NoVendiblesBadge conteo={bloqueo} />}
             </>
           )}
         </section>
@@ -1093,6 +1115,11 @@ export function PosPage() {
       <HistorialVentasModal
         isOpen={historialAbierto}
         onClose={() => setHistorialAbierto(false)}
+      />
+
+      <AbrirCajaModal
+        isOpen={abrirCajaAbierto}
+        onClose={() => setAbrirCajaAbierto(false)}
       />
     </div>
   )

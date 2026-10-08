@@ -3,6 +3,8 @@ import { useForm } from 'react-hook-form'
 import { User } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '../../components/ui/Button'
+import { CapitalizedInput } from '../../components/ui/CapitalizedInput'
+import { FieldError } from '../../components/ui/FieldError'
 import { Input } from '../../components/ui/Input'
 import { Modal } from '../../components/ui/Modal'
 import type { Cliente, ClienteInput } from '../../../electron/db/types'
@@ -19,7 +21,7 @@ const VALORES_INICIALES: FormValues = { nombre: '', telefono: '', notas: '' }
 interface ClienteModalProps {
   isOpen: boolean
   onClose: () => void
-  onSuccess: () => void
+  onSuccess: (cliente?: Cliente) => void
   /** Si viene, el modal edita; si no, da de alta. */
   cliente?: Cliente | null
 }
@@ -36,6 +38,7 @@ export function ClienteModal({
     register,
     handleSubmit,
     reset,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({ defaultValues: VALORES_INICIALES })
 
@@ -58,11 +61,6 @@ export function ClienteModal({
   const onSubmit = async (data: FormValues) => {
     const nombre = data.nombre.trim()
 
-    if (nombre.length < 2) {
-      toast.error('El nombre del cliente es obligatorio')
-      return
-    }
-
     const payload: ClienteInput = {
       nombre,
       telefono: data.telefono.trim() || null,
@@ -73,11 +71,12 @@ export function ClienteModal({
       if (cliente) {
         await cuentasCorrientesService.actualizarCliente(cliente.id, payload)
         toast.success('Cliente actualizado')
+        onSuccess()
       } else {
-        await cuentasCorrientesService.crearCliente(payload)
+        const nuevo = await cuentasCorrientesService.crearCliente(payload)
         toast.success('Cliente creado')
+        onSuccess(nuevo)
       }
-      onSuccess()
       onClose()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'No se pudo guardar el cliente')
@@ -113,14 +112,33 @@ export function ClienteModal({
         onSubmit={handleSubmit(onSubmit)}
         className="flex flex-col gap-4"
       >
-        <Input
-          label="Nombre y apellido"
-          placeholder="Ana Gómez"
-          autoFocus
-          disabled={isSubmitting}
-          error={errors.nombre?.message}
-          {...register('nombre')}
-        />
+        <div className="flex flex-col gap-1.5">
+          <label
+            htmlFor="nombre"
+            className="text-sm font-medium text-slate-700 dark:text-slate-200"
+          >
+            Nombre y apellido
+          </label>
+          <CapitalizedInput
+            id="nombre"
+            placeholder="Ana Gómez"
+            autoFocus
+            disabled={isSubmitting}
+            onClear={() => setValue('nombre', '')}
+            {...register('nombre', {
+              required: 'El nombre y apellido es obligatorio',
+              minLength: {
+                value: 2,
+                message: 'Mínimo 2 caracteres',
+              },
+              validate: {
+                noSoloEspacios: (valor) =>
+                  valor.trim().length > 0 || 'El nombre y apellido es obligatorio',
+              },
+            })}
+          />
+          <FieldError error={errors.nombre?.message} />
+        </div>
 
         <Input
           label="Teléfono"

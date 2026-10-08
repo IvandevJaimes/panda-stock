@@ -50,13 +50,13 @@ function esTecla(evento: TeclaEvento, teclas: string[]): boolean {
 function esMas(evento: TeclaEvento): boolean {
   if (evento.editable) return false
   if (evento.ctrl || evento.meta || evento.alt) return false
-  return evento.key === '+' || evento.code === 'NumpadAdd'
+  return evento.key === '+' || evento.code === 'NumpadAdd' || evento.key === 'Add' || evento.key === '=' || evento.key === 'Plus'
 }
 
 function esMenos(evento: TeclaEvento): boolean {
   if (evento.editable) return false
   if (evento.ctrl || evento.meta || evento.alt) return false
-  return evento.key === '-' || evento.code === 'NumpadSubtract'
+  return evento.key === '-' || evento.code === 'NumpadSubtract' || evento.key === 'Subtract' || evento.key === '_' || evento.key === 'Minus'
 }
 
 /** Del `code` y no del `key`, que con Alt depende del layout. */
@@ -115,7 +115,7 @@ export function resolverAtajo(
     return null
   }
 
-  if (esTecla(evento, ['delete'])) return { accion: 'quitarLinea' }
+  if (esTecla(evento, ['delete', 'backspace'])) return { accion: 'quitarLinea' }
 
   if (evento.key === 'Enter') return { accion: 'cobrar' }
 
@@ -225,21 +225,23 @@ export type EntradaAyuda = {
 export function tablaAtajos(modEsMeta: boolean): EntradaAyuda[] {
   const mod = etiquetaMod(modEsMeta)
   return [
-    { accion: 'moverArriba', teclas: 'ArrowUp', rotulo: 'Línea de arriba', grupo: 'Navegación' },
-    { accion: 'moverAbajo', teclas: 'ArrowDown', rotulo: 'Línea de abajo', grupo: 'Navegación' },
-    { accion: 'irAlPrimero', teclas: 'Home', rotulo: 'Primera línea', grupo: 'Navegación' },
-    { accion: 'irAlUltimo', teclas: 'End', rotulo: 'Última línea', grupo: 'Navegación' },
-    { accion: 'vaciarTicket', teclas: `${mod}+D`, rotulo: 'Vaciar el ticket', grupo: 'Ticket' },
+    { accion: 'moverArriba', teclas: '↑', rotulo: 'Línea de arriba', grupo: 'Navegación' },
+    { accion: 'moverAbajo', teclas: '↓', rotulo: 'Línea de abajo', grupo: 'Navegación' },
+    { accion: 'irAlPrimero', teclas: 'Inicio', rotulo: 'Primera línea', grupo: 'Navegación' },
+    { accion: 'irAlUltimo', teclas: 'Fin', rotulo: 'Última línea', grupo: 'Navegación' },
+    { accion: 'agregarUno', teclas: '+', rotulo: 'Sumar uno a la línea', grupo: 'Ticket' },
+    { accion: 'quitarUno', teclas: '-', rotulo: 'Restar uno a la línea', grupo: 'Ticket' },
+    { accion: 'quitarLinea', teclas: 'Supr / Retroceso', rotulo: 'Quitar línea seleccionada', grupo: 'Ticket' },
+    { accion: 'vaciarTicket', teclas: `${mod} + D`, rotulo: 'Vaciar el ticket', grupo: 'Ticket' },
     { accion: 'cobrar', teclas: 'Enter Enter', rotulo: 'Cobrar (dos veces Enter)', grupo: 'Ticket' },
-    { accion: 'nuevoTicket', teclas: `${mod}+N`, rotulo: 'Abrir un ticket nuevo', grupo: 'Ticket' },
-    { accion: 'ticketAnterior', teclas: 'ArrowLeft', rotulo: 'Ticket anterior', grupo: 'Ticket' },
-    { accion: 'ticketSiguiente', teclas: 'ArrowRight', rotulo: 'Ticket siguiente', grupo: 'Ticket' },
-    { accion: 'irAlTicket', teclas: 'Alt+1…5', rotulo: 'Ir al ticket N', grupo: 'Ticket' },
+    { accion: 'nuevoTicket', teclas: `${mod} + N`, rotulo: 'Abrir un ticket nuevo', grupo: 'Ticket' },
+    { accion: 'ticketAnterior', teclas: '←', rotulo: 'Ticket anterior', grupo: 'Ticket' },
+    { accion: 'ticketSiguiente', teclas: '→', rotulo: 'Ticket siguiente', grupo: 'Ticket' },
+    { accion: 'irAlTicket', teclas: 'Alt + 1…5', rotulo: 'Ir al ticket N', grupo: 'Ticket' },
     { accion: 'cambiarMetodoPago', teclas: 'F4', rotulo: 'Cambiar el método de pago', grupo: 'Ticket' },
     { accion: 'enfocarBusqueda', teclas: 'F2', rotulo: 'Buscar', grupo: 'Búsqueda' },
     { accion: 'enfocarCatalogo', teclas: 'F3', rotulo: 'Volver al catálogo', grupo: 'Búsqueda' },
-    { accion: 'salirDeBusqueda', teclas: 'Escape', rotulo: 'Salir de la búsqueda', grupo: 'Búsqueda' },
-    { accion: 'abrirMarcas', teclas: `${mod}+M`, rotulo: 'Marcas', grupo: 'General' },
-   
+    { accion: 'salirDeBusqueda', teclas: 'Esc', rotulo: 'Salir de la búsqueda', grupo: 'Búsqueda' },
+    { accion: 'abrirMarcas', teclas: `${mod} + M`, rotulo: 'Marcas', grupo: 'General' },
   ]
 }
