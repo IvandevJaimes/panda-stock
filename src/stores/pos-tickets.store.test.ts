@@ -339,5 +339,12 @@ function storeRecienCargado() {
 }
 
 function crearTicketInicial() {
-  return { id: 't1', numero: 1, items: [], metodoPago: 'efectivo' as const }
+  return {
+    id: 't1',
+    numero: 1,
+    items: [],
+    metodoPago: 'efectivo' as const,
+    clienteId: null,
+    clienteNombre: null,
+  }
 }

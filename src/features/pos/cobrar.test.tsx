@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CajaConResponsable, ProductoConLoteActivo } from '../../../electron/db/types'
 import { PosPage } from './PosPage'
 import { useCajaStore } from '../../stores/caja.store'
+import { useSettingsStore } from '../../stores/settings.store'
 
 function producto(partial: Partial<ProductoConLoteActivo> = {}): ProductoConLoteActivo {
   return {
@@ -49,15 +50,30 @@ function caja(partial: Partial<CajaConResponsable> = {}): CajaConResponsable {
 }
 
 const process = vi.fn()
+const empleadosGetAll = vi.fn()
+const empleadosCreate = vi.fn()
 
 beforeEach(() => {
   process.mockReset()
   process.mockResolvedValue({ success: true, ventaId: 42 })
+  empleadosGetAll.mockReset()
+  empleadosGetAll.mockResolvedValue([])
+  empleadosCreate.mockReset()
+  empleadosCreate.mockResolvedValue({
+    id: 12,
+    nombre: 'PANDA STOCK',
+    activo: true,
+    creadoEn: '2026-01-01',
+  })
+  // El store vive en memoria entre tests: sin reset, un caso que desactive el
+  // control por caja dejaría al siguiente creyendo que puede cobrar sin ella.
+  useSettingsStore.setState({ ventasPorCajas: true })
   window.electronAPI = {
     productos: { getAll: vi.fn().mockResolvedValue([producto()]) },
     categorias: { getAll: vi.fn().mockResolvedValue([]) },
     marcas: { getAll: vi.fn().mockResolvedValue([]) },
     ventas: { process },
+    empleados: { getAll: empleadosGetAll, create: empleadosCreate },
   } as unknown as Window['electronAPI']
 })
 
@@ -77,6 +93,32 @@ describe('cobro de la venta real', () => {
 
     await user.click(boton)
     expect(process).not.toHaveBeenCalled()
+  })
+
+  it('cobra sin caja cuando ventasPorCajas está deshabilitado', async () => {
+    useSettingsStore.setState({ ventasPorCajas: false })
+    empleadosGetAll.mockResolvedValue([
+      { id: 9, nombre: 'PANDA STOCK', activo: true, creadoEn: '2026-01-01' },
+    ])
+
+    const user = await agregarUnProducto()
+    await user.click(screen.getByRole('button', { name: /cobrar/i }))
+
+    await waitFor(() => expect(process).toHaveBeenCalledTimes(1))
+    expect(process.mock.calls[0][0].cajaId).toBeNull()
+    expect(process.mock.calls[0][0].empleadoId).toBe(9)
+  })
+
+  it('crea el empleado con el nombre del local cuando no existe ninguno', async () => {
+    useSettingsStore.setState({ ventasPorCajas: false })
+
+    const user = await agregarUnProducto()
+    await user.click(screen.getByRole('button', { name: /cobrar/i }))
+
+    await waitFor(() => expect(process).toHaveBeenCalledTimes(1))
+    expect(empleadosCreate).toHaveBeenCalledWith({ nombre: 'PANDA STOCK' })
+    expect(process.mock.calls[0][0].cajaId).toBeNull()
+    expect(process.mock.calls[0][0].empleadoId).toBe(12)
   })
 
   it('bloquea el cobro con el ticket vacío aunque la caja esté abierta', async () => {
@@ -102,6 +144,7 @@ describe('cobro de la venta real', () => {
     expect(process).toHaveBeenCalledWith({
       cajaId: 7,
       empleadoId: 3,
+      clienteId: null,
       subtotal: 200,
       descuento: 0,
       impuesto: 0,

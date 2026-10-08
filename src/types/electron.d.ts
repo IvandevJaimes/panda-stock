@@ -15,6 +15,7 @@ import type {
   CrearMovimientoInput,
   Empleado,
   FiltrosCuentaCorriente,
+  FiltrosDevoluciones,
   FiltrosMovimientos,
   FiltrosProducto,
   FiltrosReportes,
@@ -38,7 +39,13 @@ import type {
   VentaDetalle,
   VentaHistorial,
   VentaResult,
+  ProcesarDevolucionInput,
+  ResultadoDevolucion,
+  VentaDevolucionDetalle,
+  VentaDevolucionResumen,
+  DevolucionCompleta,
 } from '../../electron/db/types'
+import type { ExportarExcelInput } from '../../electron/exportaciones.types'
 import type { ResultadoDatosPrueba } from '../../electron/db/testdata.repository'
 
 export {}
@@ -50,6 +57,8 @@ declare global {
       seguridad: {
         verifyPin: (pin: string) => Promise<boolean>
         changePin: (pinActual: string, pinNuevo: string) => Promise<boolean>
+        tieneContrasena: () => Promise<boolean>
+        crearContrasena: (pinNuevo: string) => Promise<boolean>
       }
       negocio: {
         get: () => Promise<Negocio | null>
@@ -106,6 +115,12 @@ declare global {
         getDetail: (idVenta: number) => Promise<VentaDetalle | null>
         getRecientes: (limite: number) => Promise<VentaHistorial[]>
       }
+      devoluciones: {
+        getVentas: (filtros?: FiltrosDevoluciones) => Promise<{ items: VentaDevolucionResumen[]; total: number }>
+        getVentaDetail: (ventaId: number) => Promise<VentaDevolucionDetalle | null>
+        getHistorial: (filtros?: FiltrosDevoluciones) => Promise<{ items: DevolucionCompleta[]; total: number }>
+        process: (input: ProcesarDevolucionInput) => Promise<ResultadoDevolucion | null>
+      }
       movimientos: {
         getAll: (filtros?: FiltrosMovimientos) => Promise<MovimientoStock[]>
         ajuste: (data: AjusteStockInput) => Promise<void>
@@ -113,6 +128,9 @@ declare global {
       }
       reportes: {
         getSummary: (filtros?: FiltrosReportes) => Promise<ReportesSummary>
+        exportarExcel: (
+          input: ExportarExcelInput,
+        ) => Promise<string | null>
       }
       cuentasCorrientes: {
         getClientes: (opciones?: {

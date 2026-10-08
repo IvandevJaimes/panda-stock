@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
 import {
-  Bell,
   Eye,
   Moon,
   Package,
@@ -15,6 +14,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useSettingsStore } from "../../stores/settings.store";
+import { useCajaStore } from "../../stores/caja.store";
 import { useNegocioStore } from "../../stores/negocio.store";
 import { useUIStore } from "../../stores/ui.store";
 import { cn } from "../../lib/cn";
@@ -27,6 +27,7 @@ import {
 } from "../ui/DropdownMenu";
 import { BusinessSetupModal } from "../../features/onboarding/BusinessSetupModal";
 import { CajaControl } from "../../features/caja/CajaControl";
+import { NotificacionesDropdown } from "../../features/notificaciones/NotificacionesDropdown";
 import { ImageLightbox } from "../ui/ImageLightbox";
 import pandaStockLogo from "../../assets/panda-stock-logo.svg";
 import { toast } from "sonner";
@@ -47,6 +48,11 @@ const mainNavItems: MainNavItem[] = [
 
 export function Header() {
   const storeName = useSettingsStore((state) => state.storeName);
+  const ventasPorCajas = useSettingsStore((state) => state.ventasPorCajas);
+  const cajaAbierta = useCajaStore((state) => state.caja);
+  const cuentaCorrienteHabilitada = useSettingsStore(
+    (state) => state.cuentaCorrienteHabilitada,
+  );
   const negocioNombre = useNegocioStore((state) => state.nombre);
   const negocioLogoUrl = useNegocioStore((state) => state.logoUrl);
   const setNegocio = useNegocioStore((state) => state.setNegocio);
@@ -85,7 +91,9 @@ export function Header() {
 
       {/* ── Navegación principal (píldoras) ── */}
       <nav className="flex min-w-0 flex-1 items-center  gap-1 sm:gap-1.5">
-        {mainNavItems.map(({ to, label, icon: Icon, bloqueado }) =>
+        {mainNavItems
+          .filter(({ to }) => to !== "/accounts" || cuentaCorrienteHabilitada)
+          .map(({ to, label, icon: Icon, bloqueado }) =>
           bloqueado ? (
             <Tooltip key={to} content="Próximamente">
               <span
@@ -124,13 +132,19 @@ export function Header() {
 
       {/* ── Acciones ── */}
       <div className="flex shrink-0 items-center gap-2">
-        <CajaControl />
+        {/* Con el control desactivado no hay botón; con una caja ya abierta
+            se mantiene igual, porque es la única forma de rendirla. */}
+        {(ventasPorCajas || cajaAbierta !== null) && (
+          <>
+            <CajaControl />
 
-        {/* Separa el estado de la caja del resto de las acciones de la app. */}
-        <div
-          aria-hidden="true"
-          className="h-8 w-px shrink-0 bg-slate-200 dark:bg-slate-700/60"
-        />
+            {/* Separa el estado de la caja del resto de las acciones de la app. */}
+            <div
+              aria-hidden="true"
+              className="h-8 w-px shrink-0 bg-slate-200 dark:bg-slate-700/60"
+            />
+          </>
+        )}
 
         <ImageLightbox
           open={verLogoAbierto && negocioLogoUrl !== null}
@@ -174,19 +188,7 @@ export function Header() {
           </button>
         </Tooltip>
 
-        {/* Notificaciones — bloqueado (función no desarrollada) */}
-        <Tooltip content="Próximamente">
-          <span
-            aria-disabled="true"
-            className={cn(
-              "relative grid h-9 w-9 cursor-not-allowed select-none place-items-center rounded-xl sm:h-10 sm:w-10",
-              "border border-slate-200 bg-slate-100 text-slate-400",
-              "dark:border-slate-700/60 dark:bg-slate-800/40 dark:text-slate-600",
-            )}
-          >
-            <Bell size={18} />
-          </span>
-        </Tooltip>
+        <NotificacionesDropdown />
 
         {/* Configuración → abre el panel lateral derecho */}
         <Tooltip content="Configuración del sistema">

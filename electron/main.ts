@@ -18,6 +18,7 @@ import {
 } from "./assets.ts";
 import {
   changePin,
+  createContrasena,
   closeCaja,
   createAjusteStock,
   crearMovimientoStock,
@@ -45,9 +46,13 @@ import {
   getReportesSummary,
   getVentaDetalle,
   getVentas,
+  getVentasDevolucion,
+  getVentaDevolucionDetalle,
+  getHistorialDevoluciones,
   getVentasRecientes,
   openCaja,
   processSale,
+  processDevolucion,
   scanProductByCode,
   toggleEmpleado,
   toggleProducto,
@@ -58,6 +63,7 @@ import {
   deleteLote,
   updateNegocio,
   verifyPin,
+  tieneContrasena,
   verificarCodigosEnUso,
   getClientes,
   createCliente,
@@ -73,6 +79,8 @@ import {
   generarDatosPrueba,
   hayDatosPrueba,
 } from "./db/testdata.repository.ts";
+import { exportarExcel } from "./exportaciones.ts";
+import type { ExportarExcelInput } from "./exportaciones.types.ts";
 import type {
   AjusteStockInput,
   AbonoInput,
@@ -85,6 +93,8 @@ import type {
   FiltrosProducto,
   FiltrosReportes,
   FiltrosVentas,
+  FiltrosDevoluciones,
+  ProcesarDevolucionInput,
   NegocioInput,
   NegocioSetupInput,
   NuevoEmpleado,
@@ -224,6 +234,10 @@ function registerIpcHandlers() {
     (_event, pinActual: string, pinNuevo: string) =>
       changePin(pinActual, pinNuevo),
   );
+  ipcMain.handle("seguridad:tiene-contrasena", () => tieneContrasena());
+  ipcMain.handle("seguridad:crear-contrasena", (_event, pinNuevo: string) =>
+    createContrasena(pinNuevo),
+  );
 
   ipcMain.handle("negocio:get", () => getNegocio());
   ipcMain.handle("negocio:update", (_event, data: NegocioInput) =>
@@ -348,6 +362,19 @@ function registerIpcHandlers() {
     getVentasRecientes(limite),
   );
 
+  ipcMain.handle("devoluciones:get-ventas", (_event, filtros?: FiltrosDevoluciones) =>
+    getVentasDevolucion(filtros),
+  );
+  ipcMain.handle("devoluciones:get-venta-detail", (_event, ventaId: number) =>
+    getVentaDevolucionDetalle(ventaId),
+  );
+  ipcMain.handle("devoluciones:get-historial", (_event, filtros?: FiltrosDevoluciones) =>
+    getHistorialDevoluciones(filtros),
+  );
+  ipcMain.handle("devoluciones:process", (_event, input: ProcesarDevolucionInput) =>
+    processDevolucion(input),
+  );
+
   ipcMain.handle(
     "movimientos:get-all",
     (_event, filtros?: FiltrosMovimientos) => getMovimientosStock(filtros),
@@ -362,6 +389,10 @@ function registerIpcHandlers() {
 
   ipcMain.handle("reportes:summary", (_event, filtros?: FiltrosReportes) =>
     getReportesSummary(filtros),
+  );
+
+  ipcMain.handle("reportes:exportar-excel", (_event, input: ExportarExcelInput) =>
+    exportarExcel(input),
   );
 
   ipcMain.handle("cuentas-corrientes:clientes", (_event, opciones?: { incluirInactivos?: boolean }) =>

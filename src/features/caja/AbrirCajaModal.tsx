@@ -42,6 +42,14 @@ export function AbrirCajaModal({ isOpen, onClose }: AbrirCajaModalProps) {
     formState: { errors, isSubmitting },
   } = useForm<AbrirCajaValues>({ defaultValues: VALORES_INICIALES })
 
+  const registroMontoInicial = register('montoInicial', {
+    required: 'El monto inicial es obligatorio',
+    validate: {
+      numeroValido: (valor) => !Number.isNaN(Number(valor)) || 'Debe ser un número válido',
+      noNegativo: (valor) => Number(valor) >= 0 || 'No puede ser negativo',
+    },
+  })
+
   const onSubmit = async (data: AbrirCajaValues) => {
     try {
       const caja = await cajasService.open({
@@ -110,13 +118,18 @@ export function AbrirCajaModal({ isOpen, onClose }: AbrirCajaModalProps) {
           disabled={isSubmitting}
           error={errors.montoInicial?.message}
           className={noSpinnersClass}
-          {...register('montoInicial', {
-            required: 'El monto inicial es obligatorio',
-            validate: {
-              numeroValido: (valor) => !Number.isNaN(Number(valor)) || 'Debe ser un número válido',
-              noNegativo: (valor) => Number(valor) >= 0 || 'No puede ser negativo',
-            },
-          })}
+          {...registroMontoInicial}
+          onChange={(evento) => {
+            const valor = evento.currentTarget.value
+            if (/^0\d/.test(valor)) {
+              setValue('montoInicial', valor.replace(/^0+(?=\d)/, ''), {
+                shouldDirty: true,
+                shouldValidate: true,
+              })
+              return
+            }
+            void registroMontoInicial.onChange(evento)
+          }}
         />
 
         <p className="text-xs text-slate-500 dark:text-slate-400">

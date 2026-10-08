@@ -242,6 +242,9 @@ describe("PosTabs: encaje con el panel", () => {
             total: 0,
           }}
           metodoPago="efectivo"
+          metodosPago={["efectivo", "transferencia", "tarjeta"]}
+          cliente={null}
+          onAsignarCliente={vi.fn()}
           activeTicketId="t1"
           numeroTicket={1}
           onCambiarMetodoPago={vi.fn()}

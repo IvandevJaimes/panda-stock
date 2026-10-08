@@ -10,6 +10,7 @@ import type {
 import { PosPage } from "./PosPage";
 import { usePosTicketsStore } from "../../stores/pos-tickets.store";
 import { useScannerStore } from "../../stores/scanner.store";
+import { useSettingsStore } from "../../stores/settings.store";
 import { useUIStore } from "../../stores/ui.store";
 
 const categorias: Categoria[] = [{ id: 1, nombre: "Bebidas", activo: true }];
@@ -55,6 +56,9 @@ beforeEach(() => {
     categorias: { getAll: vi.fn().mockResolvedValue(categorias) },
     marcas: { getAll: vi.fn().mockResolvedValue(marcas) },
   } as unknown as Window["electronAPI"];
+  // El store vive en memoria entre tests: sin reset, un caso con el descuento
+  // apagado dejaría al siguiente sin mayoreo.
+  useSettingsStore.setState({ descuentoAutomatico: true });
 });
 
 afterEach(() => {
@@ -105,6 +109,23 @@ describe("PosPage", () => {
     });
     expect(screen.getByText("Descuento mayorista")).toBeTruthy();
     expect(screen.getByText("−$60.00")).toBeTruthy();
+  });
+
+  it("no aplica descuento con el descuento automático desactivado", async () => {
+    useSettingsStore.setState({ descuentoAutomatico: false });
+    const user = userEvent.setup();
+    render(<PosPage />);
+
+    await user.click(await esperarCatalogo());
+    const mas = screen.getByRole("button", { name: /agregar una unidad/i });
+    await user.click(mas);
+    await user.click(mas);
+
+    await waitFor(() => {
+      expect(screen.getByText("3 ítems")).toBeTruthy();
+    });
+    expect(screen.queryByText("Descuento mayorista")).toBeNull();
+    expect(screen.getAllByText("$600.00").length).toBeGreaterThan(0);
   });
 
   it("filtra el catálogo por código de barras y descarta lo que no coincide", async () => {
@@ -1536,6 +1557,8 @@ describe("PosPage · producto desactivado en el ticket", () => {
           id: "t1",
           numero: 1,
           metodoPago: "efectivo",
+          clienteId: null,
+          clienteNombre: null,
           items: [
             {
               productoId: 1,

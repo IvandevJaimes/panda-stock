@@ -276,9 +276,17 @@ export function DropdownMenuContent({
 
   // Scroll: cierra el menú para que no quede abierto flotando fuera de contexto.
   // Resize: re-posiciona el panel para mantenerlo alineado al trigger.
+  // El listener va en capture y también ve el scroll INTERNO del panel: sin este
+  // guard, scrollear la propia lista del menú lo cerraría en pleno uso.
   useEffect(() => {
     if (!open) return;
-    const cerrarAlScroll = () => setOpen(false);
+    const cerrarAlScroll = (event: Event) => {
+      const destino = event.target;
+      if (destino instanceof Node && contentRef.current?.contains(destino)) {
+        return;
+      }
+      setOpen(false);
+    };
     const reposicionar = () => {
       if (!contentRef.current) return;
       medirPosicion();

@@ -1,35 +1,54 @@
-import { ArrowRightLeft, Banknote, CreditCard, type LucideIcon } from 'lucide-react'
+import { ArrowRightLeft, Banknote, BookUser, CreditCard, type LucideIcon } from 'lucide-react'
 import { cn } from '../../lib/cn'
-import { METODOS_PAGO, type MetodoPagoPOS } from './posQuery'
+import { type MetodoPagoPOS } from './posQuery'
 
 const PRESENTACION: Record<MetodoPagoPOS, { etiqueta: string; icon: LucideIcon }> = {
   efectivo: { etiqueta: 'Efectivo', icon: Banknote },
   transferencia: { etiqueta: 'Transferencia', icon: ArrowRightLeft },
   tarjeta: { etiqueta: 'Tarjeta', icon: CreditCard },
+  cuenta_corriente: { etiqueta: 'Cuenta corriente', icon: BookUser },
 }
 
 type PaymentMethodSelectorProps = {
   valor: MetodoPagoPOS
   onChange: (metodo: MetodoPagoPOS) => void
+  /** Los habilitados según ajustes, en el mismo orden que rota `F4`. */
+  metodos: readonly MetodoPagoPOS[]
 }
 
 // El orden sale de `posQuery` y no de acá: si `F4` rotara sobre otra lista, el
 // selector y el atajo mostrarían un orden distinto al que recorre el teclado.
-const METODOS: { valor: MetodoPagoPOS; etiqueta: string; icon: LucideIcon }[] =
-  METODOS_PAGO.map((valor) => {
-    const { etiqueta, icon } = PRESENTACION[valor]
-    return { valor, etiqueta, icon }
+// La lista viene filtrada desde el ticket porque depende de los switches de
+// ajustes, que son estado de la app y no del selector.
+const COLUMNAS: Record<number, string> = {
+  2: 'grid-cols-2',
+  3: 'grid-cols-3',
+  4: 'grid-cols-4',
+}
+
+export function PaymentMethodSelector({
+  valor,
+  onChange,
+  metodos,
+}: PaymentMethodSelectorProps) {
+  const opciones = metodos.map((opcion) => {
+    const { etiqueta, icon } = PRESENTACION[opcion]
+    return { valor: opcion, etiqueta, icon }
   })
 
-export function PaymentMethodSelector({ valor, onChange }: PaymentMethodSelectorProps) {
   return (
     <div className="shrink-0 border-t border-slate-200 bg-slate-50 px-[22px] py-2.5 dark:border-slate-800 dark:bg-secondary/30">
       <h3 className="mb-1.5 text-[12.5px] font-semibold tracking-[0.02em] text-slate-600 dark:text-slate-400">
         Método de pago
       </h3>
 
-      <div className="grid grid-cols-3 gap-2 max-[600px]:gap-1.5">
-        {METODOS.map(({ valor: opcion, etiqueta, icon: Icon }) => {
+      <div
+        className={cn(
+          'grid gap-2 max-[600px]:gap-1.5',
+          COLUMNAS[opciones.length] ?? 'grid-cols-3',
+        )}
+      >
+        {opciones.map(({ valor: opcion, etiqueta, icon: Icon }) => {
           const activo = valor === opcion
           return (
             <label key={opcion} className="group relative cursor-pointer">

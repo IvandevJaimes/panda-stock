@@ -87,8 +87,14 @@ describe('origen del movimiento', () => {
       'Transferencia',
     )
   })
-
-
+  it('distingue la reducción de deuda y el reintegro de un abono', () => {
+    expect(origenMovimiento(movimiento({ tipo: 'devolucion', ventaId: 42 }))).toBe(
+      'Devolución de venta #42',
+    )
+    expect(origenMovimiento(movimiento({ tipo: 'reintegro', ventaId: 42, metodo: 'efectivo' }))).toBe(
+      'Reintegro de venta #42 · Efectivo',
+    )
+  })
 })
 
 describe('búsqueda de clientes', () => {

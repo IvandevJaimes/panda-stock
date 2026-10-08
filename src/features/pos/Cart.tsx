@@ -1,16 +1,22 @@
-import type { RefObject } from 'react'
-import { History, ShoppingBag, Ticket, Trash2 } from 'lucide-react'
+import { useState, type RefObject } from 'react'
+import { BookUser, History, ShoppingBag, Ticket, Trash2, UserRound } from 'lucide-react'
 import { cn } from '../../lib/cn'
 import { Button } from '../../components/ui/Button'
 import { ConfirmModal } from '../../components/ui/ConfirmModal'
 import { Tooltip } from '../../components/ui/Tooltip'
 import { CartItem } from './CartItem'
 import { PaymentMethodSelector } from './PaymentMethodSelector'
+import { ClienteSeleccionModal } from './ClienteSeleccionModal'
 import { formatearMoneda, type MetodoPagoPOS, type ResumenTicket } from './posQuery'
 
 type CartProps = {
   resumen: ResumenTicket
   metodoPago: MetodoPagoPOS
+  /** Métodos habilitados según ajustes, en el orden que rota `F4`. */
+  metodosPago: readonly MetodoPagoPOS[]
+  /** Cliente atado al ticket cuando el método es cuenta corriente. */
+  cliente: { id: number; nombre: string } | null
+  onAsignarCliente: (cliente: { id: number; nombre: string } | null) => void
   lineaSeleccionada: number
   onSeleccionarLinea: (indice: number) => void
   refLista: RefObject<HTMLDivElement | null>
@@ -63,6 +69,9 @@ type CartProps = {
 export function Cart({
   resumen,
   metodoPago,
+  metodosPago,
+  cliente,
+  onAsignarCliente,
   lineaSeleccionada,
   onSeleccionarLinea,
   refLista,
@@ -84,6 +93,8 @@ export function Cart({
 }: CartProps) {
   const vacio = resumen.unidades === 0
   const cobroBloqueado = motivoCobroBloqueado !== null
+  const [selectorClienteAbierto, setSelectorClienteAbierto] = useState(false)
+  const esCuentaCorriente = metodoPago === 'cuenta_corriente'
 
   return (
     // `min-h-0 flex-1` en vez de `sticky`: el alto lo reparte el flex de la
@@ -212,7 +223,55 @@ export function Cart({
         </div>
       </div>
 
-      <PaymentMethodSelector valor={metodoPago} onChange={onCambiarMetodoPago} />
+      <PaymentMethodSelector
+        valor={metodoPago}
+        onChange={onCambiarMetodoPago}
+        metodos={metodosPago}
+      />
+
+      {/* La fila del cliente solo existe con cuenta corriente: en efectivo o
+          tarjeta no hay nadie a quien imputar la venta, y mostrar un selector
+          vacío invitaría a elegir un cliente sin motivo. */}
+      {esCuentaCorriente && (
+        <div className="shrink-0 border-t border-slate-200 bg-slate-50 px-[22px] py-2.5 dark:border-slate-800 dark:bg-secondary/30">
+          <button
+            type="button"
+            onClick={() => setSelectorClienteAbierto(true)}
+            className={cn(
+              'flex w-full cursor-pointer items-center gap-2.5 rounded-xl border px-3 py-2 text-left transition-colors duration-150',
+              cliente
+                ? 'border-emerald-500/40 bg-emerald-500/10 hover:border-emerald-500/60 hover:bg-emerald-500/15'
+                : 'border-dashed border-slate-300 bg-white hover:border-emerald-400 hover:bg-emerald-50/50 dark:border-slate-700 dark:bg-[#111827] dark:hover:border-emerald-500/50',
+            )}
+          >
+            <span
+              className={cn(
+                'grid h-8 w-8 shrink-0 place-items-center rounded-lg',
+                cliente
+                  ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                  : 'bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500',
+              )}
+            >
+              {cliente ? <UserRound size={16} /> : <BookUser size={16} />}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[11px] font-semibold tracking-wide text-slate-400 uppercase dark:text-slate-500">
+                Cliente
+              </span>
+              <span
+                className={cn(
+                  'block truncate font-display text-sm font-semibold',
+                  cliente
+                    ? 'text-slate-900 dark:text-white'
+                    : 'text-slate-500 dark:text-slate-400',
+                )}
+              >
+                {cliente ? cliente.nombre : 'Seleccionar cliente'}
+              </span>
+            </span>
+          </button>
+        </div>
+      )}
 
       <div className="grid shrink-0 grid-cols-[auto_1fr] gap-3 border-t border-slate-200 px-[22px] pt-3 pb-3.5 max-[600px]:grid-cols-1 dark:border-slate-800">
         <button
@@ -274,6 +333,12 @@ export function Cart({
         title="Vaciar ticket"
         description="Se van a quitar todos los productos del ticket. No se puede deshacer."
         confirmText="Vaciar"
+      />
+
+      <ClienteSeleccionModal
+        isOpen={selectorClienteAbierto}
+        onClose={() => setSelectorClienteAbierto(false)}
+        onSeleccionar={onAsignarCliente}
       />
     </aside>
   )

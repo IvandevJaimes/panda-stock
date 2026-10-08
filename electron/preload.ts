@@ -12,12 +12,15 @@ import type {
   FiltrosProducto,
   FiltrosReportes,
   FiltrosVentas,
+  FiltrosDevoluciones,
   NuevoEmpleado,
   NuevoLote,
   NegocioInput,
   NegocioSetupInput,
   VentaCompletaInput,
+  ProcesarDevolucionInput,
 } from "./db/types.ts";
+import type { ExportarExcelInput } from "./exportaciones.types.ts";
 
 import { webFrame } from "electron";
 
@@ -33,6 +36,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
     verifyPin: (pin: string) => ipcRenderer.invoke("seguridad:verify-pin", pin),
     changePin: (pinActual: string, pinNuevo: string) =>
       ipcRenderer.invoke("seguridad:change-pin", pinActual, pinNuevo),
+    tieneContrasena: () => ipcRenderer.invoke("seguridad:tiene-contrasena"),
+    crearContrasena: (pinNuevo: string) =>
+      ipcRenderer.invoke("seguridad:crear-contrasena", pinNuevo),
   },
   negocio: {
     get: () => ipcRenderer.invoke("negocio:get"),
@@ -110,6 +116,16 @@ contextBridge.exposeInMainWorld("electronAPI", {
     getRecientes: (limite: number) =>
       ipcRenderer.invoke("ventas:get-recientes", limite),
   },
+  devoluciones: {
+    getVentas: (filtros?: FiltrosDevoluciones) =>
+      ipcRenderer.invoke("devoluciones:get-ventas", filtros),
+    getVentaDetail: (ventaId: number) =>
+      ipcRenderer.invoke("devoluciones:get-venta-detail", ventaId),
+    getHistorial: (filtros?: FiltrosDevoluciones) =>
+      ipcRenderer.invoke("devoluciones:get-historial", filtros),
+    process: (input: ProcesarDevolucionInput) =>
+      ipcRenderer.invoke("devoluciones:process", input),
+  },
   movimientos: {
     getAll: (filtros?: FiltrosMovimientos) =>
       ipcRenderer.invoke("movimientos:get-all", filtros),
@@ -121,6 +137,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   reportes: {
     getSummary: (filtros?: FiltrosReportes) =>
       ipcRenderer.invoke("reportes:summary", filtros),
+    exportarExcel: (input: ExportarExcelInput) =>
+      ipcRenderer.invoke("reportes:exportar-excel", input),
   },
   cuentasCorrientes: {
     getClientes: (opciones?: { incluirInactivos?: boolean }) =>

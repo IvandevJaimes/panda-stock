@@ -57,8 +57,8 @@ h6 {
 
 * {
   ::-webkit-scrollbar {
-    width: 3px;
-    height: 5px;
+    width: 10px;
+    height: 10px;
     cursor: pointer;
   }
 
@@ -68,27 +68,38 @@ h6 {
   }
 
   ::-webkit-scrollbar-thumb {
-    background-color: rgba(148, 163, 184, 0.35);
+    background-color: transparent;
     border-radius: 9999px;
+    /* El borde transparente agranda el área de agarre sin encoger el thumb */
+    border: 2px solid transparent;
+    background-clip: padding-box;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background-color: rgba(100, 116, 139, 0.6);
-    width: 7px;
-    height: 7px;
+    background-color: rgba(100, 116, 139, 0.65);
   }
+}
 
-  .dark * {
-    scrollbar-color: rgba(71, 85, 105, 0.45) transparent;
-  }
+/* La barra aparece solo cuando el mouse ronda el área scrolleable o la propia
+   barra; en reposo queda invisible para no estorbar contra los bordes. */
+*:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(148, 163, 184, 0.4);
+}
 
-  .dark *::-webkit-scrollbar-thumb {
-    background-color: rgba(71, 85, 105, 0.45);
-  }
+.dark * {
+  scrollbar-color: rgba(71, 85, 105, 0.45) transparent;
+}
 
-  .dark *::-webkit-scrollbar-thumb:hover {
-    background-color: rgba(100, 116, 139, 0.7);
-  }
+.dark *::-webkit-scrollbar-thumb {
+  background-color: transparent;
+}
+
+.dark *:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(71, 85, 105, 0.5);
+}
+
+.dark *::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(100, 116, 139, 0.7);
 }
 
 /* ==========================================================================

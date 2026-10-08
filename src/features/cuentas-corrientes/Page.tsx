@@ -214,16 +214,16 @@ export function CuentasCorrientesPage() {
         <KpiCard
           icon={<ArrowDownCircle size={20} />}
           iconBgClass="bg-emerald-100 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400"
-          title="Cobrado"
-          value={formatearMoneda(resumen?.totalAbonos ?? 0)}
-          subtitle="Histórico de abonos"
+          title="Cobrado neto"
+          value={formatearMoneda((resumen?.totalAbonos ?? 0) - (resumen?.totalReintegros ?? 0))}
+          subtitle="Abonos menos reintegros"
         />
         <KpiCard
           icon={<ArrowUpCircle size={20} />}
           iconBgClass="bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
-          title="Fiado histórico"
-          value={formatearMoneda(resumen?.totalCargos ?? 0)}
-          subtitle="Ventas y cargas"
+          title="Fiado neto"
+          value={formatearMoneda((resumen?.totalCargos ?? 0) - (resumen?.totalDevoluciones ?? 0))}
+          subtitle="Cargos menos devoluciones"
         />
         <KpiCard
           icon={<Users size={20} />}
@@ -439,12 +439,12 @@ export function CuentasCorrientesPage() {
                         </TableCell>
                         <TableCell
                           className={`text-right font-medium tabular-nums ${
-                            movimiento.tipo === 'cargo'
+                            movimiento.tipo === 'cargo' || movimiento.tipo === 'reintegro'
                               ? 'text-amber-600 dark:text-amber-400'
                               : 'text-emerald-600 dark:text-emerald-400'
                           }`}
                         >
-                          {movimiento.tipo === 'cargo' ? '+' : '−'}
+                          {movimiento.tipo === 'cargo' || movimiento.tipo === 'reintegro' ? '+' : '−'}
                           {formatearMoneda(movimiento.monto)}
                         </TableCell>
                       </TableRow>

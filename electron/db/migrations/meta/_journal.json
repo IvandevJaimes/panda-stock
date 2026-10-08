@@ -57,6 +57,20 @@
       "when": 1790996405668,
       "tag": "0007_little_wildside",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1791323646583,
+      "tag": "0008_large_dragon_lord",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1791413033524,
+      "tag": "0009_tough_blackheart",
+      "breakpoints": true
     }
   ]
 }

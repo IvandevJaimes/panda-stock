@@ -29,6 +29,8 @@ import {
   esVendible,
   esVencido,
   esVisibleEnPOS,
+  metodosHabilitados,
+  normalizarMetodoPago,
   siguienteMetodoPago,
   estaPorVencer,
   filtrarCatalogoPOS,
@@ -622,6 +624,19 @@ describe("precioUnitarioPorCantidad", () => {
     expect(precioUnitarioPorCantidad(2000, 4)).toBe(1800);
     expect(redondearMoneda(1800.0000000000002)).toBe(1800);
   });
+
+  it("nunca aplica mayoreo con la regla deshabilitada", () => {
+    const regla = { habilitado: false, umbral: 3, factor: 0.9 };
+    expect(tipoTarifaPorCantidad(10, regla)).toBe("minorista");
+    expect(precioUnitarioPorCantidad(200, 10, regla)).toBe(200);
+  });
+
+  it("respeta el umbral y el porcentaje de una regla propia", () => {
+    const regla = { habilitado: true, umbral: 5, factor: 0.85 };
+    expect(tipoTarifaPorCantidad(4, regla)).toBe("minorista");
+    expect(tipoTarifaPorCantidad(5, regla)).toBe("mayoreo");
+    expect(precioUnitarioPorCantidad(200, 5, regla)).toBe(170);
+  });
 });
 
 describe("operaciones del ticket", () => {
@@ -830,6 +845,28 @@ describe("resumirTicket", () => {
     expect(resumen.impuesto).toBe(0);
     expect(resumen.total).toBe(640);
   });
+
+  it("con el descuento desactivado no descuenta nada", () => {
+    const items: ItemTicket[] = [
+      {
+        productoId: 1,
+        nombre: "Gaseosa",
+        precioVenta: 200,
+        costo: 100,
+        cantidad: 3,
+        imgPath: null,
+      },
+    ];
+    const resumen = resumirTicket(items, {
+      habilitado: false,
+      umbral: 3,
+      factor: 0.9,
+    });
+
+    expect(resumen.lineas[0].tipoTarifa).toBe("minorista");
+    expect(resumen.descuento).toBe(0);
+    expect(resumen.total).toBe(600);
+  });
 });
 
 describe("formatearMoneda", () => {
@@ -1012,13 +1049,70 @@ describe("sesiones de ticket", () => {
 });
 
 describe('siguienteMetodoPago', () => {
-  it('rota por los tres métodos y vuelve al primero', () => {
+  it('rota por la lista entera y vuelve al primero', () => {
     expect(siguienteMetodoPago('efectivo')).toBe('transferencia')
     expect(siguienteMetodoPago('transferencia')).toBe('tarjeta')
-    expect(siguienteMetodoPago('tarjeta')).toBe('efectivo')
+    expect(siguienteMetodoPago('tarjeta')).toBe('cuenta_corriente')
+    expect(siguienteMetodoPago('cuenta_corriente')).toBe('efectivo')
+  })
+
+  it('rota solo sobre los métodos habilitados', () => {
+    const habilitados = ['efectivo', 'transferencia', 'cuenta_corriente'] as const
+
+    expect(siguienteMetodoPago('efectivo', habilitados)).toBe('transferencia')
+    expect(siguienteMetodoPago('transferencia', habilitados)).toBe('cuenta_corriente')
+    expect(siguienteMetodoPago('cuenta_corriente', habilitados)).toBe('efectivo')
   })
 
   it('un método desconocido arranca por el primero', () => {
     expect(siguienteMetodoPago('bitcoin' as MetodoPagoPOS)).toBe('efectivo')
+  })
+
+  it('si el actual quedó fuera de la lista, arranca desde el primero habilitado', () => {
+    expect(siguienteMetodoPago('tarjeta', ['efectivo', 'transferencia'])).toBe('efectivo')
+  })
+})
+
+describe('metodosHabilitados', () => {
+  const todos = {
+    tarjetaHabilitada: true,
+    cuentaCorrienteHabilitada: true,
+  }
+
+  it('siempre incluye efectivo y transferencia, en el orden de la app', () => {
+    expect(metodosHabilitados(todos)).toEqual([
+      'efectivo',
+      'transferencia',
+      'tarjeta',
+      'cuenta_corriente',
+    ])
+    expect(
+      metodosHabilitados({ tarjetaHabilitada: false, cuentaCorrienteHabilitada: false }),
+    ).toEqual(['efectivo', 'transferencia'])
+  })
+
+  it('quita cada método con su propio switch', () => {
+    expect(metodosHabilitados({ ...todos, tarjetaHabilitada: false })).toEqual([
+      'efectivo',
+      'transferencia',
+      'cuenta_corriente',
+    ])
+    expect(metodosHabilitados({ ...todos, cuentaCorrienteHabilitada: false })).toEqual([
+      'efectivo',
+      'transferencia',
+      'tarjeta',
+    ])
+  })
+})
+
+describe('normalizarMetodoPago', () => {
+  it('conserva el método si sigue habilitado', () => {
+    expect(normalizarMetodoPago('tarjeta', ['efectivo', 'tarjeta'])).toBe('tarjeta')
+  })
+
+  it('cae a efectivo si el método quedó desactivado', () => {
+    expect(normalizarMetodoPago('cuenta_corriente', ['efectivo', 'transferencia'])).toBe(
+      'efectivo',
+    )
   })
 })

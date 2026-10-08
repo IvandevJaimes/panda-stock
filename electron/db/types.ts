@@ -3,7 +3,7 @@ export type UnidadMedida = 'unidad' | 'ml' | 'g'
 export type EstadoVenta = 'completada' | 'anulada'
 export type EstadoCaja = 'abierta' | 'cerrada'
 export type MetodoPago = 'efectivo' | 'transferencia' | 'debito' | 'credito' | 'cuenta_corriente'
-export type TipoMovimientoCuentaCorriente = 'cargo' | 'abono'
+export type TipoMovimientoCuentaCorriente = 'cargo' | 'abono' | 'devolucion' | 'reintegro'
 export type TipoTarifa = 'minorista' | 'mayoreo'
 export type TipoMovimientoStock = 'entrada' | 'venta' | 'ajuste_positivo' | 'ajuste_negativo' | 'merma' | 'devolucion'
 export type TipoAjusteStock = 'ajuste_positivo' | 'ajuste_negativo' | 'merma'
@@ -189,6 +189,7 @@ export type CajaSummary = {
   totalVentas: number
   cantidadVentas: number
   totalEfectivo: number
+  totalEgresosEfectivo: number
   totalTransferencia: number
   totalTarjeta: number
   /** Ventas del turno cobradas en cuenta corriente. No son plata en la gaveta. */
@@ -274,6 +275,78 @@ export type FiltrosVentas = {
   cajaId?: number
   /** Tope de filas. Sin tope, `getVentas` devuelve el histórico completo. */
   limit?: number
+}
+
+export type FiltrosDevoluciones = {
+  desde?: string
+  hasta?: string
+  buscar?: string
+  limit?: number
+  offset?: number
+}
+
+export type Pagina<T> = {
+  items: T[]
+  total: number
+}
+
+export type VentaDevolucionResumen = {
+  venta: Venta
+  clienteNombre: string | null
+  metodos: MetodoPago[]
+  unidades: number
+}
+
+export type VentaDevolucionDetalle = {
+  venta: Venta
+  clienteNombre: string | null
+  items: DetalleVenta[]
+  pagos: Pago[]
+}
+
+export type ProcesarDevolucionInput = {
+  pin: string
+  ventaId: number
+}
+
+export type Devolucion = {
+  id: number
+  ventaId: number
+  cajaId: number | null
+  fechaHora: string
+  total: number
+  costo: number
+  gananciaRevertida: number
+}
+
+export type LineaDevolucion = {
+  id: number
+  devolucionId: number
+  detalleVentaId: number
+  cantidad: number
+  importe: number
+  costo: number
+  gananciaRevertida: number
+  descripcionItem: string
+}
+
+export type ReintegroDevolucion = {
+  metodo: Exclude<MetodoPago, 'cuenta_corriente'>
+  monto: number
+}
+
+export type DevolucionCompleta = Devolucion & {
+  clienteNombre: string | null
+  deudaReducida: number
+  items: LineaDevolucion[]
+  reintegros: ReintegroDevolucion[]
+}
+
+export type ResultadoDevolucion = {
+  devolucionId: number
+  ventaId: number
+  total: number
+  gananciaRevertida: number
 }
 
 /**
@@ -494,6 +567,14 @@ export type ReportesSummary = {
   movimientos: ResumenMovimientos
   perdidas: ResumenPerdidas
   cortes: ResumenCortes
+  devoluciones?: {
+    cantidad: number
+    unidades: number
+    total: number
+    costo: number
+    gananciaRevertida: number
+  }
+  ventasAnuladas?: { cantidad: number; monto: number }
 }
 
 export type FiltrosReportes = {
@@ -550,6 +631,7 @@ export type MovimientoCuentaCorriente = {
   clienteNombre: string
   /** Total de la venta origen, cuando el cargo viene de una venta. */
   ventaTotal: number | null
+  abonoOrigenId?: number | null
 }
 
 export type FiltrosCuentaCorriente = {
@@ -567,6 +649,8 @@ export type ResumenCuentasCorrientes = {
   clientesActivos: number
   totalCargos: number
   totalAbonos: number
+  totalDevoluciones: number
+  totalReintegros: number
 }
 
 export type AbonoInput = {

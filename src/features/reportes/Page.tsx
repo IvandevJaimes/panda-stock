@@ -3,6 +3,8 @@ import {
   AlertTriangle,
   ArrowDownRight,
   BarChart3,
+  FileSpreadsheet,
+  Loader2,
   PackageX,
   Receipt,
   RefreshCw,
@@ -11,6 +13,7 @@ import {
   TrendingUp,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '../../components/ui/Button'
 import { KpiCard } from '../../components/ui/KpiCard'
 import { LoadingState } from '../../components/ui/LoadingState'
@@ -20,6 +23,7 @@ import { cajasService } from '../../services/cajas.service'
 import { reportesService } from '../../services/reportes.service'
 import { BotonDatosPrueba } from './BotonDatosPrueba'
 import { CajaResumen } from './CajaResumen'
+import { DevolucionesPanel } from './DevolucionesPanel'
 import { HistorialVentas } from './HistorialVentas'
 import { MetodosPagoChart } from './MetodosPagoChart'
 import { CortesPanel, MovimientosPanel, PerdidasPanel } from './PanelesPestana'
@@ -43,6 +47,7 @@ import {
   totalCredito,
   type PresetRango,
 } from './reportsQuery'
+import { construirExportacion } from './exportacionQuery'
 import type { CajaConResponsable, CajaSummary, ReportesSummary } from '../../../electron/db/types'
 
 /** Arranca en "Mes": el ciclo empieza en Día, y "Todo" no tiene eje diario que densificar. */
@@ -154,6 +159,32 @@ function ContenidoReportes() {
 
   const metricas = useMemo(() => metricasDePestana(pestana, resumen), [pestana, resumen])
 
+  const [exportando, setExportando] = useState(false)
+
+  const exportarReporte = useCallback(async () => {
+    if (exportando || resumen === null) return
+
+    setExportando(true)
+    try {
+      const input = construirExportacion({ pestana, resumen, rango })
+      const ruta = await reportesService.exportarExcel({
+        ...input,
+        elegirCarpeta: true,
+      })
+      if (ruta === null) {
+        toast.info('Exportación cancelada')
+        return
+      }
+      toast.success('Reporte exportado', { description: ruta })
+    } catch (fallo) {
+      toast.error('No se pudo exportar el reporte', {
+        description: fallo instanceof Error ? fallo.message : undefined,
+      })
+    } finally {
+      setExportando(false)
+    }
+  }, [exportando, pestana, resumen, rango])
+
   const pestanaActiva = useMemo(
     () => PESTANAS_REPORTES.find((opcion) => opcion.valor === pestana) ?? PESTANAS_REPORTES[0]!,
     [pestana],
@@ -262,9 +293,33 @@ function ContenidoReportes() {
           )
         })}
 
-        <span className="ml-auto pr-2 text-[11px] text-slate-400 dark:text-slate-500">
-          {pestanaActiva.resumen}
-        </span>
+        {/* Mismo estilo que las pestañas, pero es una acción: el ícono la
+            distingue de las selecciones de la barra. */}
+        <button
+          type="button"
+          onClick={exportarReporte}
+          disabled={exportando || cargando}
+          title="Elige la carpeta donde guardar la pestaña activa como .xlsx"
+          className={cn(
+            'inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-xl px-3.5 py-2',
+            'text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500',
+            'text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200',
+            'disabled:pointer-events-none disabled:opacity-60',
+          )}
+        >
+          {exportando ? (
+            <Loader2 size={14} className="shrink-0 animate-spin" />
+          ) : (
+            <FileSpreadsheet size={14} className="shrink-0" />
+          )}
+          {exportando ? 'Exportando…' : 'Exportar'}
+        </button>
+
+        <div className="ml-auto flex items-center gap-2">
+          <span className="text-[11px] text-slate-400 dark:text-slate-500">
+            {pestanaActiva.resumen}
+          </span>
+        </div>
       </div>
 
       {/* Contenido de la pestaña */}
@@ -301,12 +356,24 @@ function ContenidoReportes() {
 
       {pestana === 'cortes' && <CortesPanel resumen={resumen} />}
 
-      {pestana !== 'ventas' && (
+      {pestana === 'devoluciones' && (
+        <DevolucionesPanel
+          desde={rango.desde}
+          hasta={rango.hasta}
+          onSuccess={recargar}
+        />
+      )}
+
+      {pestana !== 'ventas' && pestana !== 'devoluciones' && (
         <p className="flex items-center justify-center gap-1.5 pb-2 text-[11px] text-slate-400 dark:text-slate-500">
           <PackageX size={12} />
           {pestana === 'perdidas'
             ? 'Las mermas se valoran al costo actual del producto, no al del día de la merma.'
-            : 'Los cortes cuentan por la fecha en que se cerró la caja.'}
+            : pestana === 'cortes'
+              ? 'Los cortes cuentan por la fecha en que se cerró la caja.'
+              : pestana === 'movimientos'
+                ? 'Las devoluciones aparecen como entradas de mercadería.'
+                : 'Los tickets anulados no afectan el stock ni los ingresos.'}
         </p>
       )}
     </div>

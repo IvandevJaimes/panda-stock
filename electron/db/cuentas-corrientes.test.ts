@@ -134,7 +134,9 @@ describe('saldo y libro mayor', () => {
       .reduce((total, c) => total + c.saldo, 0)
 
     expect(resumen.totalPorCobrar).toBe(suma)
-    expect(resumen.totalCargos - resumen.totalAbonos).toBe(suma)
+    expect(
+      resumen.totalCargos - resumen.totalAbonos - resumen.totalDevoluciones + resumen.totalReintegros,
+    ).toBe(suma)
   })
 
   it('archivar a un cliente no borra la deuda que tiene pendiente', () => {
