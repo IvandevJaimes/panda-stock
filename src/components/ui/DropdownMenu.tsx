@@ -174,7 +174,7 @@ export interface DropdownMenuContentProps
   children: ReactNode;
 }
 
-const EXIT_DURATION_MS = 150;
+const EXIT_DURATION_MS = 100;
 /** Margen mínimo respecto de los bordes de la ventana para no desbordar. */
 const VIEWPORT_MARGIN = 8;
 /** Separación vertical entre el disparador y el panel. */
@@ -348,7 +348,7 @@ export function DropdownMenuContent({
         "transition-[opacity,transform] ease",
         visible
           ? "scale-100 opacity-100 pointer-events-auto duration-[170ms]"
-          : "scale-[0.6] opacity-0 duration-[150ms]",
+          : "scale-95 opacity-0 duration-[100ms]",
         className,
       )}
       {...props}
