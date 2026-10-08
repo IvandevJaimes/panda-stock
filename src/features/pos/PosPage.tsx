@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '../../lib/cn'
+import { CajaCerradaOverlay } from '../../components/ui/CajaCerradaOverlay'
 import { CustomSelect } from '../../components/ui/CustomSelect'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
@@ -104,6 +105,7 @@ export function PosPage() {
   const [confirmandoVaciar, setConfirmandoVaciar] = useState(false)
 
   const [busqueda, setBusqueda] = useState('')
+  const [paginaActual, setPaginaActual] = useState(1)
   const [categoriaId, setCategoriaId] = useState('all')
   const [vista, setVista] = useState<VistaCatalogo>(VISTA_POR_DEFECTO)
   const [viendoMasVendidos, setViendoMasVendidos] = useState(false)
@@ -154,7 +156,6 @@ export function PosPage() {
   const [cobrando, setCobrando] = useState(false)
 
   const busquedaDiferida = useDeferredValue(busqueda)
-
   // Conteo por marca para el selector: el número que el cajero necesita es el de
   // los productos que se pueden cobrar, no el de todos los asignados. Se cuenta
   // sobre los crudos porque ahí está `activo`, que `mapearProductosPOS` ya no
@@ -669,7 +670,7 @@ export function PosPage() {
     onAbrirMarcas: () => setMarcasAbiertas(true),
     onCambiarMetodoPago: () =>
       handleCambiarMetodoPago(
-        siguienteMetodoPago(metodoPagoActivo, metodosPago),
+        siguienteMetodoPago(metodoPagoActivo, metodosPago.filter(m => m !== 'cuenta_corriente')),
       ),
     onSalirDeBusqueda: () => setBusqueda(''),
     onSinEfecto: (mensaje) => toast.warning(mensaje),
@@ -704,7 +705,11 @@ export function PosPage() {
       */}
       <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)] gap-6 min-[1025px]:grid-cols-[minmax(0,1fr)_520px]">
         <section className="relative flex min-w-0 min-h-0 flex-col overflow-hidden">
-          <div className="mb-4 flex shrink-0 flex-col gap-3">
+          {ventasPorCajas && cajaCargada && !caja ? (
+            <CajaCerradaOverlay />
+          ) : (
+            <>
+              <div className="mb-4 flex shrink-0 flex-col gap-3">
             {/* El botón de marcas va en la fila del título, a la derecha, igual
                 que en Inventario: el título y la acción que cambia el
                 filtro conviven, y el buscador queda abajo como la caja donde
@@ -816,7 +821,10 @@ export function PosPage() {
               <Input
                 ref={busquedaRef}
                 value={busqueda}
-                onChange={(event) => setBusqueda(event.target.value)}
+                onChange={(event) => {
+                  setBusqueda(event.target.value)
+                  setPaginaActual(1)
+                }}
                 placeholder="Buscar por producto, marca, variante o código..."
                 aria-label="Buscar producto"
                 leftIcon={<Search size={16} />}
@@ -833,9 +841,10 @@ export function PosPage() {
                 <CustomSelect
                   options={OPCIONES_VISTA}
                   value={valorVistaActiva(vista)}
-                  onChange={(valor) =>
+                  onChange={(valor) => {
                     setVista(aplicarValorVista(vista, String(valor)))
-                  }
+                    setPaginaActual(1)
+                  }}
                   displayLabel={etiquetaVista(vista)}
                   className="w-50 shrink-0"
                   buttonClassName="h-11"
@@ -867,7 +876,10 @@ export function PosPage() {
               categorias={categoriasCatalogo}
               total={vendiblesDeBusqueda.length}
               valor={categoriaId}
-              onChange={setCategoriaId}
+              onChange={(id) => {
+              setCategoriaId(id)
+              setPaginaActual(1)
+            }}
             />
           </div>
 
@@ -897,6 +909,8 @@ export function PosPage() {
               onLimpiarFiltros={
                 hayFiltrosActivos ? handleLimpiarFiltros : undefined
               }
+              paginaActual={paginaActual}
+              onPageChange={setPaginaActual}
             />
           )}
 
@@ -904,6 +918,8 @@ export function PosPage() {
               en modo más vendidos un producto sin stock puede no estar en la
               grilla, pero sigue pesando en el total que ve el cajero. */}
           {!errorProductos && <NoVendiblesBadge conteo={bloqueo} />}
+            </>
+          )}
         </section>
 
         {/*
