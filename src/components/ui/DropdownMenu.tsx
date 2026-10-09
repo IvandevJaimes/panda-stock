@@ -63,14 +63,33 @@ function useDropdownMenu(): DropdownMenuContextValue {
 
 export interface DropdownMenuProps {
   placement?: DropdownMenuPlacement;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   children: ReactNode;
 }
 
 export function DropdownMenu({
   placement = "bottom-end",
+  open: openProp,
+  onOpenChange,
   children,
 }: DropdownMenuProps) {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isControlled = openProp !== undefined;
+  const open = isControlled ? openProp : internalOpen;
+
+  const setOpen = useCallback<Dispatch<SetStateAction<boolean>>>(
+    (value) => {
+      const nextOpen =
+        typeof value === "function" ? value(open) : value;
+      if (!isControlled) {
+        setInternalOpen(nextOpen);
+      }
+      onOpenChange?.(nextOpen);
+    },
+    [isControlled, open, onOpenChange],
+  );
+
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   // Cierre al hacer clic fuera y cierre con tecla ESC.
@@ -95,7 +114,7 @@ export function DropdownMenu({
       document.removeEventListener("pointerdown", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [open]);
+  }, [open, setOpen]);
 
   return (
     <DropdownMenuContext.Provider

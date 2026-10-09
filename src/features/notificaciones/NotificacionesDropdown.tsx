@@ -1,8 +1,10 @@
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Bell, Trash2, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { cn } from '../../lib/cn'
 import { buildAssetUrl } from '../../lib/assets'
 import { getProductPlaceholder } from '../../lib/productPlaceholder'
+import { onAlertCreated } from '../../stores/stockAlertHistoryStore'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -76,9 +78,60 @@ function FilaNotificacion({
 export function NotificacionesDropdown() {
   const { notificaciones, eliminar, limpiar } = useNotificaciones()
   const navegar = useNavigate()
+  const [abierto, setAbierto] = useState(false)
+  const [animando, setAnimando] = useState(false)
+  const timeoutAnimacionRef = useRef<number | null>(null)
 
   const total = notificaciones.length
+  const totalPrevioRef = useRef(total)
   const abreviado = total > 99 ? '99+' : String(total)
+
+  const dispararAnimacion = useCallback(() => {
+    setAnimando(false)
+    requestAnimationFrame(() => {
+      setAnimando(true)
+      if (timeoutAnimacionRef.current !== null) {
+        window.clearTimeout(timeoutAnimacionRef.current)
+      }
+      timeoutAnimacionRef.current = window.setTimeout(() => {
+        setAnimando(false)
+        timeoutAnimacionRef.current = null
+      }, 1100)
+    })
+  }, [])
+
+  useEffect(() => {
+    const desuscribirAlerta = onAlertCreated(() => {
+      dispararAnimacion()
+    })
+
+    const alHaberNuevas = () => {
+      dispararAnimacion()
+    }
+
+    const alAbrirNotificaciones = () => {
+      setAbierto(true)
+    }
+
+    window.addEventListener('nuevas-notificaciones', alHaberNuevas)
+    window.addEventListener('open-notifications', alAbrirNotificaciones)
+
+    return () => {
+      desuscribirAlerta()
+      window.removeEventListener('nuevas-notificaciones', alHaberNuevas)
+      window.removeEventListener('open-notifications', alAbrirNotificaciones)
+      if (timeoutAnimacionRef.current !== null) {
+        window.clearTimeout(timeoutAnimacionRef.current)
+      }
+    }
+  }, [dispararAnimacion])
+
+  useEffect(() => {
+    if (total > totalPrevioRef.current) {
+      dispararAnimacion()
+    }
+    totalPrevioRef.current = total
+  }, [total, dispararAnimacion])
 
   const abrirProducto = (notificacion: Notificacion) => {
     navegar({
@@ -88,7 +141,7 @@ export function NotificacionesDropdown() {
   }
 
   return (
-    <DropdownMenu placement="bottom-end">
+    <DropdownMenu placement="bottom-end" open={abierto} onOpenChange={setAbierto}>
       <Tooltip content="Notificaciones">
         <DropdownMenuTrigger asChild>
           <button
@@ -106,10 +159,28 @@ export function NotificacionesDropdown() {
               'dark:hover:bg-slate-800/60 dark:hover:text-white',
             )}
           >
-            <Bell size={18} aria-hidden="true" />
+            <Bell
+              size={18}
+              aria-hidden="true"
+              className={cn(
+                'transition-transform',
+                animando && 'animate-bell-ring origin-top text-red-500 dark:text-red-400',
+              )}
+            />
             {total > 0 && (
-              <span className="absolute -right-1 -top-1 min-w-[16px] rounded-full bg-red-500 px-1 text-center text-[10px] font-bold leading-4 text-white shadow-xs">
-                {abreviado}
+              <span
+                className={cn(
+                  'absolute -right-1 -top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-center text-[10px] font-bold leading-4 text-white shadow-xs',
+                  animando && 'animate-badge-pop',
+                )}
+              >
+                {animando && (
+                  <span
+                    className="pointer-events-none absolute inset-0 animate-ping rounded-full bg-red-500 opacity-75"
+                    aria-hidden="true"
+                  />
+                )}
+                <span className="relative z-10">{abreviado}</span>
               </span>
             )}
           </button>

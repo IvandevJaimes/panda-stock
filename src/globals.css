@@ -298,6 +298,70 @@ h6 {
   will-change: opacity, transform;
 }
 
+/* Oscilación pendular de la campana desde su anclaje superior */
+@keyframes bellRing {
+  0% {
+    transform: rotate(0);
+  }
+  15% {
+    transform: rotate(18deg);
+  }
+  30% {
+    transform: rotate(-16deg);
+  }
+  45% {
+    transform: rotate(14deg);
+  }
+  60% {
+    transform: rotate(-10deg);
+  }
+  75% {
+    transform: rotate(6deg);
+  }
+  85% {
+    transform: rotate(-3deg);
+  }
+  100% {
+    transform: rotate(0);
+  }
+}
+
+.animate-bell-ring {
+  animation: bellRing 1000ms cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+  transform-origin: top center;
+  will-change: transform;
+}
+
+/* Rebote elástico para la llegada de nuevas alertas al badge */
+@keyframes badgePop {
+  0% {
+    transform: scale(0.4);
+    opacity: 0.4;
+  }
+  35% {
+    transform: scale(1.35);
+    opacity: 1;
+  }
+  55% {
+    transform: scale(0.85);
+  }
+  75% {
+    transform: scale(1.15);
+  }
+  90% {
+    transform: scale(0.95);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.animate-badge-pop {
+  animation: badgePop 750ms cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
+  will-change: transform, opacity;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-entry-up,
   .animate-entry-fade,
@@ -306,7 +370,9 @@ h6 {
   .animate-shake,
   .animate-scan-in,
   .animate-scan-out,
-  .animate-stock-fab-in {
+  .animate-stock-fab-in,
+  .animate-bell-ring,
+  .animate-badge-pop {
     animation: none !important;
     transform: none !important;
     opacity: 1 !important;
