@@ -1,5 +1,4 @@
-import { useEffect, useState, useRef } from "react";
-import Sound from "react-sound";
+import { useEffect, useRef } from "react";
 import {
   onAlertCreated,
   type StockAlertHistoryType,
@@ -20,16 +19,12 @@ function getSoundUrl(type: StockAlertHistoryType): string {
 const INTERVALO_MINIMO_MS = 1000;
 
 /**
- * Componente que reproduce sonidos de alerta usando react-sound.
- * Se monta una sola vez en App.tsx.
+ * Componente que reproduce sonidos de alerta ante eventos del store.
+ * Se monta una sola vez en App.tsx sin renderizar elementos DOM.
  */
 export function StockAlertSound() {
-  const [currentSound, setCurrentSound] = useState<{
-    url: string;
-    id: number;
-  } | null>(null);
   const lastPlayTime = useRef(0);
-  const soundIdRef = useRef(0);
+  const currentAudio = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     const unsubscribe = onAlertCreated((entry) => {
@@ -40,27 +35,30 @@ export function StockAlertSound() {
       lastPlayTime.current = now;
 
       const url = getSoundUrl(entry.type);
-      if (url) {
-        soundIdRef.current += 1;
-        setCurrentSound({ url, id: soundIdRef.current });
+      try {
+        if (currentAudio.current) {
+          currentAudio.current.pause();
+          currentAudio.current.currentTime = 0;
+        }
+        const audio = new Audio(url);
+        currentAudio.current = audio;
+        audio.play().catch((err) => {
+          // Si el navegador requiere interacción previa del usuario
+          console.warn("No se pudo reproducir audio de alerta:", err);
+        });
+      } catch (err) {
+        console.warn("Error creando audio de alerta:", err);
       }
     });
 
-    return unsubscribe;
+    return () => {
+      unsubscribe();
+      if (currentAudio.current) {
+        currentAudio.current.pause();
+        currentAudio.current = null;
+      }
+    };
   }, []);
 
-  if (!currentSound) return null;
-
-  return (
-    <Sound
-      key={currentSound.id}
-      url={currentSound.url}
-      playStatus="PLAYING"
-      onFinishedPlaying={() => setCurrentSound(null)}
-      onError={(_code, description) => {
-        console.warn("Error reproduciendo sonido de alerta:", description);
-        setCurrentSound(null);
-      }}
-    />
-  );
+  return null;
 }
