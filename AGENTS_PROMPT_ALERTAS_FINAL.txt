@@ -1,0 +1,41 @@
+# Prompt para agente: Alertas StockFlow adaptadas a Panda Stock
+
+## Contexto
+Repo: /home/ivanj/Desktop/proyectos/panda-stock (Electron + React + TS + Tailwind 4 + Zustand + sonner + pnpm)
+Ya copiados: StockAlert.tsx, Tooltip.tsx/css. Faltan sonidos, store, servicios, react-sound, integración.
+
+## Objetivo
+Implementar sistema de alertas visuales tipo StockFlow con sonido prioritario.
+
+## Requisitos
+1. Visual: toasts centrados arriba con sonner (toasterId="stock"). Misma UI que StockAlert.tsx.
+2. Sonido: usar react-sound. Al recibir alertas nuevas (onAlertCreated), reproducir ÚNICAMENTE el sonido de mayor gravedad. NUNCA 2 sonidos juntos.
+   Orden de prioridad: out-of-stock > expired > low-stock > near-expiry
+   Si hay varios tipos, elige 1 según ese orden.
+3. Stock bajo/sin stock: SOLO al vender. Detectar transición pre->post: solo empeoramiento. Si mejora o igual -> NO alertar.
+4. Vencidos/por vencer: SOLO al iniciar app (1 vez). Usar evaluateExpiry (src/lib/dateUtils.ts) + DIAS_POR_VENCER (src/features/pos/posQuery.ts).
+5. Sin repeticiones: addAlertIfNew + notifiedCache. Al iniciar, filtrar ya notificados/activos.
+6. Store centralizado con mismo patrón StockFlow.
+
+## Pasos
+1. Copiar sonidos .mp3 desde stockflow (dist/assets/src/assets) a public/sounds/ con nombres:
+   lucadialessandro-alert-sound-230091.mp3 -> stock_low.mp3
+   universfield-error-notification-08-206492(1).mp3 -> stock_out.mp3
+   universfield-error-notification-352286.mp3 -> stock_expired.mp3
+   universfield-new-notification-012-363675.mp3 -> stock_near_expiry.mp3
+2. pnpm add react-sound
+3. Crear src/utils/dates.ts: export function parseISO(s?:string|null), export function formatISODate(s?:string|null) usando date-fns
+4. Arreglar rutas en src/components/ui/alerts/StockAlert.tsx: Tooltip ../tooltip/Tooltip, dates ../../../utils/dates.ts
+5. Crear src/stores/stockAlertHistoryStore.ts (igual StockFlow) con persist 'panda-stock-alert-history' v6
+6. Crear src/services/stockAlertService.ts (evaluar transiciones venta)
+7. Crear src/services/expiryDetectionService.ts (solo inicio)
+8. Crear src/components/ui/alerts/StockAlertSound.tsx con react-sound + lógica prioridad única
+9. App.tsx: montar <StockAlertSound/>, llamar detectExpiryAlerts() 1 vez
+10. POS (tras venta exitosa): evaluar impactos -> evaluateStockAlerts
+11. typecheck + lint
+
+## Reglas duras
+- NO reproducir 2 sonidos simultáneos
+- Sonido crítico (out-of-stock/expired) tiene prioridad absoluta sobre advertencia si coexisten
+- No alertar vencidos/por vencer fuera del init
+- No alertar stock bajo/sin stock fuera de venta por transición
