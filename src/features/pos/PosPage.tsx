@@ -55,6 +55,7 @@ import { useCajaStore } from '../../stores/caja.store'
 import { useSettingsStore } from '../../stores/settings.store'
 import { ventasService } from '../../services/ventas.service'
 import { resolverEmpleadoDelComercio } from '../../services/empleado-comercio'
+import { evaluateStockAlerts, type StockImpact } from '../../services/stockAlertService'
 import {
   siguienteMetodoPago,
   construirCategorias,
@@ -640,6 +641,32 @@ export function PosPage() {
       cerrarTicketDelStore(activeTicketId)
       toast.success(`Venta #${venta.ventaId} · ${formatearMoneda(resumen.total)}`)
 
+      // Evaluar transiciones de stock y disparar alertas tipo StockFlow
+      const cantidadesPorProducto = new Map<number, number>()
+      for (const linea of resumen.lineas) {
+        const actual = cantidadesPorProducto.get(linea.productoId) ?? 0
+        cantidadesPorProducto.set(linea.productoId, actual + linea.cantidad)
+      }
+
+      const productosMap = new Map(productosCrudos.map((p) => [p.id, p]))
+      const impacts: StockImpact[] = []
+
+      for (const [productoId, deductedQty] of cantidadesPorProducto.entries()) {
+        const prod = productosMap.get(productoId)
+        if (prod) {
+          impacts.push({
+            productId: prod.id,
+            name: prod.nombre,
+            preStock: prod.stockActual,
+            deductedQty,
+            stockMin: prod.stockMinimo,
+            unit: prod.unidadMedida,
+          })
+        }
+      }
+
+      evaluateStockAlerts(impacts)
+
       // Sin releer el catálogo la grilla muestra el stock anterior y el cajero
       // puede volver a agregar un producto que ya no queda.
       try {
@@ -667,6 +694,7 @@ export function PosPage() {
     resumen,
     activeTicketId,
     cerrarTicketDelStore,
+    productosCrudos,
   ])
 
   const {

@@ -7,6 +7,8 @@ import { useNegocioStore } from './stores/negocio.store'
 import { negocioService } from './services/negocio.service'
 import { BusinessSetupModal } from './features/onboarding/BusinessSetupModal'
 import { useScannerInit } from './hooks/useBarcodeScanner'
+import { StockAlertSound } from './components/ui/alerts/StockAlertSound'
+import { detectExpiryAlerts } from './services/expiryDetectionService'
 
 function App() {
   const theme = useUIStore((state) => state.theme)
@@ -45,8 +47,15 @@ function App() {
     }
   }, [setNegocio])
 
+  useEffect(() => {
+    detectExpiryAlerts().catch((err) => {
+      console.warn('Error detectando vencimientos:', err)
+    })
+  }, [])
+
   return (
     <>
+      <StockAlertSound />
       <RouterProvider router={router} />
       {!verificando && (
         <BusinessSetupModal
@@ -58,6 +67,13 @@ function App() {
         />
       )}
       <Toaster position="bottom-left" theme={theme} richColors />
+      <Toaster
+        id="stock"
+        position="top-center"
+        offset={{ top: 20 }}
+        theme={theme}
+        gap={6}
+      />
     </>
   )
 }
