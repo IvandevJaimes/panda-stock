@@ -71,15 +71,41 @@ function BadgeEstado({ tipo }: { tipo: Notificacion['tipo'] }) {
   }
 }
 
+const EXIT_MS = 200
+
 function FilaNotificacion({
   notificacion,
+  saliendoTodo,
   onAbrir,
   onEliminar,
 }: {
   notificacion: Notificacion
+  saliendoTodo?: boolean
   onAbrir: () => void
   onEliminar: () => void
 }) {
+  const [saliendo, setSaliendo] = useState(false)
+  const timerRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current !== null) {
+        window.clearTimeout(timerRef.current)
+      }
+    }
+  }, [])
+
+  const handleEliminar = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (saliendo || saliendoTodo) return
+    setSaliendo(true)
+    timerRef.current = window.setTimeout(() => {
+      timerRef.current = null
+      onEliminar()
+    }, EXIT_MS)
+  }
+
+  const enSalida = saliendo || saliendoTodo
   const imagen =
     buildAssetUrl(notificacion.imgPath) ??
     getProductPlaceholder(notificacion.productoId)
@@ -96,9 +122,10 @@ function FilaNotificacion({
         }
       }}
       className={cn(
-        'group relative flex items-start gap-3 rounded-xl border p-2.5 pr-8 transition-all cursor-pointer select-none',
+        'group relative flex items-center gap-3 rounded-xl border p-2.5 pr-8 transition-all cursor-pointer select-none',
         'shadow-2xs hover:shadow-xs focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary',
         ESTILOS_CARD[notificacion.tipo],
+        enSalida && 'animate-card-exit pointer-events-none',
       )}
     >
       <img
@@ -106,7 +133,7 @@ function FilaNotificacion({
         alt=""
         aria-hidden="true"
         className={cn(
-          'h-11 w-11 shrink-0 rounded-lg object-cover border bg-white dark:bg-slate-800 shadow-2xs',
+          'h-11 w-11 shrink-0 self-center rounded-lg object-cover border bg-white dark:bg-slate-800 shadow-2xs',
           ESTILOS_BORDE_IMG[notificacion.severidad],
         )}
       />
@@ -128,10 +155,7 @@ function FilaNotificacion({
         type="button"
         aria-label={`Descartar notificación de ${notificacion.producto}`}
         title="Descartar"
-        onClick={(e) => {
-          e.stopPropagation()
-          onEliminar()
-        }}
+        onClick={handleEliminar}
         className={cn(
           'absolute top-2.5 right-2.5 grid h-6 w-6 place-items-center rounded-lg cursor-pointer',
           'text-slate-400 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200',
@@ -150,7 +174,9 @@ export function NotificacionesDropdown() {
   const navegar = useNavigate()
   const [abierto, setAbierto] = useState(false)
   const [animando, setAnimando] = useState(false)
+  const [limpiandoTodo, setLimpiandoTodo] = useState(false)
   const timeoutAnimacionRef = useRef<number | null>(null)
+  const timerLimpiarRef = useRef<number | null>(null)
 
   const total = notificaciones.length
   const totalPrevioRef = useRef(total)
@@ -169,6 +195,24 @@ export function NotificacionesDropdown() {
       }, 1100)
     })
   }, [])
+
+  useEffect(() => {
+    return () => {
+      if (timerLimpiarRef.current !== null) {
+        window.clearTimeout(timerLimpiarRef.current)
+      }
+    }
+  }, [])
+
+  const handleLimpiarTodo = () => {
+    if (limpiandoTodo || total === 0) return
+    setLimpiandoTodo(true)
+    timerLimpiarRef.current = window.setTimeout(() => {
+      timerLimpiarRef.current = null
+      limpiar()
+      setLimpiandoTodo(false)
+    }, EXIT_MS)
+  }
 
   useEffect(() => {
     const desuscribirAlerta = onAlertCreated(() => {
@@ -277,8 +321,9 @@ export function NotificacionesDropdown() {
           {total > 0 && (
             <button
               type="button"
-              onClick={limpiar}
-              className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-slate-500 hover:text-red-600 hover:bg-red-50 dark:text-slate-400 dark:hover:text-red-400 dark:hover:bg-red-950/30 transition-colors cursor-pointer"
+              onClick={handleLimpiarTodo}
+              disabled={limpiandoTodo}
+              className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-slate-500 hover:text-red-600 hover:bg-red-50 dark:text-slate-400 dark:hover:text-red-400 dark:hover:bg-red-950/30 transition-colors cursor-pointer disabled:opacity-50"
             >
               <Trash2 size={13} />
               <span>Limpiar todo</span>
@@ -304,6 +349,7 @@ export function NotificacionesDropdown() {
               <FilaNotificacion
                 key={notificacion.id}
                 notificacion={notificacion}
+                saliendoTodo={limpiandoTodo}
                 onAbrir={() => abrirProducto(notificacion)}
                 onEliminar={() => eliminar(notificacion.id)}
               />

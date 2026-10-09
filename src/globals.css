@@ -362,6 +362,23 @@ h6 {
   will-change: transform, opacity;
 }
 
+/* Salida suave de tarjetas de notificación al descartar individualmente o limpiar */
+@keyframes notiCardExit {
+  from {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(18px) scale(0.96);
+  }
+}
+
+.animate-card-exit {
+  animation: notiCardExit 200ms cubic-bezier(0.4, 0, 1, 1) both;
+  will-change: opacity, transform;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-entry-up,
   .animate-entry-fade,
@@ -372,7 +389,8 @@ h6 {
   .animate-scan-out,
   .animate-stock-fab-in,
   .animate-bell-ring,
-  .animate-badge-pop {
+  .animate-badge-pop,
+  .animate-card-exit {
     animation: none !important;
     transform: none !important;
     opacity: 1 !important;
