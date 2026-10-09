@@ -438,7 +438,7 @@ export function Cart({
                 (cobroBloqueado || cobrando) && 'pointer-events-none opacity-50',
               )}
             >
-              {cobrando ? 'Guardando…' : esCuentaCorriente ? 'Anotar en cuenta' : 'Cobrar'}
+              {cobrando ? 'Procesando...' : esCuentaCorriente ? 'Anotar en cuenta' : 'Cobrar'}
             </Button>
           </span>
         </Tooltip>

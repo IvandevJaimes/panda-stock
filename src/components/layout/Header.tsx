@@ -65,7 +65,8 @@ export function Header() {
 
   const isDark = theme === "dark";
   const hayNegocio = negocioNombre.length > 0 || negocioLogoUrl !== null;
-  const logoCaido = negocioLogoUrl !== null && logoFallidoUrl === negocioLogoUrl;
+  const logoCaido =
+    negocioLogoUrl !== null && logoFallidoUrl === negocioLogoUrl;
 
   return (
     <header className="flex h-18 shadow-md z-10 shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3 text-slate-900 dark:border-slate-800 dark:bg-[#111827] dark:text-slate-200 md:gap-4 md:px-6 lg:gap-6">
@@ -94,40 +95,40 @@ export function Header() {
         {mainNavItems
           .filter(({ to }) => to !== "/accounts" || cuentaCorrienteHabilitada)
           .map(({ to, label, icon: Icon, bloqueado }) =>
-          bloqueado ? (
-            <Tooltip key={to} content="Próximamente">
-              <span
-                aria-disabled="true"
-                className={cn(
-                  "inline-flex cursor-not-allowed select-none items-center justify-center gap-2 rounded-full border border-transparent px-2.5 py-2 sm:px-4",
-                  "font-display text-sm font-medium text-slate-400",
-                  "dark:text-slate-600",
-                )}
-              >
-                <Icon size={17} className="shrink-0" />
-                <span className="hidden xl:inline">{label}</span>
-              </span>
-            </Tooltip>
-          ) : (
-            <Tooltip key={to} content={label}>
-              <NavLink
-                to={to}
-                className={({ isActive }) =>
-                  cn(
-                    "inline-flex items-center justify-center gap-2 rounded-full border px-2.5 py-2 sm:px-4",
-                    "font-display text-sm font-medium transition-colors duration-150",
-                    isActive
-                      ? "border-emerald-500/30 bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400"
-                      : "border-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800/60 dark:hover:text-white",
-                  )
-                }
-              >
-                <Icon size={17} className="shrink-0" />
-                <span className="hidden xl:inline">{label}</span>
-              </NavLink>
-            </Tooltip>
-          ),
-        )}
+            bloqueado ? (
+              <Tooltip key={to} content="Próximamente">
+                <span
+                  aria-disabled="true"
+                  className={cn(
+                    "inline-flex cursor-not-allowed select-none items-center justify-center gap-2 rounded-full border border-transparent px-2.5 py-2 sm:px-4",
+                    "font-display text-sm font-medium text-slate-400",
+                    "dark:text-slate-600",
+                  )}
+                >
+                  <Icon size={17} className="shrink-0" />
+                  <span className="hidden xl:inline">{label}</span>
+                </span>
+              </Tooltip>
+            ) : (
+              <Tooltip key={to} content={label}>
+                <NavLink
+                  to={to}
+                  className={({ isActive }) =>
+                    cn(
+                      "inline-flex items-center justify-center gap-2 rounded-full border px-2.5 py-2 sm:px-4",
+                      "font-display text-sm font-medium transition-colors duration-150",
+                      isActive
+                        ? "border-emerald-500/30 bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400"
+                        : "border-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800/60 dark:hover:text-white",
+                    )
+                  }
+                >
+                  <Icon size={17} className="shrink-0" />
+                  <span className="hidden xl:inline">{label}</span>
+                </NavLink>
+              </Tooltip>
+            ),
+          )}
       </nav>
 
       {/* ── Acciones ── */}
@@ -207,7 +208,7 @@ export function Header() {
           </button>
         </Tooltip>
 
-               {/* Información del negocio */}
+        {/* Información del negocio */}
         {hayNegocio && (
           <>
             <DropdownMenu placement="bottom-end">
@@ -254,8 +255,6 @@ export function Header() {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-
-           
           </>
         )}
       </div>

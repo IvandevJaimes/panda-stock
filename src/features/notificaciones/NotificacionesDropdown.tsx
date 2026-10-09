@@ -270,7 +270,7 @@ export function NotificacionesDropdown() {
         </DropdownMenuTrigger>
       </Tooltip>
 
-      <DropdownMenuContent className="flex flex-col h-[480px] max-h-[calc(100vh-5rem)] w-[24rem] sm:w-[27rem] p-0 overflow-hidden rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800">
+      <DropdownMenuContent className="flex flex-col h-[400px] max-h-[calc(100vh-5rem)] w-[24rem] sm:w-[27rem] p-0 overflow-hidden rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800">
         <div className="shrink-0 flex items-center gap-2 border-b border-slate-100 dark:border-slate-800/80 px-3.5 py-3 bg-slate-50/70 dark:bg-slate-900/50">
           <div className="grid h-7 w-7 place-items-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400">
             <Bell size={15} />
