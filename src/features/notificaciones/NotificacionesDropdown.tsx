@@ -1,18 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import {
-  AlertCircle,
-  AlertTriangle,
-  Bell,
-  CalendarX2,
-  Clock,
-  Trash2,
-  X,
-} from 'lucide-react'
+import { Bell, Trash2, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { cn } from '../../lib/cn'
 import { buildAssetUrl } from '../../lib/assets'
 import { getProductPlaceholder } from '../../lib/productPlaceholder'
 import { onAlertCreated } from '../../stores/stockAlertHistoryStore'
+import { Badge } from '../../components/ui/Badge'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,13 +17,13 @@ import type { Notificacion } from './notificacionesQuery'
 
 const ESTILOS_CARD: Record<Notificacion['tipo'], string> = {
   vencido:
-    'border-red-200/90 border-l-4 border-l-red-500 bg-red-50/70 hover:bg-red-100/70 hover:border-red-300 dark:border-red-900/40 dark:border-l-red-500 dark:bg-red-950/25 dark:hover:bg-red-950/40 dark:hover:border-red-800/60',
+    'border-red-200/90 border-l-4 border-l-red-500 bg-red-50/70 hover:bg-red-100/70 hover:border-y-red-300 hover:border-r-red-300 hover:border-l-red-500 dark:border-red-900/40 dark:border-l-red-500 dark:bg-red-950/25 dark:hover:bg-red-950/40 dark:hover:border-y-red-800/60 dark:hover:border-r-red-800/60 dark:hover:border-l-red-500',
   stock_agotado:
-    'border-red-200/90 border-l-4 border-l-red-500 bg-red-50/70 hover:bg-red-100/70 hover:border-red-300 dark:border-red-900/40 dark:border-l-red-500 dark:bg-red-950/25 dark:hover:bg-red-950/40 dark:hover:border-red-800/60',
+    'border-red-200/90 border-l-4 border-l-red-500 bg-red-50/70 hover:bg-red-100/70 hover:border-y-red-300 hover:border-r-red-300 hover:border-l-red-500 dark:border-red-900/40 dark:border-l-red-500 dark:bg-red-950/25 dark:hover:bg-red-950/40 dark:hover:border-y-red-800/60 dark:hover:border-r-red-800/60 dark:hover:border-l-red-500',
   por_vencer:
-    'border-amber-200/90 border-l-4 border-l-amber-500 bg-amber-50/70 hover:bg-amber-100/70 hover:border-amber-300 dark:border-amber-900/40 dark:border-l-amber-500 dark:bg-amber-950/25 dark:hover:bg-amber-950/40 dark:hover:border-amber-800/60',
+    'border-amber-200/90 border-l-4 border-l-amber-500 bg-amber-50/70 hover:bg-amber-100/70 hover:border-y-amber-300 hover:border-r-amber-300 hover:border-l-amber-500 dark:border-amber-900/40 dark:border-l-amber-500 dark:bg-amber-950/25 dark:hover:bg-amber-950/40 dark:hover:border-y-amber-800/60 dark:hover:border-r-amber-800/60 dark:hover:border-l-amber-500',
   stock_bajo:
-    'border-amber-200/90 border-l-4 border-l-amber-500 bg-amber-50/70 hover:bg-amber-100/70 hover:border-amber-300 dark:border-amber-900/40 dark:border-l-amber-500 dark:bg-amber-950/25 dark:hover:bg-amber-950/40 dark:hover:border-amber-800/60',
+    'border-amber-200/90 border-l-4 border-l-amber-500 bg-amber-50/70 hover:bg-amber-100/70 hover:border-y-amber-300 hover:border-r-amber-300 hover:border-l-amber-500 dark:border-amber-900/40 dark:border-l-amber-500 dark:bg-amber-950/25 dark:hover:bg-amber-950/40 dark:hover:border-y-amber-800/60 dark:hover:border-r-amber-800/60 dark:hover:border-l-amber-500',
 }
 
 const ESTILOS_BORDE_IMG: Record<Notificacion['severidad'], string> = {
@@ -38,37 +31,14 @@ const ESTILOS_BORDE_IMG: Record<Notificacion['severidad'], string> = {
   advertencia: 'border-amber-200 dark:border-amber-900/60',
 }
 
-function BadgeEstado({ tipo }: { tipo: Notificacion['tipo'] }) {
-  switch (tipo) {
-    case 'vencido':
-      return (
-        <span className="inline-flex items-center gap-1 rounded border border-red-200/80 bg-red-100/90 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-red-700 dark:border-red-800/40 dark:bg-red-950/70 dark:text-red-300">
-          <CalendarX2 size={11} aria-hidden="true" />
-          <span>Vencido</span>
-        </span>
-      )
-    case 'stock_agotado':
-      return (
-        <span className="inline-flex items-center gap-1 rounded border border-red-200/80 bg-red-100/90 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-red-700 dark:border-red-800/40 dark:bg-red-950/70 dark:text-red-300">
-          <AlertCircle size={11} aria-hidden="true" />
-          <span>Sin stock</span>
-        </span>
-      )
-    case 'por_vencer':
-      return (
-        <span className="inline-flex items-center gap-1 rounded border border-amber-200/80 bg-amber-100/90 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-800 dark:border-amber-800/40 dark:bg-amber-950/70 dark:text-amber-300">
-          <Clock size={11} aria-hidden="true" />
-          <span>Por vencer</span>
-        </span>
-      )
-    case 'stock_bajo':
-      return (
-        <span className="inline-flex items-center gap-1 rounded border border-amber-200/80 bg-amber-100/90 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-800 dark:border-amber-800/40 dark:bg-amber-950/70 dark:text-amber-300">
-          <AlertTriangle size={11} aria-hidden="true" />
-          <span>Stock bajo</span>
-        </span>
-      )
-  }
+const CONFIG_BADGE: Record<
+  Notificacion['tipo'],
+  { label: string; variant: 'expired' | 'warning' }
+> = {
+  vencido: { label: 'Vencido', variant: 'expired' },
+  stock_agotado: { label: 'Sin stock', variant: 'expired' },
+  por_vencer: { label: 'Por vencer', variant: 'warning' },
+  stock_bajo: { label: 'Stock bajo', variant: 'warning' },
 }
 
 const EXIT_MS = 200
@@ -109,6 +79,7 @@ function FilaNotificacion({
   const imagen =
     buildAssetUrl(notificacion.imgPath) ??
     getProductPlaceholder(notificacion.productoId)
+  const badge = CONFIG_BADGE[notificacion.tipo]
 
   return (
     <div
@@ -133,19 +104,24 @@ function FilaNotificacion({
         alt=""
         aria-hidden="true"
         className={cn(
-          'h-11 w-11 shrink-0 self-center rounded-lg object-cover border bg-white dark:bg-slate-800 shadow-2xs',
+          'h-10 w-10 shrink-0 self-center rounded-lg object-cover border bg-white dark:bg-slate-800 shadow-2xs',
           ESTILOS_BORDE_IMG[notificacion.severidad],
         )}
       />
 
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5 mb-1">
-          <BadgeEstado tipo={notificacion.tipo} />
+        <div className="flex items-center gap-1.5 min-w-0">
+          <p className="truncate text-xs font-bold text-slate-900 dark:text-white leading-tight">
+            {notificacion.producto}
+          </p>
+          <Badge
+            variant={badge.variant}
+            className="shrink-0 text-[10px] px-1.5 py-0 font-semibold leading-normal"
+          >
+            {badge.label}
+          </Badge>
         </div>
-        <p className="truncate text-xs font-bold text-slate-900 dark:text-white leading-tight">
-          {notificacion.producto}
-        </p>
-        <p className="mt-1 truncate text-[11px] text-slate-600 dark:text-slate-300 leading-tight">
+        <p className="mt-0.5 truncate text-[11px] text-slate-600 dark:text-slate-300 leading-tight">
           {notificacion.titulo}
           {notificacion.detalle ? ` · ${notificacion.detalle}` : ''}
         </p>
@@ -157,7 +133,7 @@ function FilaNotificacion({
         title="Descartar"
         onClick={handleEliminar}
         className={cn(
-          'absolute top-2.5 right-2.5 grid h-6 w-6 place-items-center rounded-lg cursor-pointer',
+          'absolute top-1/2 -translate-y-1/2 right-2 grid h-6 w-6 place-items-center rounded-lg cursor-pointer',
           'text-slate-400 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200',
           'hover:bg-black/5 dark:hover:bg-white/10 active:scale-95 transition-all',
           'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-slate-400',
