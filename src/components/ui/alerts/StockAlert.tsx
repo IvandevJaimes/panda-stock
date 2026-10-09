@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import type { JSX } from "react";
 import { differenceInCalendarDays } from "date-fns";
 import { AlertCircle, AlertTriangle, Skull, Clock, X } from "lucide-react";
-import Tooltip from "../tooltip/Tooltip";
+import { Tooltip } from "../Tooltip";
 import { formatISODate, parseISO } from "../../../utils/dates";
 
 
@@ -165,10 +165,10 @@ function StockToast({
               return (
                 <Tooltip
                   key={item.name}
-                  zIndex={9999999999}
                   delay={0}
                   content={tooltip}
-                  placement="top"
+                  placement="bottom"
+                  zIndex={999999999}
                 >
                   <span className={BADGE_BASE}>{item.name}</span>
                 </Tooltip>

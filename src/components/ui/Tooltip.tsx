@@ -13,6 +13,7 @@ interface TooltipProps {
   duration?: number | [number, number];
   disabled?: boolean;
   maxWidth?: number;
+  zIndex?: number;
 }
 
 const innerShape =
@@ -28,6 +29,7 @@ export function Tooltip({
   duration = [180, 150],
   disabled = false,
   maxWidth = 220,
+  zIndex,
 }: TooltipProps) {
   return (
     <Tippy
@@ -41,6 +43,7 @@ export function Tooltip({
       arrow={false}
       hideOnClick={false}
       touch={["hold", 400]}
+      zIndex={zIndex}
     >
       {children}
     </Tippy>
