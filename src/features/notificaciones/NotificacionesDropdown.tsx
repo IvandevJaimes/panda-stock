@@ -271,31 +271,17 @@ export function NotificacionesDropdown() {
       </Tooltip>
 
       <DropdownMenuContent className="w-[24rem] sm:w-[27rem] p-0 overflow-hidden rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800">
-        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 px-3.5 py-3 bg-slate-50/70 dark:bg-slate-900/50">
-          <div className="flex items-center gap-2">
-            <div className="grid h-7 w-7 place-items-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400">
-              <Bell size={15} />
-            </div>
-            <span className="font-display text-sm font-bold text-slate-900 dark:text-white">
-              Notificaciones
-            </span>
-            {total > 0 && (
-              <span className="rounded-full bg-slate-200/80 dark:bg-slate-800 px-2 py-0.5 text-[11px] font-semibold text-slate-700 dark:text-slate-300">
-                {total}
-              </span>
-            )}
+        <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800/80 px-3.5 py-3 bg-slate-50/70 dark:bg-slate-900/50">
+          <div className="grid h-7 w-7 place-items-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400">
+            <Bell size={15} />
           </div>
-
+          <span className="font-display text-sm font-bold text-slate-900 dark:text-white">
+            Notificaciones
+          </span>
           {total > 0 && (
-            <button
-              type="button"
-              onClick={handleLimpiarTodo}
-              disabled={limpiandoTodo}
-              className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-slate-500 hover:text-red-600 hover:bg-red-50 dark:text-slate-400 dark:hover:text-red-400 dark:hover:bg-red-950/30 transition-colors cursor-pointer disabled:opacity-50"
-            >
-              <Trash2 size={13} />
-              <span>Limpiar todo</span>
-            </button>
+            <span className="rounded-full bg-slate-200/80 dark:bg-slate-800 px-2 py-0.5 text-[11px] font-semibold text-slate-700 dark:text-slate-300">
+              {total}
+            </span>
           )}
         </div>
 
@@ -326,8 +312,24 @@ export function NotificacionesDropdown() {
         )}
 
         {total > 0 && (
-          <div className="border-t border-slate-100 dark:border-slate-800/80 px-3 py-2 text-center text-[11px] text-slate-400 dark:text-slate-500 bg-slate-50/40 dark:bg-slate-900/30">
-            Clic en una alerta para ver el producto en Inventario
+          <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800/80 px-3.5 py-2 bg-slate-50/70 dark:bg-slate-900/50">
+            <span className="text-[11px] text-slate-400 dark:text-slate-500">
+              Clic en una alerta para ver en Inventario
+            </span>
+            <button
+              type="button"
+              aria-label="Limpiar todas las notificaciones"
+              onClick={handleLimpiarTodo}
+              disabled={limpiandoTodo}
+              className={cn(
+                'inline-flex h-7 items-center justify-center gap-1.5 rounded-lg px-2.5 text-xs font-medium transition-colors cursor-pointer',
+                'text-slate-500 hover:text-red-600 hover:bg-red-50 dark:text-slate-400 dark:hover:text-red-400 dark:hover:bg-red-950/30',
+                'disabled:pointer-events-none disabled:opacity-50',
+              )}
+            >
+              <Trash2 size={14} className="shrink-0" aria-hidden="true" />
+              <span className="leading-none">Limpiar todo</span>
+            </button>
           </div>
         )}
       </DropdownMenuContent>
