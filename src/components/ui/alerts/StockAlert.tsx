@@ -8,7 +8,7 @@
 import { toast } from "sonner";
 import type { JSX } from "react";
 import { differenceInCalendarDays } from "date-fns";
-import { AlertCircle, AlertTriangle, Skull, Clock, X } from "lucide-react";
+import { AlertCircle, AlertTriangle, CalendarX2, Clock, X } from "lucide-react";
 import { Tooltip } from "../Tooltip";
 import { formatISODate, parseISO } from "../../../utils/dates";
 
@@ -41,7 +41,7 @@ function AlertIcon({ type }: { type: StockAlertType }) {
     case "lowStock":
       return <AlertTriangle className="w-5 h-5" />;
     case "expired":
-      return <Skull className="w-5 h-5" />;
+      return <CalendarX2 className="w-5 h-5" />;
     case "nearExpiry":
       return <Clock className="w-5 h-5" />;
   }
