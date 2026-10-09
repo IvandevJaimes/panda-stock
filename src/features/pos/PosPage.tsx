@@ -639,7 +639,15 @@ export function PosPage() {
       })
 
       cerrarTicketDelStore(activeTicketId)
-      toast.success(`Venta #${venta.ventaId} · ${formatearMoneda(resumen.total)}`)
+
+      import('./sonidoVenta').then(({ reproducirSonidoVentaExitosa }) => {
+        reproducirSonidoVentaExitosa()
+      })
+      if (metodoPagoActivo === 'cuenta_corriente') {
+        toast.info(`Venta a cuenta corriente #${venta.ventaId} · ${formatearMoneda(resumen.total)}`)
+      } else {
+        toast.success(`Venta #${venta.ventaId} · ${formatearMoneda(resumen.total)}`)
+      }
 
       // Evaluar transiciones de stock y disparar alertas tipo StockFlow
       const cantidadesPorProducto = new Map<number, number>()
