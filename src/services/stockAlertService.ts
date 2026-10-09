@@ -69,24 +69,8 @@ export function evaluateStockAlerts(impacts: StockImpact[]): StockAlertResult {
     showStockoutAlert("Sin stock", stockoutAlerts);
   }
 
-  // Guardar en historial persistente
+  // Guardar en historial persistente: primero la crítica (sin stock)
   const addAlert = useStockAlertHistoryStore.getState().addAlert;
-
-  if (lowStockAlerts.length > 0) {
-    const historyIngredients: StockAlertHistoryIngredient[] = lowStockAlerts.map(
-      (badge) => {
-        const impact = impacts.find((i) => i.name === badge.name);
-        return {
-          id: impact?.productId ?? 0,
-          name: badge.name,
-          remainingStock: badge.remaining ?? 0,
-          unit: badge.unit ?? impact?.unit ?? "",
-          minimumStock: impact?.stockMin ?? 0,
-        };
-      },
-    );
-    addAlert("low-stock", "Stock bajo", historyIngredients);
-  }
 
   if (stockoutAlerts.length > 0) {
     const historyIngredients: StockAlertHistoryIngredient[] = stockoutAlerts.map(
@@ -102,6 +86,22 @@ export function evaluateStockAlerts(impacts: StockImpact[]): StockAlertResult {
       },
     );
     addAlert("out-of-stock", "Sin stock", historyIngredients);
+  }
+
+  if (lowStockAlerts.length > 0) {
+    const historyIngredients: StockAlertHistoryIngredient[] = lowStockAlerts.map(
+      (badge) => {
+        const impact = impacts.find((i) => i.name === badge.name);
+        return {
+          id: impact?.productId ?? 0,
+          name: badge.name,
+          remainingStock: badge.remaining ?? 0,
+          unit: badge.unit ?? impact?.unit ?? "",
+          minimumStock: impact?.stockMin ?? 0,
+        };
+      },
+    );
+    addAlert("low-stock", "Stock bajo", historyIngredients);
   }
 
   return {
