@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Bell, Trash2, X } from 'lucide-react'
+import {
+  AlertCircle,
+  AlertTriangle,
+  Bell,
+  CalendarX2,
+  Clock,
+  Trash2,
+  X,
+} from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { cn } from '../../lib/cn'
 import { buildAssetUrl } from '../../lib/assets'
@@ -8,17 +16,59 @@ import { onAlertCreated } from '../../stores/stockAlertHistoryStore'
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '../../components/ui/DropdownMenu'
 import { Tooltip } from '../../components/ui/Tooltip'
 import { useNotificaciones } from './useNotificaciones'
 import type { Notificacion } from './notificacionesQuery'
 
-const ANILLO_SEVERIDAD: Record<Notificacion['severidad'], string> = {
-  critica: 'ring-2 ring-red-300 dark:ring-red-500/60',
-  advertencia: 'ring-2 ring-amber-300 dark:ring-amber-500/60',
+const ESTILOS_CARD: Record<Notificacion['tipo'], string> = {
+  vencido:
+    'border-red-200/90 border-l-4 border-l-red-500 bg-red-50/70 hover:bg-red-100/70 hover:border-red-300 dark:border-red-900/40 dark:border-l-red-500 dark:bg-red-950/25 dark:hover:bg-red-950/40 dark:hover:border-red-800/60',
+  stock_agotado:
+    'border-red-200/90 border-l-4 border-l-red-500 bg-red-50/70 hover:bg-red-100/70 hover:border-red-300 dark:border-red-900/40 dark:border-l-red-500 dark:bg-red-950/25 dark:hover:bg-red-950/40 dark:hover:border-red-800/60',
+  por_vencer:
+    'border-amber-200/90 border-l-4 border-l-amber-500 bg-amber-50/70 hover:bg-amber-100/70 hover:border-amber-300 dark:border-amber-900/40 dark:border-l-amber-500 dark:bg-amber-950/25 dark:hover:bg-amber-950/40 dark:hover:border-amber-800/60',
+  stock_bajo:
+    'border-amber-200/90 border-l-4 border-l-amber-500 bg-amber-50/70 hover:bg-amber-100/70 hover:border-amber-300 dark:border-amber-900/40 dark:border-l-amber-500 dark:bg-amber-950/25 dark:hover:bg-amber-950/40 dark:hover:border-amber-800/60',
+}
+
+const ESTILOS_BORDE_IMG: Record<Notificacion['severidad'], string> = {
+  critica: 'border-red-200 dark:border-red-900/60',
+  advertencia: 'border-amber-200 dark:border-amber-900/60',
+}
+
+function BadgeEstado({ tipo }: { tipo: Notificacion['tipo'] }) {
+  switch (tipo) {
+    case 'vencido':
+      return (
+        <span className="inline-flex items-center gap-1 rounded border border-red-200/80 bg-red-100/90 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-red-700 dark:border-red-800/40 dark:bg-red-950/70 dark:text-red-300">
+          <CalendarX2 size={11} aria-hidden="true" />
+          <span>Vencido</span>
+        </span>
+      )
+    case 'stock_agotado':
+      return (
+        <span className="inline-flex items-center gap-1 rounded border border-red-200/80 bg-red-100/90 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-red-700 dark:border-red-800/40 dark:bg-red-950/70 dark:text-red-300">
+          <AlertCircle size={11} aria-hidden="true" />
+          <span>Sin stock</span>
+        </span>
+      )
+    case 'por_vencer':
+      return (
+        <span className="inline-flex items-center gap-1 rounded border border-amber-200/80 bg-amber-100/90 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-800 dark:border-amber-800/40 dark:bg-amber-950/70 dark:text-amber-300">
+          <Clock size={11} aria-hidden="true" />
+          <span>Por vencer</span>
+        </span>
+      )
+    case 'stock_bajo':
+      return (
+        <span className="inline-flex items-center gap-1 rounded border border-amber-200/80 bg-amber-100/90 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-800 dark:border-amber-800/40 dark:bg-amber-950/70 dark:text-amber-300">
+          <AlertTriangle size={11} aria-hidden="true" />
+          <span>Stock bajo</span>
+        </span>
+      )
+  }
 }
 
 function FilaNotificacion({
@@ -35,38 +85,58 @@ function FilaNotificacion({
     getProductPlaceholder(notificacion.productoId)
 
   return (
-    <div className="flex items-center gap-1">
-      <DropdownMenuItem
-        onClick={onAbrir}
-        className="min-w-0 flex-1 items-center gap-3"
-      >
-        <img
-          src={imagen}
-          alt=""
-          aria-hidden="true"
-          className={cn(
-            'h-10 w-10 shrink-0 rounded-lg object-cover',
-            ANILLO_SEVERIDAD[notificacion.severidad],
-          )}
-        />
-        <span className="min-w-0 flex-1">
-          <span className="block truncate font-semibold">
-            {notificacion.producto}
-          </span>
-          <span className="block truncate font-normal text-slate-500 dark:text-slate-400">
-            {notificacion.titulo}
-            {notificacion.detalle ? ` · ${notificacion.detalle}` : ''}
-          </span>
-        </span>
-      </DropdownMenuItem>
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onAbrir}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onAbrir()
+        }
+      }}
+      className={cn(
+        'group relative flex items-start gap-3 rounded-xl border p-2.5 pr-8 transition-all cursor-pointer select-none',
+        'shadow-2xs hover:shadow-xs focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary',
+        ESTILOS_CARD[notificacion.tipo],
+      )}
+    >
+      <img
+        src={imagen}
+        alt=""
+        aria-hidden="true"
+        className={cn(
+          'h-11 w-11 shrink-0 rounded-lg object-cover border bg-white dark:bg-slate-800 shadow-2xs',
+          ESTILOS_BORDE_IMG[notificacion.severidad],
+        )}
+      />
+
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5 mb-1">
+          <BadgeEstado tipo={notificacion.tipo} />
+        </div>
+        <p className="truncate text-xs font-bold text-slate-900 dark:text-white leading-tight">
+          {notificacion.producto}
+        </p>
+        <p className="mt-1 truncate text-[11px] text-slate-600 dark:text-slate-300 leading-tight">
+          {notificacion.titulo}
+          {notificacion.detalle ? ` · ${notificacion.detalle}` : ''}
+        </p>
+      </div>
+
       <button
         type="button"
-        aria-label={`Eliminar notificación de ${notificacion.producto}`}
-        onClick={onEliminar}
+        aria-label={`Descartar notificación de ${notificacion.producto}`}
+        title="Descartar"
+        onClick={(e) => {
+          e.stopPropagation()
+          onEliminar()
+        }}
         className={cn(
-          'mr-1 grid h-6 w-6 shrink-0 cursor-pointer place-items-center rounded-md',
-          'bg-red-500 text-white shadow-xs transition-colors hover:bg-red-600',
-          'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-red-400',
+          'absolute top-2.5 right-2.5 grid h-6 w-6 place-items-center rounded-lg cursor-pointer',
+          'text-slate-400 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200',
+          'hover:bg-black/5 dark:hover:bg-white/10 active:scale-95 transition-all',
+          'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-slate-400',
         )}
       >
         <X size={13} aria-hidden="true" />
@@ -134,6 +204,7 @@ export function NotificacionesDropdown() {
   }, [total, dispararAnimacion])
 
   const abrirProducto = (notificacion: Notificacion) => {
+    setAbierto(false)
     navegar({
       pathname: '/inventory',
       search: `?q=${encodeURIComponent(notificacion.termino)}`,
@@ -187,31 +258,48 @@ export function NotificacionesDropdown() {
         </DropdownMenuTrigger>
       </Tooltip>
 
-      <DropdownMenuContent className="w-[26rem]">
-        <div className="flex items-baseline justify-between px-2 pb-1 pt-1.5">
-          <span className="font-display text-xs font-bold text-slate-900 dark:text-white">
-            Notificaciones
-          </span>
-          {total > 0 && (
-            <span className="text-[11px] text-slate-400 dark:text-slate-500">
-              {total} pendiente{total === 1 ? '' : 's'}
+      <DropdownMenuContent className="w-[24rem] sm:w-[27rem] p-0 overflow-hidden rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800">
+        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 px-3.5 py-3 bg-slate-50/70 dark:bg-slate-900/50">
+          <div className="flex items-center gap-2">
+            <div className="grid h-7 w-7 place-items-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400">
+              <Bell size={15} />
+            </div>
+            <span className="font-display text-sm font-bold text-slate-900 dark:text-white">
+              Notificaciones
             </span>
+            {total > 0 && (
+              <span className="rounded-full bg-slate-200/80 dark:bg-slate-800 px-2 py-0.5 text-[11px] font-semibold text-slate-700 dark:text-slate-300">
+                {total}
+              </span>
+            )}
+          </div>
+
+          {total > 0 && (
+            <button
+              type="button"
+              onClick={limpiar}
+              className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-slate-500 hover:text-red-600 hover:bg-red-50 dark:text-slate-400 dark:hover:text-red-400 dark:hover:bg-red-950/30 transition-colors cursor-pointer"
+            >
+              <Trash2 size={13} />
+              <span>Limpiar todo</span>
+            </button>
           )}
         </div>
 
         {total === 0 ? (
-          <div className="flex flex-col items-center gap-1.5 px-3 py-6 text-center">
-            <Bell
-              size={22}
-              className="text-slate-300 dark:text-slate-600"
-              aria-hidden="true"
-            />
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Sin notificaciones
+          <div className="flex flex-col items-center justify-center py-10 px-4 text-center">
+            <div className="grid h-12 w-12 place-items-center rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 mb-2.5">
+              <Bell size={22} />
+            </div>
+            <p className="text-xs font-bold text-slate-700 dark:text-slate-200">
+              Sin notificaciones pendientes
+            </p>
+            <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
+              El inventario y los vencimientos están al día
             </p>
           </div>
         ) : (
-          <div className="flex max-h-[520px] flex-col gap-0.5 overflow-y-auto">
+          <div className="flex max-h-[460px] flex-col gap-2 p-2.5 overflow-y-auto">
             {notificaciones.map((notificacion) => (
               <FilaNotificacion
                 key={notificacion.id}
@@ -224,16 +312,9 @@ export function NotificacionesDropdown() {
         )}
 
         {total > 0 && (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              variant="danger"
-              icon={<Trash2 size={14} />}
-              onClick={limpiar}
-            >
-              Limpiar notificaciones
-            </DropdownMenuItem>
-          </>
+          <div className="border-t border-slate-100 dark:border-slate-800/80 px-3 py-2 text-center text-[11px] text-slate-400 dark:text-slate-500 bg-slate-50/40 dark:bg-slate-900/30">
+            Clic en una alerta para ver el producto en Inventario
+          </div>
         )}
       </DropdownMenuContent>
     </DropdownMenu>
