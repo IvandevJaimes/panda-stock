@@ -179,7 +179,6 @@ export function NotificacionesDropdown() {
   const timerLimpiarRef = useRef<number | null>(null)
 
   const total = notificaciones.length
-  const totalPrevioRef = useRef(total)
   const abreviado = total > 99 ? '99+' : String(total)
 
   const dispararAnimacion = useCallback(() => {
@@ -239,13 +238,6 @@ export function NotificacionesDropdown() {
       }
     }
   }, [dispararAnimacion])
-
-  useEffect(() => {
-    if (total > totalPrevioRef.current) {
-      dispararAnimacion()
-    }
-    totalPrevioRef.current = total
-  }, [total, dispararAnimacion])
 
   const abrirProducto = (notificacion: Notificacion) => {
     setAbierto(false)

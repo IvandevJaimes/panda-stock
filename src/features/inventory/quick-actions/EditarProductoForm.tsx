@@ -18,6 +18,7 @@ import {
 } from "../../../components/ui/CustomSelect";
 import { cn } from "../../../lib/cn";
 import { productosService } from "../../../services/productos.service";
+import { useNotificacionesStore } from "../../../stores/notificaciones.store";
 import { marcasService } from "../../../services/marcas.service";
 import type {
   Categoria,
@@ -229,6 +230,11 @@ export function EditarProductoForm({
       };
 
       await productosService.update(producto.id, payload);
+
+      useNotificacionesStore.getState().registrarStockInicial(
+        producto.id,
+        producto.stockActual,
+      );
 
       toast.success("Producto actualizado exitosamente");
       onSuccess();

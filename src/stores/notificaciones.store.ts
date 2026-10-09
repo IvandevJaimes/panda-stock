@@ -19,6 +19,11 @@ type NotificacionesState = {
   sincronizar: (actuales: Notificacion[]) => void
   eliminar: (id: string) => void
   limpiar: () => void
+  /**
+   * Silencia el stock cargado en inventario para que solo alerte si una
+   * venta posterior reduce el stock por debajo de este valor.
+   */
+  registrarStockInicial: (productoId: number, stockActual: number) => void
 }
 
 export const useNotificacionesStore = create<NotificacionesState>()(
@@ -80,6 +85,22 @@ export const useNotificacionesStore = create<NotificacionesState>()(
             }
           })
           return { visibles: [], descartes }
+        }),
+      registrarStockInicial: (productoId, stockActual) =>
+        set((estado) => {
+          const estadoActual = (estado ?? {}) as Partial<NotificacionesState>
+          const descartes: Record<string, number> = { ...(estadoActual.descartes ?? {}) }
+          descartes[`stock_bajo:${productoId}`] = stockActual
+          if (stockActual <= 0) {
+            descartes[`stock_agotado:${productoId}`] = -1
+          }
+          const visiblesActuales = estadoActual.visibles ?? []
+          const visibles = visiblesActuales.filter(
+            (n) =>
+              n.productoId !== productoId ||
+              (n.tipo !== 'stock_bajo' && n.tipo !== 'stock_agotado'),
+          )
+          return { descartes, visibles }
         }),
     }),
     {

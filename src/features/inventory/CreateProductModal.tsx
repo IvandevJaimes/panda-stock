@@ -20,6 +20,7 @@ import { DateInput } from "../../components/ui/DateInput";
 import { MargenGananciaHint } from "../../components/ui/MargenGananciaHint";
 import { cn } from "../../lib/cn";
 import { productosService } from "../../services/productos.service";
+import { useNotificacionesStore } from "../../stores/notificaciones.store";
 import { marcasService } from "../../services/marcas.service";
 import type {
   Categoria,
@@ -231,6 +232,12 @@ export function CreateProductModal({
     };
 
     const nuevoProducto = await productosService.create(payload);
+
+    // Silencia la alerta del stock cargado: solo debe saltar si una venta posterior lo reduce.
+    useNotificacionesStore.getState().registrarStockInicial(
+      nuevoProducto.id,
+      nuevoProducto.stockActual,
+    );
 
     // La foto se persiste recién tras tener el producto creado (necesita su id).
     if (data.imagen) {

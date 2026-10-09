@@ -3,6 +3,7 @@ import { useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 import { Input } from "../../../components/ui/Input";
 import { productosService } from "../../../services/productos.service";
+import { useNotificacionesStore } from "../../../stores/notificaciones.store";
 import type { Producto } from "../../../../electron/db/types";
 import { HeaderMini } from "./HeaderMini";
 import { ACCION_LABEL, FORM_ID, noSpinnersClass } from "./types";
@@ -54,6 +55,10 @@ export function StockMinimoForm({
     const valor = Math.max(0, Math.round(Number(data.stockMinimo) || 0));
     try {
       await productosService.updateStockMinimo(producto.id, valor);
+      useNotificacionesStore.getState().registrarStockInicial(
+        producto.id,
+        producto.stockActual,
+      );
       toast.success(
         valor > 0
           ? `Stock mínimo actualizado a ${valor}`
