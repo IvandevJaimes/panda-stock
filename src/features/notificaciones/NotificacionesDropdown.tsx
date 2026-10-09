@@ -270,8 +270,8 @@ export function NotificacionesDropdown() {
         </DropdownMenuTrigger>
       </Tooltip>
 
-      <DropdownMenuContent className="w-[24rem] sm:w-[27rem] p-0 overflow-hidden rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800">
-        <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800/80 px-3.5 py-3 bg-slate-50/70 dark:bg-slate-900/50">
+      <DropdownMenuContent className="flex flex-col h-[480px] max-h-[calc(100vh-5rem)] w-[24rem] sm:w-[27rem] p-0 overflow-hidden rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800">
+        <div className="shrink-0 flex items-center gap-2 border-b border-slate-100 dark:border-slate-800/80 px-3.5 py-3 bg-slate-50/70 dark:bg-slate-900/50">
           <div className="grid h-7 w-7 place-items-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400">
             <Bell size={15} />
           </div>
@@ -286,7 +286,7 @@ export function NotificacionesDropdown() {
         </div>
 
         {total === 0 ? (
-          <div className="flex flex-col items-center justify-center py-10 px-4 text-center">
+          <div className="flex-1 flex flex-col items-center justify-center py-10 px-4 text-center">
             <div className="grid h-12 w-12 place-items-center rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 mb-2.5">
               <Bell size={22} />
             </div>
@@ -298,7 +298,7 @@ export function NotificacionesDropdown() {
             </p>
           </div>
         ) : (
-          <div className="flex max-h-[460px] flex-col gap-2 p-2.5 overflow-y-auto">
+          <div className="flex-1 min-h-0 flex flex-col gap-2 p-2.5 overflow-y-auto overscroll-contain">
             {notificaciones.map((notificacion) => (
               <FilaNotificacion
                 key={notificacion.id}
@@ -312,7 +312,7 @@ export function NotificacionesDropdown() {
         )}
 
         {total > 0 && (
-          <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800/80 px-3.5 py-2 bg-slate-50/70 dark:bg-slate-900/50">
+          <div className="shrink-0 flex items-center justify-between border-t border-slate-100 dark:border-slate-800/80 px-3.5 py-2 bg-slate-50/70 dark:bg-slate-900/50">
             <span className="text-[11px] text-slate-400 dark:text-slate-500">
               Clic en una alerta para ver en Inventario
             </span>
