@@ -2,11 +2,12 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render } from "@testing-library/react";
 import { StockAlertSound } from "./StockAlertSound";
 import { useStockAlertHistoryStore } from "../../../stores/stockAlertHistoryStore";
+import { hayAlertaStockActiva } from "../../../lib/prioridadSonidos";
 
 describe("StockAlertSound", () => {
   let playMock: ReturnType<typeof vi.fn>;
   let pauseMock: ReturnType<typeof vi.fn>;
-  let audioInstances: { url: string }[];
+  let audioInstances: { url: string; onended: (() => void) | null }[];
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -95,7 +96,7 @@ describe("StockAlertSound", () => {
     vi.advanceTimersByTime(100);
 
     expect(audioInstances.length).toBe(1);
-    expect(audioInstances[0].url).toContain("stock_expired.mp3");
+    expect(audioInstances[0].url).toContain("stock_out.mp3");
     expect(playMock).toHaveBeenCalledTimes(1);
   });
 
@@ -134,5 +135,67 @@ describe("StockAlertSound", () => {
 
     // No debe haber reproducido la alerta ámbar
     expect(audioInstances.length).toBe(1);
+  });
+
+  it("marca la alerta como activa mientras suena y la libera al terminar", async () => {
+    render(<StockAlertSound />);
+
+    useStockAlertHistoryStore.getState().addAlert("expired", "Vencido", [
+      {
+        id: 1,
+        name: "Prod 1",
+        remainingStock: 5,
+        unit: "u",
+        minimumStock: 5,
+      },
+    ]);
+
+    vi.advanceTimersByTime(100);
+    expect(audioInstances.length).toBe(1);
+    expect(hayAlertaStockActiva()).toBe(true);
+
+    audioInstances[0].onended?.();
+    expect(hayAlertaStockActiva()).toBe(false);
+  });
+
+  it("no queda marcada la alerta si la reproducción falla", async () => {
+    playMock.mockRejectedValueOnce(new Error("bloqueado"));
+    render(<StockAlertSound />);
+
+    useStockAlertHistoryStore.getState().addAlert("out-of-stock", "Sin stock", [
+      {
+        id: 1,
+        name: "Prod 1",
+        remainingStock: 0,
+        unit: "u",
+        minimumStock: 5,
+      },
+    ]);
+
+    vi.advanceTimersByTime(100);
+    await vi.waitFor(() => {
+      expect(hayAlertaStockActiva()).toBe(false);
+    });
+  });
+
+  it("una alerta ámbar (stock bajo) también marca prioridad para callar la venta", async () => {
+    render(<StockAlertSound />);
+
+    useStockAlertHistoryStore.getState().addAlert("low-stock", "Stock bajo", [
+      {
+        id: 1,
+        name: "Prod 1",
+        remainingStock: 2,
+        unit: "u",
+        minimumStock: 5,
+      },
+    ]);
+
+    vi.advanceTimersByTime(100);
+    expect(audioInstances.length).toBe(1);
+    expect(hayAlertaStockActiva()).toBe(true);
+
+    audioInstances[0].onended?.();
+    expect(hayAlertaStockActiva()).toBe(false);
   });
 });

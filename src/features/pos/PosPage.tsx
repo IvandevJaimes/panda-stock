@@ -640,9 +640,6 @@ export function PosPage() {
 
       cerrarTicketDelStore(activeTicketId)
 
-      import('./sonidoVenta').then(({ reproducirSonidoVentaExitosa }) => {
-        reproducirSonidoVentaExitosa()
-      })
       if (metodoPagoActivo === 'cuenta_corriente') {
         toast.info(`Venta a cuenta corriente #${venta.ventaId} · ${formatearMoneda(resumen.total)}`)
       } else {
@@ -673,7 +670,16 @@ export function PosPage() {
         }
       }
 
-      evaluateStockAlerts(impacts)
+      // Las alertas se evalúan ANTES de sonar la venta: si esta venta dispara
+      // una alerta de stock, el sonido de alerta tiene prioridad y el de venta
+      // no debe sonar (ni siquiera por un instante).
+      const resultadoAlertas = evaluateStockAlerts(impacts)
+
+      if (!resultadoAlertas.lowStock && !resultadoAlertas.stockout) {
+        import('./sonidoVenta').then(({ reproducirSonidoVentaExitosa }) => {
+          reproducirSonidoVentaExitosa()
+        })
+      }
 
       // Sin releer el catálogo la grilla muestra el stock anterior y el cajero
       // puede volver a agregar un producto que ya no queda.

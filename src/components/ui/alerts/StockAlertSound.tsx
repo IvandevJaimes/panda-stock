@@ -4,11 +4,15 @@ import {
   type StockAlertHistoryType,
   classifyAlert,
 } from "../../../stores/stockAlertHistoryStore";
+import {
+  marcarAlertaStockIniciada,
+  marcarAlertaStockFinalizada,
+} from "../../../lib/prioridadSonidos";
 
 const SOUND_FILES: Record<StockAlertHistoryType, string> = {
-  expired: "stock_expired.mp3",
+  expired: "stock_out.mp3",
   "out-of-stock": "stock_out.mp3",
-  "near-expiry": "stock_near_expiry.mp3",
+  "near-expiry": "stock_low.mp3",
   "low-stock": "stock_low.mp3",
 };
 
@@ -54,6 +58,13 @@ export function StockAlertSound() {
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
+    // Balancea el contador del coordinador: solo cuenta lo que se reproduce.
+    const finalizarAlertaActiva = () => {
+      if (activeIsPlayingRef.current) {
+        marcarAlertaStockFinalizada();
+      }
+    };
+
     const processBatch = () => {
       const types = pendingBatchRef.current;
       pendingBatchRef.current = [];
@@ -99,6 +110,11 @@ export function StockAlertSound() {
         lastCriticalPlayTimeRef.current = now;
       }
 
+      // Inicia el nuevo antes de finalizar el interrumpido para que el contador
+      // del coordinador nunca baje a 0 entre alertas (la venta no debe colarse).
+      marcarAlertaStockIniciada();
+      finalizarAlertaActiva();
+
       activePriorityRef.current = highestPriority;
       activeIsPlayingRef.current = true;
 
@@ -110,21 +126,25 @@ export function StockAlertSound() {
         audio.onended = () => {
           activeIsPlayingRef.current = false;
           activePriorityRef.current = 0;
+          marcarAlertaStockFinalizada();
         };
 
         audio.onerror = () => {
           activeIsPlayingRef.current = false;
           activePriorityRef.current = 0;
+          marcarAlertaStockFinalizada();
         };
 
         audio.play().catch((err) => {
           activeIsPlayingRef.current = false;
           activePriorityRef.current = 0;
+          marcarAlertaStockFinalizada();
           console.warn("No se pudo reproducir audio de alerta:", err);
         });
       } catch (err) {
         activeIsPlayingRef.current = false;
         activePriorityRef.current = 0;
+        marcarAlertaStockFinalizada();
         console.warn("Error creando audio de alerta:", err);
       }
     };
@@ -152,6 +172,7 @@ export function StockAlertSound() {
         currentAudioRef.current.pause();
         currentAudioRef.current = null;
       }
+      finalizarAlertaActiva();
     };
   }, []);
 
