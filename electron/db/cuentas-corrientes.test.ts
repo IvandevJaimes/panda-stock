@@ -233,9 +233,9 @@ describe('historial', () => {
   })
 })
 
-describe('venta fiada', () => {
+describe('venta en cuenta corriente', () => {
   it('deja cargada la deuda del cliente y la enlaza a la venta', () => {
-    const id = repo.createCliente({ nombre: 'Fiado' }).id
+    const id = repo.createCliente({ nombre: 'Saldo pendiente' }).id
     const antes = saldoDe(id)
 
     const { ventaId } = repo.processSale(venta(300, 'cuenta_corriente', id))
@@ -249,7 +249,7 @@ describe('venta fiada', () => {
     expect(cargo?.metodo).toBeNull()
   })
 
-  it('rechaza la venta si no se sabe a quién se le fía, sin dejar nada a medias', () => {
+  it('rechaza la venta si no tiene un cliente asociado, sin dejar nada a medias', () => {
     const ventasAntes = repo.getVentas().length
     const movimientosAntes = repo.getMovimientosCuentaCorriente().length
 
@@ -260,7 +260,7 @@ describe('venta fiada', () => {
     expect(repo.getMovimientosCuentaCorriente()).toHaveLength(movimientosAntes)
   })
 
-  it('no le fía a un cliente archivado', () => {
+  it('no registra ventas en la cuenta de un cliente archivado', () => {
     expect(() => repo.processSale(venta(300, 'cuenta_corriente', ciroId))).toThrow(/archivado/i)
   })
 })
@@ -302,7 +302,7 @@ describe('efecto en la caja', () => {
     expect(despues.montoEsperado).toBe(antes.montoEsperado)
   })
 
-  it('la venta fiada aparece separada del efectivo', () => {
+  it('la venta en cuenta corriente aparece separada del efectivo', () => {
     const id = repo.createCliente({ nombre: 'Sin plata' }).id
     const antes = repo.getCajaSummary(cajaId)
 

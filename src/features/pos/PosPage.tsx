@@ -577,12 +577,12 @@ export function PosPage() {
     ticket.items.length === 0
       ? 'Cargá al menos un producto al ticket para cobrar'
       : metodoPagoActivo === 'cuenta_corriente' && ticket.clienteId === null
-        ? 'Elegí el cliente al que le fías la venta'
+        ? 'Elegí el cliente asociado a la venta en cuenta corriente'
         : null
 
   // El orden importa: sin caja el motivo es la caja aunque el ticket también
   // esté vacío, porque es la causa raíz. La caja manda. Después el cliente:
-  // fiar sin cliente es un cargo que ningún saldo va a reclamar.
+  // Registrar una venta en cuenta corriente sin cliente crea un cargo que ningún saldo va a reclamar.
   const motivoCobroBloqueado = !ventasPorCajas
     ? motivoTicketBloqueado
     : !cajaCargada
@@ -628,7 +628,7 @@ export function PosPage() {
     // Mismo guard que el tooltip: `Enter` no pasa por el botón, y sin cliente
     // `processSale` rechazaría la venta igual — avisar antes evita el viaje.
     if (metodoPagoActivo === 'cuenta_corriente' && ticket.clienteId === null) {
-      toast.error('Elegí el cliente al que le fías la venta')
+      toast.error('Elegí el cliente asociado a la venta en cuenta corriente')
       return
     }
 

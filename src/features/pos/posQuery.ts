@@ -697,7 +697,7 @@ export type TicketSession = {
   items: ItemTicket[]
   metodoPago: MetodoPagoPOS
   /**
-   * Cliente al que se le fía la venta. Solo tiene sentido con
+   * Cliente asociado a la venta en cuenta corriente. Solo tiene sentido con
    * `metodoPago === 'cuenta_corriente'`; `cambiarMetodoPagoTicket` lo limpia
    * al salir de ese método para que no quede un cliente huérfano asociado a un
    * ticket en efectivo. El nombre es cosmético (para el botón del ticket): la

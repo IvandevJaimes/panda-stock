@@ -389,8 +389,8 @@ export function SettingsPage() {
             {draft.tarjetaHabilitada && <Input label="Recargo de tarjeta de crédito (%)" type="number" min={0} max={100} value={cardSurchargeInput} placeholder="Sin recargo" className="[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" onChange={(event) => setCardSurchargeInput(event.target.value)} onBlur={(event) => { const value = event.target.value; actualizar('recargoTarjetaCredito', value !== '' && Number.isFinite(Number(value)) ? Number(value) : 0) }} onWheel={(event) => event.currentTarget.blur()} />}
           </SettingsSection>
 
-          <SettingsSection title="Ventas a crédito" description="Administrá si el negocio puede registrar compras fiadas.">
-            <SettingRow icon={<BookUser size={17} />} title="Cuenta corriente" description="Habilita ventas fiadas y la administración de saldos por cliente." checked={draft.cuentaCorrienteHabilitada} onCheckedChange={(activo) => actualizar('cuentaCorrienteHabilitada', activo)} />
+          <SettingsSection title="Ventas con saldo pendiente" description="Administrá las ventas registradas en cuenta corriente.">
+            <SettingRow icon={<BookUser size={17} />} title="Cuenta corriente" description="Permite registrar ventas con saldo pendiente y administrar los saldos por cliente." checked={draft.cuentaCorrienteHabilitada} onCheckedChange={(activo) => actualizar('cuentaCorrienteHabilitada', activo)} />
           </SettingsSection>
 
           <SecuritySettingsPanel protecciones={draft.proteccionesSeguridad} onChange={(protecciones) => actualizar('proteccionesSeguridad', protecciones)} />

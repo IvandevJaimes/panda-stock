@@ -44,7 +44,7 @@ import {
   formatearRangoLegible,
   rangoDesdePreset,
   siguientePeriodo,
-  totalCredito,
+  totalTarjetaCuentaCorriente,
   type PresetRango,
 } from './reportsQuery'
 import { construirExportacion } from './exportacionQuery'
@@ -329,7 +329,7 @@ function ContenidoReportes() {
             <div className="xl:col-span-2">
               <VentasPorDiaChart puntos={ejeDias} />
             </div>
-            <MetodosPagoChart filas={metodos} totalCredito={totalCredito(metodos)} />
+            <MetodosPagoChart filas={metodos} totalTarjetaCuentaCorriente={totalTarjetaCuentaCorriente(metodos)} />
           </div>
 
           <div className="grid gap-4 xl:grid-cols-3">

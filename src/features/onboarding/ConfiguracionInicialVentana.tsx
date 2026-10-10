@@ -489,12 +489,12 @@ export function ConfiguracionInicialVentana() {
             <GrupoConfiguracion
               icon={<BookUser size={19} />}
               titulo="Ventas a cuenta corriente"
-              descripcion="Habilitá las ventas fiadas y su seguimiento por cliente."
+              descripcion="Registrá ventas con saldo pendiente y hacé su seguimiento por cliente."
             >
               <OpcionRow
                 icon={<BookUser size={17} />}
                 titulo="Habilitar cuenta corriente"
-                descripcion="Permite fiar ventas y habilita la sección de cuentas corrientes."
+                descripcion="Permite registrar ventas con saldo pendiente y habilita las cuentas corrientes."
                 checked={cuentaCorrienteHabilitada}
                 onCheckedChange={setCuentaCorrienteHabilitada}
               />

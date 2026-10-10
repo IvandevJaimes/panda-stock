@@ -16,7 +16,7 @@ import {
   porcentaje,
   rangoDesdePreset,
   siguientePeriodo,
-  totalCredito,
+  totalTarjetaCuentaCorriente,
   type PresetRango,
   type RangoFechas,
 } from './reportsQuery'
@@ -282,7 +282,7 @@ describe('pasoEje y etiquetaVisible', () => {
 })
 
 describe('agruparMetodos', () => {
-  it('junta crédito y cuenta corriente en un solo renglón', () => {
+  it('agrupa tarjeta de crédito y cuenta corriente en un renglón combinado', () => {
     const filas = agruparMetodos([
       { metodo: 'efectivo', monto: 1000 },
       { metodo: 'credito', monto: 300 },
@@ -290,7 +290,7 @@ describe('agruparMetodos', () => {
     ])
     expect(filas).toHaveLength(2)
     expect(filas[0]).toMatchObject({ metodo: 'efectivo', monto: 1000 })
-    expect(filas[1]).toMatchObject({ metodo: 'credito', monto: 500 })
+    expect(filas[1]).toMatchObject({ metodo: 'cuenta_corriente', monto: 500 })
   })
 
   it('ordena de mayor a menor', () => {
@@ -321,17 +321,17 @@ describe('agruparMetodos', () => {
   })
 })
 
-describe('totalCredito', () => {
-  it('suma lo cobrado por los medios a crédito', () => {
+describe('totalTarjetaCuentaCorriente', () => {
+  it('suma los importes registrados con tarjeta de crédito o cuenta corriente', () => {
     const filas = agruparMetodos([
       { metodo: 'efectivo', monto: 1000 },
       { metodo: 'credito', monto: 400 },
     ])
-    expect(totalCredito(filas)).toBe(400)
+    expect(totalTarjetaCuentaCorriente(filas)).toBe(400)
   })
 
-  it('es cero si no se cobró nada a crédito', () => {
-    expect(totalCredito(agruparMetodos([{ metodo: 'efectivo', monto: 1000 }]))).toBe(0)
+  it('es cero si no hay importes registrados en esos medios', () => {
+    expect(totalTarjetaCuentaCorriente(agruparMetodos([{ metodo: 'efectivo', monto: 1000 }]))).toBe(0)
   })
 })
 

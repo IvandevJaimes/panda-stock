@@ -270,25 +270,23 @@ export function pasoEje(cantidad: number): number {
 // ── Medios de pago ───────────────────────────────────────────────────────────
 
 /**
- * `credito` y `cuenta_corriente` se agrupan en un solo "Crédito".
+ * `credito` y `cuenta_corriente` se agrupan en un renglón combinado.
  *
- * Agruparlos evita dos renglones que el usuario no puede diferenciar: desde el
- * mostrador los dos son "no me/entró plata ahora". La deuda por persona se consulta
- * en la pantalla de cuentas corrientes, no en este gráfico, que solo informa cuánto
- * se cobró por cada medio.
+ * Agruparlos evita dos renglones para importes que no ingresaron de inmediato a caja.
+ * El saldo por persona se consulta
+ * en la pantalla de cuentas corrientes; este gráfico resume los importes por medio.
  */
 export const METODOS_AGRUPADOS: { metodo: MetodoPago; etiqueta: string }[] = [
   { metodo: 'efectivo', etiqueta: 'Efectivo' },
   { metodo: 'transferencia', etiqueta: 'Transferencia' },
   { metodo: 'qr', etiqueta: 'QR' },
   { metodo: 'debito', etiqueta: 'Tarjeta' },
-  { metodo: 'credito', etiqueta: 'Crédito' },
-  { metodo: 'cuenta_corriente', etiqueta: 'Cuenta corriente' },
+  { metodo: 'cuenta_corriente', etiqueta: 'Tarjeta de crédito y cuenta corriente' },
 ]
 
 export type FilaMetodo = { metodo: MetodoPago; etiqueta: string; monto: number; porcentaje: number }
 
-function esCredito(metodo: MetodoPago): boolean {
+function esMedioCombinado(metodo: MetodoPago): boolean {
   return metodo === 'credito' || metodo === 'cuenta_corriente'
 }
 
@@ -298,7 +296,7 @@ export function agruparMetodos(
   const acumulado = new Map<string, number>()
 
   for (const fila of ventasPorMetodo) {
-    const clave = esCredito(fila.metodo) ? 'credito' : fila.metodo
+    const clave = esMedioCombinado(fila.metodo) ? 'cuenta_corriente' : fila.metodo
     acumulado.set(clave, (acumulado.get(clave) ?? 0) + fila.monto)
   }
 
@@ -314,10 +312,10 @@ export function agruparMetodos(
     .sort((a, b) => b.monto - a.monto)
 }
 
-/** Suma de lo cobrado con crédito y cuenta corriente, que es lo que se pudo cobrar. */
-export function totalCredito(filas: FilaMetodo[]): number {
+/** Suma de los importes registrados con tarjeta de crédito o cuenta corriente. */
+export function totalTarjetaCuentaCorriente(filas: FilaMetodo[]): number {
   return filas
-    .filter((fila) => fila.metodo === 'credito' || fila.metodo === 'cuenta_corriente')
+    .filter((fila) => fila.metodo === 'cuenta_corriente')
     .reduce((acc, fila) => acc + fila.monto, 0)
 }
 

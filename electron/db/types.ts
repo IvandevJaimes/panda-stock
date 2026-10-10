@@ -267,7 +267,7 @@ export type VentaCompletaInput = {
   items: DetalleVentaInput[]
   pagos: PagoInput[]
   /**
-   * A quién se le fía. Solo se usa si algún pago viene como `cuenta_corriente`:
+   * Cliente asociado. Solo se usa si algún pago viene como `cuenta_corriente`:
    * sin cliente, ese pago es un cobro sin destinatario y `processSale` lo
    * rechaza.
    */

@@ -222,7 +222,7 @@ export function CuentasCorrientesPage() {
         <KpiCard
           icon={<ArrowUpCircle size={20} />}
           iconBgClass="bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
-          title="Fiado neto"
+              title="Saldo neto pendiente"
           value={formatearMoneda((resumen?.totalCargos ?? 0) - (resumen?.totalDevoluciones ?? 0))}
           subtitle="Cargos menos devoluciones"
         />
@@ -410,7 +410,7 @@ export function CuentasCorrientesPage() {
             <EmptyState
               icon={<Eye size={32} />}
               title="Sin movimientos"
-              description="Acá van a aparecer las ventas fiadas y los abonos."
+              description="Acá aparecen las ventas con saldo pendiente y los pagos registrados."
             />
           ) : (
             <div className="max-h-[32rem] overflow-y-auto">

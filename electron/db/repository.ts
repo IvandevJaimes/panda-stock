@@ -1212,17 +1212,17 @@ export function processSale(venta: VentaCompletaInput): VentaResult {
     }
 
     /*
-      Cobrar "en cuenta corriente" es dejar fiado: el pago existe en `pagos` para
+      Registrar un importe en cuenta corriente crea un cargo asociado al cliente. El pago existe en `pagos` para
       que la venta cierre, y en el libro mayor queda como cargo del cliente. Van
       en la misma transacción a propósito: si el cargo fallara y la venta quedara
       guardada, el mostrador habría vendido sin que nadie deba nada.
     */
-    const fiado = venta.pagos.filter((pago) => pago.metodo === 'cuenta_corriente')
+    const pagosCuentaCorriente = venta.pagos.filter((pago) => pago.metodo === 'cuenta_corriente')
 
-    if (fiado.length > 0) {
+    if (pagosCuentaCorriente.length > 0) {
       if (venta.clienteId == null) {
         throw new Error(
-          'La venta tiene un pago en cuenta corriente pero no se indicó a qué cliente se le fía',
+          'La venta tiene un pago en cuenta corriente pero no se indicó el cliente asociado',
         )
       }
 
@@ -1232,12 +1232,12 @@ export function processSale(venta: VentaCompletaInput): VentaResult {
         .where(eq(clientes.id, venta.clienteId))
         .get()
 
-      if (!cliente) throw new Error('El cliente al que se le fía no existe')
+      if (!cliente) throw new Error('El cliente asociado a la cuenta corriente no existe')
       if (!cliente.activo) {
-        throw new Error(`El cliente ${cliente.nombre} está archivado y no puede recibir deuda`)
+        throw new Error(`El cliente ${cliente.nombre} está archivado y no puede registrar nuevos saldos pendientes`)
       }
 
-      for (const pago of fiado) {
+      for (const pago of pagosCuentaCorriente) {
         tx.insert(cuentasCorrientes)
           .values({
             clienteId: venta.clienteId,

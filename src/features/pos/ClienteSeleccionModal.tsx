@@ -98,7 +98,7 @@ export function ClienteSeleccionModal({
         isOpen={isOpen}
         onClose={cerrar}
         title="Seleccionar cliente"
-        subtitle="Cliente al que se le fía esta venta"
+        subtitle="Cliente al que se asignará el saldo de esta venta"
         headerIcon={
           <BookUser size={18} className="text-emerald-600 dark:text-emerald-400" />
         }
@@ -157,7 +157,7 @@ export function ClienteSeleccionModal({
               </p>
               <span className="text-[13px] text-slate-500">
                 {clientes.length === 0
-                  ? 'Creá tu primer cliente para poder fiar ventas'
+                  ? 'Creá un cliente para registrar ventas en cuenta corriente'
                   : 'Probá con otro nombre o teléfono, o creá un cliente nuevo'}
               </span>
               <Button

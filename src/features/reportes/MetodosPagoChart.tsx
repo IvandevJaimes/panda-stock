@@ -22,11 +22,11 @@ const COLORES = ['#10b981', '#0ea5e9', '#8b5cf6', '#f59e0b', '#64748b']
 
 type MetodosPagoChartProps = {
   filas: FilaMetodo[]
-  /** Total cobrado con crédito y cuenta corriente, que se destaca aparte. */
-  totalCredito: number
+  /** Total registrado con tarjeta de crédito o en cuenta corriente. */
+  totalTarjetaCuentaCorriente: number
 }
 
-export function MetodosPagoChart({ filas, totalCredito }: MetodosPagoChartProps) {
+export function MetodosPagoChart({ filas, totalTarjetaCuentaCorriente }: MetodosPagoChartProps) {
   const isDark = useUIStore((state) => state.theme === 'dark')
   const total = filas.reduce((acc, fila) => acc + fila.monto, 0)
 
@@ -113,15 +113,15 @@ export function MetodosPagoChart({ filas, totalCredito }: MetodosPagoChartProps)
             */}
             <li className="rounded-xl border border-amber-200 bg-amber-50/60 p-2.5 dark:border-amber-900/60 dark:bg-amber-950/20">
               <p className="text-[11px] font-medium uppercase tracking-wide text-amber-700 dark:text-amber-400">
-                Cobrado a crédito
+                Tarjeta y cuenta corriente
               </p>
               <p className="mt-0.5 font-display text-base font-bold tabular-nums text-slate-900 dark:text-white">
-                {formatearMoneda(totalCredito)}
+                {formatearMoneda(totalTarjetaCuentaCorriente)}
               </p>
               <p className="mt-0.5 text-[11px] leading-snug text-slate-500 dark:text-slate-400">
                 {total > 0
-                  ? `${((totalCredito / total) * 100).toFixed(1)}% de lo cobrado en el período.`
-                  : 'Sin cobros a crédito en el período.'}
+                  ? `${((totalTarjetaCuentaCorriente / total) * 100).toFixed(1)}% del total registrado en el período.`
+                  : 'Sin operaciones en estos medios durante el período.'}
               </p>
             </li>
           </ul>

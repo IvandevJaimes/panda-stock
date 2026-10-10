@@ -199,8 +199,8 @@ describe('exportación de la pestaña Ventas', () => {
     expect(fechas).toEqual(['01/03', '02/03', '03/03', '04/03', '05/03'])
   })
 
-  it('agrupa crédito y cuenta corriente en un solo medio', () => {
-    const conCredito = exportar('ventas', {
+  it('agrupa tarjeta de crédito y cuenta corriente en un solo medio', () => {
+    const conTarjetaYCuenta = exportar('ventas', {
       ...COMPLETO,
       ventasPorMetodo: [
         { metodo: 'credito', monto: 1000 },
@@ -208,8 +208,8 @@ describe('exportación de la pestaña Ventas', () => {
       ],
     }).hojas[0]!.filas
 
-    const filaCredito = conCredito.find((fila) => fila[0]?.value === 'Crédito')
-    expect(filaCredito?.[1]?.value).toBe(3000)
+    const filaCombinada = conTarjetaYCuenta.find((fila) => fila[0]?.value === 'Tarjeta de crédito y cuenta corriente')
+    expect(filaCombinada?.[1]?.value).toBe(3000)
   })
 
   it('marca con nota las secciones sin datos en vez de dejar filas vacías', () => {
