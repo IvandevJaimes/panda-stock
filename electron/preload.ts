@@ -40,6 +40,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     tieneContrasena: () => ipcRenderer.invoke("seguridad:tiene-contrasena"),
     crearContrasena: (pinNuevo: string) =>
       ipcRenderer.invoke("seguridad:crear-contrasena", pinNuevo),
+    quitarContrasena: (pinActual: string) =>
+      ipcRenderer.invoke("seguridad:quitar-contrasena", pinActual),
   },
   negocio: {
     get: () => ipcRenderer.invoke("negocio:get"),
@@ -172,5 +174,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.on("app:pedir-cierre-caja", () => callback());
     },
     salir: () => ipcRenderer.invoke("app:salir"),
+  },
+  configuracion: {
+    /** El wizard de primer inicio terminó; el main cierra la ventana y abre la app. */
+    completada: () => ipcRenderer.invoke("configuracion:completada"),
   },
 });

@@ -451,6 +451,7 @@ export function contarBloqueados(productos: ProductoPOS[]): ConteoBloqueados {
 export type MetodoPagoPOS =
   | 'efectivo'
   | 'transferencia'
+  | 'qr'
   | 'tarjeta'
   | 'cuenta_corriente'
 
@@ -458,22 +459,26 @@ export type MetodoPagoPOS =
 export const METODOS_PAGO: readonly MetodoPagoPOS[] = [
   'efectivo',
   'transferencia',
+  'qr',
   'tarjeta',
   'cuenta_corriente',
 ]
 
 export type MetodosPagoConfig = {
   tarjetaHabilitada: boolean
+  transferenciaHabilitada?: boolean
+  qrHabilitado?: boolean
   cuentaCorrienteHabilitada: boolean
 }
 
 /**
- * Efectivo y transferencia siempre están: son el piso del cobro. Solo tarjeta
- * y cuenta corriente dependen de ajustes, y el resultado conserva el orden de
- * `METODOS_PAGO` porque `F4` y el selector comparten esa lista.
+ * Efectivo siempre está disponible; el resto depende de ajustes. El orden de
+ * `METODOS_PAGO` se conserva porque `F4` y el selector comparten esa lista.
  */
 export function metodosHabilitados(config: MetodosPagoConfig): MetodoPagoPOS[] {
   return METODOS_PAGO.filter((metodo) => {
+    if (metodo === 'transferencia') return config.transferenciaHabilitada !== false
+    if (metodo === 'qr') return config.qrHabilitado === true
     if (metodo === 'tarjeta') return config.tarjetaHabilitada
     if (metodo === 'cuenta_corriente') return config.cuentaCorrienteHabilitada
     return true

@@ -28,6 +28,7 @@ export const negocio = sqliteTable('negocio', {
   nombre: text('nombre'),
   logoPath: text('logo_path'),
   passwordHash: text('password_hash'),
+  creadoEn: text('creado_en'),
   actualizadoEn: text('actualizado_en').notNull(),
 })
 

@@ -18,6 +18,7 @@ import { EmptyState } from '../../components/ui/EmptyState'
 import { Input } from '../../components/ui/Input'
 import { KpiCard } from '../../components/ui/KpiCard'
 import { LoadingState } from '../../components/ui/LoadingState'
+import { Tooltip } from '../../components/ui/Tooltip'
 import {
   Table,
   TableBody,
@@ -346,39 +347,42 @@ export function CuentasCorrientesPage() {
                           >
                             Cobrar
                           </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            aria-label={`Cargar deuda a ${cliente.nombre}`}
-                            title="Cargar deuda"
-                            onClick={() => {
-                              setSeleccionado(cliente)
-                              setModalCargo(true)
-                            }}
-                          >
-                            <NotebookPen size={15} />
-                          </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            aria-label={`Editar a ${cliente.nombre}`}
-                            title="Editar"
-                            onClick={() => {
-                              setClienteEnEdicion(cliente)
-                              setModalCliente(true)
-                            }}
-                          >
-                            <Pencil size={15} />
-                          </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            aria-label={`Archivar a ${cliente.nombre}`}
-                            title="Archivar"
-                            onClick={() => void archivar(cliente)}
-                          >
-                            <Archive size={15} />
-                          </Button>
+                          <Tooltip content="Cargar deuda" placement="top">
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              aria-label={`Cargar deuda a ${cliente.nombre}`}
+                              onClick={() => {
+                                setSeleccionado(cliente)
+                                setModalCargo(true)
+                              }}
+                            >
+                              <NotebookPen size={15} />
+                            </Button>
+                          </Tooltip>
+                          <Tooltip content="Editar" placement="top">
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              aria-label={`Editar a ${cliente.nombre}`}
+                              onClick={() => {
+                                setClienteEnEdicion(cliente)
+                                setModalCliente(true)
+                              }}
+                            >
+                              <Pencil size={15} />
+                            </Button>
+                          </Tooltip>
+                          <Tooltip content="Archivar" placement="top">
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              aria-label={`Archivar a ${cliente.nombre}`}
+                              onClick={() => void archivar(cliente)}
+                            >
+                              <Archive size={15} />
+                            </Button>
+                          </Tooltip>
                         </div>
                       </TableCell>
                     </TableRow>

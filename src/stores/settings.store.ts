@@ -1,5 +1,9 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
+import {
+  PROTECCIONES_INICIALES,
+  type ProteccionesSeguridad,
+} from '../types/security'
 
 type SettingsState = {
   /** Nombre del comercio / local, editable en configuraciones. */
@@ -18,6 +22,11 @@ type SettingsState = {
   /** Muestra el botón de tarjeta en el ticket de venta. */
   tarjetaHabilitada: boolean
   setTarjetaHabilitada: (active: boolean) => void
+  /** Muestra transferencia entre los métodos de pago del ticket. */
+  transferenciaHabilitada: boolean
+  /** Muestra el pago con QR entre los métodos de pago del ticket. */
+  qrHabilitado: boolean
+  setQrHabilitado: (active: boolean) => void
   /** Habilita vender a cuenta corriente y la pestaña de cuentas corrientes. */
   cuentaCorrienteHabilitada: boolean
   setCuentaCorrienteHabilitada: (active: boolean) => void
@@ -33,9 +42,9 @@ type SettingsState = {
   /** Unidades mínimas para que empiece a aplicar el descuento. */
   descuentoDesdeUnidades: number
   setDescuentoDesdeUnidades: (unidades: number) => void
-  /** Pide contraseña al abrir reportes, cuentas corrientes y al anular ventas. */
-  pedidoContrasenaHabilitado: boolean
-  setPedidoContrasenaHabilitado: (active: boolean) => void
+  /** Áreas y acciones que requieren contraseña cuando existe una. */
+  proteccionesSeguridad: ProteccionesSeguridad
+  setProteccionesSeguridad: (protecciones: ProteccionesSeguridad) => void
   /** Muestra la calculadora de vuelto en el ticket cuando se cobra en efectivo. */
   calculadoraVueltoHabilitada: boolean
   setCalculadoraVueltoHabilitada: (active: boolean) => void
@@ -52,6 +61,9 @@ export const useSettingsStore = create<SettingsState>()(
       setSonidoAlertas: (sonidoAlertas) => set({ sonidoAlertas }),
       tarjetaHabilitada: true,
       setTarjetaHabilitada: (tarjetaHabilitada) => set({ tarjetaHabilitada }),
+      transferenciaHabilitada: true,
+      qrHabilitado: true,
+      setQrHabilitado: (qrHabilitado) => set({ qrHabilitado }),
       cuentaCorrienteHabilitada: true,
       setCuentaCorrienteHabilitada: (cuentaCorrienteHabilitada) =>
         set({ cuentaCorrienteHabilitada }),
@@ -66,9 +78,8 @@ export const useSettingsStore = create<SettingsState>()(
       descuentoDesdeUnidades: 3,
       setDescuentoDesdeUnidades: (unidades) =>
         set({ descuentoDesdeUnidades: Math.min(99, Math.max(2, unidades)) }),
-      pedidoContrasenaHabilitado: true,
-      setPedidoContrasenaHabilitado: (pedidoContrasenaHabilitado) =>
-        set({ pedidoContrasenaHabilitado }),
+      proteccionesSeguridad: PROTECCIONES_INICIALES,
+      setProteccionesSeguridad: (proteccionesSeguridad) => set({ proteccionesSeguridad }),
       calculadoraVueltoHabilitada: true,
       setCalculadoraVueltoHabilitada: (calculadoraVueltoHabilitada) =>
         set({ calculadoraVueltoHabilitada }),
@@ -81,14 +92,42 @@ export const useSettingsStore = create<SettingsState>()(
         ventasPorCajas: state.ventasPorCajas,
         sonidoAlertas: state.sonidoAlertas,
         tarjetaHabilitada: state.tarjetaHabilitada,
+        qrHabilitado: state.qrHabilitado,
         cuentaCorrienteHabilitada: state.cuentaCorrienteHabilitada,
         recargoTarjetaCredito: state.recargoTarjetaCredito,
         descuentoAutomatico: state.descuentoAutomatico,
         descuentoPorcentaje: state.descuentoPorcentaje,
         descuentoDesdeUnidades: state.descuentoDesdeUnidades,
-        pedidoContrasenaHabilitado: state.pedidoContrasenaHabilitado,
+        proteccionesSeguridad: state.proteccionesSeguridad,
         calculadoraVueltoHabilitada: state.calculadoraVueltoHabilitada,
       }),
+      merge: (persistido, estadoActual) => {
+        const ajustes = persistido as Partial<SettingsState> & {
+          pedidoContrasenaHabilitado?: boolean
+        }
+        const legado = ajustes.pedidoContrasenaHabilitado === true
+        const existeConfiguracionAnterior = typeof ajustes.pedidoContrasenaHabilitado === 'boolean'
+        const proteccionesGuardadas = ajustes.proteccionesSeguridad
+        return {
+          ...estadoActual,
+          ...ajustes,
+          transferenciaHabilitada: true,
+          proteccionesSeguridad: {
+            ...PROTECCIONES_INICIALES,
+            reportes: proteccionesGuardadas?.reportes ?? legado,
+            cuentasCorrientes: proteccionesGuardadas?.cuentasCorrientes ?? legado,
+            anularVentas: proteccionesGuardadas?.anularVentas ?? existeConfiguracionAnterior,
+            eliminarProductos: proteccionesGuardadas?.eliminarProductos ?? false,
+            eliminarLotes: proteccionesGuardadas?.eliminarLotes ?? false,
+            eliminarCategorias: proteccionesGuardadas?.eliminarCategorias ?? false,
+            eliminarMarcas: proteccionesGuardadas?.eliminarMarcas ?? false,
+          },
+          qrHabilitado:
+            ajustes.qrHabilitado ??
+            ajustes.transferenciaHabilitada ??
+            estadoActual.qrHabilitado,
+        }
+      },
     },
   ),
 )

@@ -181,6 +181,8 @@ export function Cart({
   const calculadoraVueltoHabilitada = useSettingsStore(
     (estado) => estado.calculadoraVueltoHabilitada,
   )
+  const descuentoAutomatico = useSettingsStore((estado) => estado.descuentoAutomatico)
+  const descuentoPorcentaje = useSettingsStore((estado) => estado.descuentoPorcentaje)
 
   return (
     // `min-h-0 flex-1` en vez de `sticky`: el alto lo reparte el flex de la
@@ -291,7 +293,9 @@ export function Cart({
 
           {resumen.descuento > 0 && (
             <div className="flex items-baseline justify-between py-1 text-[13.5px] text-emerald-600 dark:text-emerald-400">
-              <span>Descuento mayorista</span>
+              <span>
+                Descuento mayorista{descuentoAutomatico ? ` (${descuentoPorcentaje}%)` : ''}
+              </span>
               <span className="font-display font-semibold tabular-nums">
                 −{formatearMoneda(resumen.descuento)}
               </span>

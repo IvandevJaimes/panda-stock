@@ -19,7 +19,7 @@ const ReportesPage = lazy(() =>
 )
 
 export function ReportesRoute() {
-  const { estado, unlock } = useGateContrasena()
+  const { estado, unlock } = useGateContrasena('reportes')
   const navigate = useNavigate()
 
   if (estado === 'chequeando') {

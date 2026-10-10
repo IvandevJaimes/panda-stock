@@ -107,6 +107,9 @@ function hashValida(pinHash: string, pin: string): boolean {
 }
 
 export function verifyPin(pin: string): boolean {
+  const pinNormalizado = pin.trim()
+  if (!pinNormalizado) return false
+
   const db = getDb()
   const fila = db
     .select({ pinHash: seguridadReportes.pinHash })
@@ -115,15 +118,18 @@ export function verifyPin(pin: string): boolean {
     .get()
 
   if (!fila) return false
-  return hashValida(fila.pinHash, pin)
+  return hashValida(fila.pinHash, pinNormalizado)
 }
 
 export function changePin(pinActual: string, pinNuevo: string): boolean {
+  const pinNuevoNormalizado = pinNuevo.trim()
+  if (!pinNuevoNormalizado) return false
+
   const db = getDb()
   if (!verifyPin(pinActual)) return false
 
   db.update(seguridadReportes)
-    .set({ pinHash: sha256(pinNuevo), actualizadoEn: new Date().toISOString() })
+    .set({ pinHash: sha256(pinNuevoNormalizado), actualizadoEn: new Date().toISOString() })
     .where(eq(seguridadReportes.id, 1))
     .run()
 
@@ -147,10 +153,23 @@ export function tieneContrasena(): boolean {
 
 export function createContrasena(pinNuevo: string): boolean {
   const db = getDb()
-  if (tieneContrasena()) return false
+  const pinNuevoNormalizado = pinNuevo.trim()
+  if (!pinNuevoNormalizado || tieneContrasena()) return false
 
   db.update(seguridadReportes)
-    .set({ pinHash: sha256(pinNuevo), actualizadoEn: new Date().toISOString() })
+    .set({ pinHash: sha256(pinNuevoNormalizado), actualizadoEn: new Date().toISOString() })
+    .where(eq(seguridadReportes.id, 1))
+    .run()
+
+  return true
+}
+
+export function removeContrasena(pinActual: string): boolean {
+  if (!tieneContrasena() || !verifyPin(pinActual)) return false
+
+  getDb()
+    .update(seguridadReportes)
+    .set({ pinHash: PIN_INICIAL_HASH, actualizadoEn: new Date().toISOString() })
     .where(eq(seguridadReportes.id, 1))
     .run()
 
@@ -163,6 +182,7 @@ export function getNegocio(): Negocio | null {
       id: negocio.id,
       nombre: negocio.nombre,
       logoPath: negocio.logoPath,
+      creadoEn: negocio.creadoEn,
       actualizadoEn: negocio.actualizadoEn,
     })
     .from(negocio)
@@ -174,29 +194,32 @@ export function getNegocio(): Negocio | null {
 
 export function updateNegocio(data: NegocioInput): Negocio {
   const db = getDb()
-  const set: Record<string, unknown> = { actualizadoEn: new Date().toISOString() }
+  const ahora = new Date().toISOString()
+  const set: Record<string, unknown> = { actualizadoEn: ahora }
 
   if (data.nombre !== undefined) set.nombre = (data.nombre as string | null | undefined)?.trim() ?? null
   if (data.logoPath !== undefined) set.logoPath = (data.logoPath as string | null | undefined) ?? null
   if (data.password !== undefined && data.password) set.passwordHash = sha256(data.password)
 
-  const existe = db
-    .select({ id: negocio.id })
+  const existente = db
+    .select({ id: negocio.id, creadoEn: negocio.creadoEn })
     .from(negocio)
     .where(eq(negocio.id, 1))
     .get()
 
-  if (!existe) {
+  if (!existente) {
     db.insert(negocio)
       .values({
         id: 1,
         nombre: (data.nombre as string | null | undefined)?.trim() ?? null,
         logoPath: (data.logoPath as string | null | undefined) ?? null,
         passwordHash: data.password ? sha256(data.password) : null,
-        actualizadoEn: new Date().toISOString(),
+        creadoEn: ahora,
+        actualizadoEn: ahora,
       })
       .run()
   } else {
+    if (!existente.creadoEn) set.creadoEn = ahora
     db.update(negocio).set(set).where(eq(negocio.id, 1)).run()
   }
 
@@ -205,6 +228,7 @@ export function updateNegocio(data: NegocioInput): Negocio {
       id: negocio.id,
       nombre: negocio.nombre,
       logoPath: negocio.logoPath,
+      creadoEn: negocio.creadoEn,
       actualizadoEn: negocio.actualizadoEn,
     })
     .from(negocio)
@@ -1007,12 +1031,14 @@ export function getCajaSummary(cajaId: number): CajaSummary {
   let totalEfectivo = 0
   let totalEgresosEfectivo = 0
   let totalTransferencia = 0
+  let totalQr = 0
   let totalTarjeta = 0
   let totalCuentaCorriente = 0
 
   for (const fila of filasMetodo) {
     if (fila.metodo === 'efectivo') totalEfectivo += fila.monto
     else if (fila.metodo === 'transferencia') totalTransferencia += fila.monto
+    else if (fila.metodo === 'qr') totalQr += fila.monto
     else if (fila.metodo === 'debito' || fila.metodo === 'credito') totalTarjeta += fila.monto
     else if (fila.metodo === 'cuenta_corriente') totalCuentaCorriente += fila.monto
   }
@@ -1025,6 +1051,7 @@ export function getCajaSummary(cajaId: number): CajaSummary {
   for (const fila of abonosMetodo) {
     if (fila.metodo === 'efectivo') totalEfectivo += fila.monto
     else if (fila.metodo === 'transferencia') totalTransferencia += fila.monto
+    else if (fila.metodo === 'qr') totalQr += fila.monto
     else if (fila.metodo === 'debito' || fila.metodo === 'credito') totalTarjeta += fila.monto
   }
 
@@ -1033,6 +1060,7 @@ export function getCajaSummary(cajaId: number): CajaSummary {
       totalEgresosEfectivo += fila.monto
       totalEfectivo -= fila.monto
     } else if (fila.metodo === 'transferencia') totalTransferencia -= fila.monto
+    else if (fila.metodo === 'qr') totalQr -= fila.monto
     else if (fila.metodo === 'debito' || fila.metodo === 'credito') totalTarjeta -= fila.monto
   }
 
@@ -1042,6 +1070,7 @@ export function getCajaSummary(cajaId: number): CajaSummary {
     totalEfectivo,
     totalEgresosEfectivo,
     totalTransferencia,
+    totalQr,
     totalTarjeta,
     totalCuentaCorriente,
     montoEsperado: montoEsperadoDeCaja(db, cajaId, filaCaja?.montoInicial ?? 0),
@@ -1346,12 +1375,8 @@ export function getVentaDetalle(idVenta: number): VentaDetalle | null {
 }
 
 export function anularVenta(input: AnularVentaInput): ResultadoAnulacion | null {
-  if (typeof input.pin !== 'string') return null
-  const pin = input.pin.trim()
-  const contrasenaValida = tieneContrasena()
-    ? verifyPin(pin)
-    : sha256(pin) === MAESTRA_PASSWORD_HASH
-  if (!contrasenaValida) return null
+  const pin = input.pin?.trim() ?? ''
+  if (pin && !(tieneContrasena() ? verifyPin(pin) : sha256(pin) === MAESTRA_PASSWORD_HASH)) return null
   if (!Number.isSafeInteger(input.ventaId) || input.ventaId < 1) throw new Error('Ticket inválido')
 
   const db = getDb()
@@ -2020,12 +2045,8 @@ function aplicacionesFifoCuentaCorriente(
 }
 
 export function processDevolucion(input: ProcesarDevolucionInput): ResultadoDevolucion | null {
-  if (typeof input.pin !== 'string') return null
-  const pin = input.pin.trim()
-  const contrasenaValida = tieneContrasena()
-    ? verifyPin(pin)
-    : sha256(pin) === MAESTRA_PASSWORD_HASH
-  if (!contrasenaValida) return null
+  const pin = input.pin?.trim() ?? ''
+  if (pin && !(tieneContrasena() ? verifyPin(pin) : sha256(pin) === MAESTRA_PASSWORD_HASH)) return null
   if (!Number.isSafeInteger(input.ventaId) || input.ventaId < 1) throw new Error('Ticket inválido')
 
   const db = getDb()

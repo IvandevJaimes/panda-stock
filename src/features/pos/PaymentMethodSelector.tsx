@@ -1,10 +1,18 @@
-import { ArrowRightLeft, Banknote, BookUser, CreditCard, type LucideIcon } from 'lucide-react'
+import {
+  ArrowRightLeft,
+  Banknote,
+  BookUser,
+  CreditCard,
+  QrCode,
+  type LucideIcon,
+} from 'lucide-react'
 import { cn } from '../../lib/cn'
 import { type MetodoPagoPOS } from './posQuery'
 
 const PRESENTACION: Record<MetodoPagoPOS, { etiqueta: string; icon: LucideIcon }> = {
   efectivo: { etiqueta: 'Efectivo', icon: Banknote },
   transferencia: { etiqueta: 'Transferencia', icon: ArrowRightLeft },
+  qr: { etiqueta: 'QR', icon: QrCode },
   tarjeta: { etiqueta: 'Tarjeta', icon: CreditCard },
   cuenta_corriente: { etiqueta: 'Cuenta corriente', icon: BookUser },
 }

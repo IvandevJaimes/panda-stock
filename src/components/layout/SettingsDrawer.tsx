@@ -1,514 +1,216 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { Briefcase, Headset, Percent, Shield, Volume2, Wallet, X, type LucideIcon } from "lucide-react";
-import { toast } from "sonner";
-import { Switch } from "../ui/Switch";
-import { Input } from "../ui/Input";
-import { Button } from "../ui/Button";
-import { useSettingsStore } from "../../stores/settings.store";
-import { useCajaStore } from "../../stores/caja.store";
-import { useUIStore } from "../../stores/ui.store";
-import { seguridadService } from "../../services/seguridad.service";
-import { ModalContrasena } from "../../features/seguridad/ModalContrasena";
-import { toErrorMessage } from "../../services/errors";
-import { cn } from "../../lib/cn";
+import { useEffect, useState, type ReactNode } from 'react'
+import { Briefcase, Building2, ImagePlus, LogOut, Pencil, Settings, Volume2, Wallet, X } from 'lucide-react'
+import { toast } from 'sonner'
+import { Button } from '../ui/Button'
+import { Card } from '../ui/Card'
+import { Switch } from '../ui/Switch'
+import { useSettingsStore } from '../../stores/settings.store'
+import { useCajaStore } from '../../stores/caja.store'
+import { useUIStore } from '../../stores/ui.store'
+import { cn } from '../../lib/cn'
+import { Tooltip } from '../ui/Tooltip'
+import { ImageLightbox } from '../ui/ImageLightbox'
+import { BusinessSetupModal } from '../../features/onboarding/BusinessSetupModal'
+import { BusinessLogoPicker } from '../../features/onboarding/BusinessLogoPicker'
+import { useNegocioStore } from '../../stores/negocio.store'
+import packageInfo from '../../../package.json'
 
-interface SettingRowProps {
-  title: string;
-  description: string;
-  checked: boolean;
-  onCheckedChange: (checked: boolean) => void;
+function formatearFecha(iso: string | null): string {
+  if (!iso) return '—'
+  const fecha = new Date(iso)
+  if (Number.isNaN(fecha.getTime())) return '—'
+  return fecha.toLocaleString('es-AR', { dateStyle: 'medium', timeStyle: 'short' })
 }
 
-function SettingRow({
-  title,
-  description,
-  checked,
-  onCheckedChange,
-}: SettingRowProps) {
+function BasicSetting({ title, description, checked, onCheckedChange, icon }: {
+  title: string
+  description: string
+  checked: boolean
+  onCheckedChange: (checked: boolean) => void
+  icon: ReactNode
+}) {
   return (
-    <div className="flex items-start justify-between gap-4">
-      <div className="min-w-0">
-        <strong className="block font-display text-sm font-semibold text-slate-900 dark:text-white">
-          {title}
-        </strong>
-        <p className="mt-0.5 text-[13px] leading-snug text-slate-500 dark:text-slate-400">
-          {description}
-        </p>
+    <div className="flex items-start justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50/80 p-3 dark:border-slate-800 dark:bg-slate-900/60">
+      <div className="flex min-w-0 items-start gap-2.5">
+        <span className="mt-0.5 shrink-0 text-slate-400 dark:text-slate-500">{icon}</span>
+        <div className="min-w-0">
+          <strong className="block text-sm font-semibold text-slate-900 dark:text-white">{title}</strong>
+          <p className="mt-0.5 text-xs leading-snug text-slate-500 dark:text-slate-400">{description}</p>
+        </div>
       </div>
-      <Switch
-        checked={checked}
-        onCheckedChange={onCheckedChange}
-        className="mt-1 shrink-0"
-      />
+      <Switch checked={checked} onCheckedChange={onCheckedChange} className="mt-1 shrink-0" />
     </div>
-  );
+  )
 }
 
-interface DrawerSectionProps {
-  title: string;
-  icon: LucideIcon;
-  children: ReactNode;
-}
+export function SettingsDrawer() {
+  const isOpen = useUIStore((state) => state.isRightSidebarOpen)
+  const closeRightSidebar = useUIStore((state) => state.closeRightSidebar)
+  const openSettings = useUIStore((state) => state.openSettings)
+  const cajaAbierta = useCajaStore((state) => state.caja)
+  const ventasPorCajas = useSettingsStore((state) => state.ventasPorCajas)
+  const setVentasPorCajas = useSettingsStore((state) => state.setVentasPorCajas)
+  const calculadoraVuelto = useSettingsStore((state) => state.calculadoraVueltoHabilitada)
+  const setCalculadoraVuelto = useSettingsStore((state) => state.setCalculadoraVueltoHabilitada)
+  const sonidoAlertas = useSettingsStore((state) => state.sonidoAlertas)
+  const setSonidoAlertas = useSettingsStore((state) => state.setSonidoAlertas)
+  const negocioNombre = useNegocioStore((state) => state.nombre)
+  const negocioLogoUrl = useNegocioStore((state) => state.logoUrl)
+  const negocioCreadoEn = useNegocioStore((state) => state.creadoEn)
+  const negocioActualizadoEn = useNegocioStore((state) => state.actualizadoEn)
+  const setNegocio = useNegocioStore((state) => state.setNegocio)
+  const [editarNegocioAbierto, setEditarNegocioAbierto] = useState(false)
+  const [verLogoAbierto, setVerLogoAbierto] = useState(false)
 
-function DrawerSection({ title, icon: Icon, children }: DrawerSectionProps) {
-  return (
-    <section className="px-5 py-5">
-      <div className="mb-4 flex items-center gap-2.5">
-        <span className="grid h-8 w-8 place-items-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-          <Icon size={15} />
-        </span>
-        <h3 className="font-display text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
-          {title}
-        </h3>
-      </div>
-      {children}
-    </section>
-  );
-}
+  useEffect(() => {
+    if (!isOpen) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeRightSidebar()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [isOpen, closeRightSidebar])
 
-interface FormuarioContrasenaProps {
-  modo: "crear" | "cambiar";
-  onGuardar: (actual: string, nueva: string) => Promise<boolean>;
-  onCambio: () => void;
-  onCancelar: () => void;
-}
+  function openAdvancedSettings() {
+    closeRightSidebar()
+    openSettings()
+  }
 
-function FormularioContrasena({ modo, onGuardar, onCambio, onCancelar }: FormuarioContrasenaProps) {
-  const [actual, setActual] = useState("");
-  const [nueva, setNueva] = useState("");
-  const [repetir, setRepetir] = useState("");
-  const [guardando, setGuardando] = useState(false);
+  function toggleCashRegister(enabled: boolean) {
+    setVentasPorCajas(enabled)
+    if (!enabled && cajaAbierta !== null) {
+      toast.warning('Se desactivó el control por caja; la caja abierta sigue activa hasta que la cierres.')
+    }
+  }
 
-  const coincide = repetir.length > 0 && nueva === repetir;
-  const puedeGuardar =
-    nueva.length > 0 &&
-    coincide &&
-    !guardando &&
-    (modo === "crear" || actual.length > 0);
-
-  async function manejarGuardar() {
-    if (!puedeGuardar) return;
-    setGuardando(true);
+  async function exitApplication() {
     try {
-      const cambio = await onGuardar(actual, nueva);
-      if (cambio) {
-        toast.success(
-          modo === "crear"
-            ? "Contraseña creada. Ya se pide al abrir reportes, cuentas y anulaciones."
-            : "Contraseña actualizada",
-        );
-        setActual("");
-        setNueva("");
-        setRepetir("");
-        onCambio();
-      } else {
-        toast.error(
-          modo === "crear"
-            ? "No se pudo crear la contraseña"
-            : "La contraseña actual es incorrecta",
-        );
-        setRepetir("");
-      }
+      await window.electronAPI.app.salir()
     } catch (error) {
-      toast.error(toErrorMessage(error));
-    } finally {
-      setGuardando(false);
+      toast.error(error instanceof Error ? error.message : 'No se pudo cerrar Panda Stock')
     }
   }
 
   return (
-    <div className="rounded-xl border border-slate-200 p-3.5 dark:border-slate-800">
-      <p className="mb-3 text-[13px] font-semibold text-slate-700 dark:text-slate-200">
-        {modo === "crear" ? "Crear contraseña" : "Cambiar contraseña"}
-      </p>
-      <div className="space-y-2.5">
-        {modo === "cambiar" && (
-          <Input
-            label="Contraseña actual"
-            type="password"
-            placeholder="••••••••"
-            value={actual}
-            onChange={(evento) => setActual(evento.target.value)}
-          />
-        )}
-        <Input
-          label="Nueva contraseña"
-          type="password"
-          placeholder="••••••••"
-          value={nueva}
-          onChange={(evento) => setNueva(evento.target.value)}
-        />
-        <Input
-          label="Repetir nueva contraseña"
-          type="password"
-          placeholder="••••••••"
-          value={repetir}
-          onChange={(evento) => setRepetir(evento.target.value)}
-          error={repetir.length > 0 && !coincide ? "Las contraseñas no coinciden" : undefined}
-        />
-      </div>
-      <div className="mt-3 flex gap-2">
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          className="flex-1"
-          onClick={onCancelar}
-        >
-          Cancelar
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          className="flex-1"
-          loading={guardando}
-          disabled={!puedeGuardar}
-          onClick={manejarGuardar}
-        >
-          {modo === "crear" ? "Crear contraseña" : "Cambiar contraseña"}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-export function SettingsDrawer() {
-  const isOpen = useUIStore((state) => state.isRightSidebarOpen);
-  const closeRightSidebar = useUIStore((state) => state.closeRightSidebar);
-  const ventasPorCajas = useSettingsStore((state) => state.ventasPorCajas);
-  const setVentasPorCajas = useSettingsStore(
-    (state) => state.setVentasPorCajas,
-  );
-  const sonidoAlertas = useSettingsStore((state) => state.sonidoAlertas);
-  const setSonidoAlertas = useSettingsStore((state) => state.setSonidoAlertas);
-  const tarjetaHabilitada = useSettingsStore((state) => state.tarjetaHabilitada);
-  const setTarjetaHabilitada = useSettingsStore(
-    (state) => state.setTarjetaHabilitada,
-  );
-  const recargoTarjetaCredito = useSettingsStore(
-    (state) => state.recargoTarjetaCredito,
-  );
-  const setRecargoTarjetaCredito = useSettingsStore(
-    (state) => state.setRecargoTarjetaCredito,
-  );
-  const cuentaCorrienteHabilitada = useSettingsStore(
-    (state) => state.cuentaCorrienteHabilitada,
-  );
-  const setCuentaCorrienteHabilitada = useSettingsStore(
-    (state) => state.setCuentaCorrienteHabilitada,
-  );
-  const descuentoAutomatico = useSettingsStore(
-    (state) => state.descuentoAutomatico,
-  );
-  const setDescuentoAutomatico = useSettingsStore(
-    (state) => state.setDescuentoAutomatico,
-  );
-  const descuentoPorcentaje = useSettingsStore(
-    (state) => state.descuentoPorcentaje,
-  );
-  const setDescuentoPorcentaje = useSettingsStore(
-    (state) => state.setDescuentoPorcentaje,
-  );
-  const descuentoDesdeUnidades = useSettingsStore(
-    (state) => state.descuentoDesdeUnidades,
-  );
-  const setDescuentoDesdeUnidades = useSettingsStore(
-    (state) => state.setDescuentoDesdeUnidades,
-  );
-  const pedidoContrasenaHabilitado = useSettingsStore(
-    (state) => state.pedidoContrasenaHabilitado,
-  );
-  const setPedidoContrasenaHabilitado = useSettingsStore(
-    (state) => state.setPedidoContrasenaHabilitado,
-  );
-  const calculadoraVueltoHabilitada = useSettingsStore(
-    (state) => state.calculadoraVueltoHabilitada,
-  );
-  const setCalculadoraVueltoHabilitada = useSettingsStore(
-    (state) => state.setCalculadoraVueltoHabilitada,
-  );
-
-  const cajaAbierta = useCajaStore((state) => state.caja);
-
-  const [existeContrasena, setExisteContrasena] = useState(false);
-  const [mostrarFormulario, setMostrarFormulario] = useState(false);
-  const [verificandoApagado, setVerificandoApagado] = useState(false);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    let vigente = true;
-    seguridadService
-      .tieneContrasena()
-      .then((existe) => {
-        if (vigente) setExisteContrasena(existe);
-      })
-      .catch(() => {
-        /* Sin contraseña detectable se muestra el form de crear. */
-      });
-    return () => {
-      vigente = false;
-    };
-  }, [isOpen]);
-
-  // Apagar el control con una caja ya abierta no la cierra: el turno sigue
-  // vivo hasta que se rinda, y el botón de caja permanece en el encabezado.
-  const alternarVentasPorCajas = (activado: boolean) => {
-    setVentasPorCajas(activado);
-    if (!activado && cajaAbierta !== null) {
-      toast.warning(
-        "Se desactivó el control por caja; la caja abierta sigue activa hasta que la cierres.",
-      );
-    }
-  };
-
-  const alternarPedidoContrasena = (activado: boolean) => {
-    if (activado) {
-      setPedidoContrasenaHabilitado(true);
-      return;
-    }
-
-    if (existeContrasena) {
-      setVerificandoApagado(true);
-      return;
-    }
-    setPedidoContrasenaHabilitado(false);
-    setMostrarFormulario(false);
-  };
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") closeRightSidebar();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [isOpen, closeRightSidebar]);
-
-  return (
     <>
-      {/* ── Backdrop (cierra al hacer click afuera) ── */}
-      <div
-        onClick={closeRightSidebar}
-        aria-hidden
-        className={cn(
-          "fixed inset-0 z-40 bg-black/40 backdrop-blur-xs transition-opacity duration-300",
-          isOpen ? "opacity-100" : "pointer-events-none opacity-0",
-        )}
+      <ImageLightbox
+        open={verLogoAbierto && negocioLogoUrl !== null}
+        onClose={() => setVerLogoAbierto(false)}
+        src={negocioLogoUrl ?? ''}
+        alt="Logo del negocio"
       />
-
-      {/* ── Drawer ── */}
-      <aside
-        aria-hidden={!isOpen}
-        className={cn(
-          "fixed right-0 top-0 z-50 flex h-full w-[440px] max-w-[90vw] flex-col",
-          "border-l border-slate-200 bg-white text-slate-900",
-          "dark:border-slate-800/80 dark:bg-[#0f172a] dark:text-slate-200",
-          "shadow-2xl shadow-black/20 dark:shadow-black/40 transition-transform duration-300 ease-out",
-          isOpen ? "translate-x-0" : "translate-x-full",
-        )}
-      >
-        {/* Encabezado */}
-        <div className="flex items-center justify-between gap-4 border-b border-slate-200 px-5 py-4 dark:border-slate-800/80">
-          <div className="min-w-0">
-            <h2 className="font-display text-lg font-bold text-slate-900 dark:text-white">
-              Configuración
-            </h2>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              Personalizá Panda Stock
-            </p>
+      <BusinessSetupModal
+        isOpen={editarNegocioAbierto}
+        closable
+        onClose={() => setEditarNegocioAbierto(false)}
+        initialNombre={negocioNombre}
+        initialLogoUrl={negocioLogoUrl}
+        onSuccess={(negocio) => {
+          setNegocio(negocio)
+          setEditarNegocioAbierto(false)
+        }}
+      />
+      <div onClick={closeRightSidebar} aria-hidden className={cn('fixed inset-0 z-40 bg-black/40 backdrop-blur-xs transition-opacity duration-300', isOpen ? 'opacity-100' : 'pointer-events-none opacity-0')} />
+      <aside aria-hidden={!isOpen} className={cn('fixed right-0 top-0 z-50 flex h-full w-[400px] max-w-[90vw] flex-col border-l border-slate-200 bg-slate-50 text-slate-900 shadow-2xl shadow-black/20 transition-transform duration-300 ease-out dark:border-slate-800 dark:bg-[#0B1120] dark:text-slate-200 dark:shadow-black/40', isOpen ? 'translate-x-0' : 'translate-x-full')}>
+        <header className="flex items-center justify-between gap-4 border-b border-slate-200 bg-white px-5 py-4 dark:border-slate-800 dark:bg-[#111827]">
+          <div>
+            <h2 className="font-display text-lg font-bold text-slate-900 dark:text-white">Configuración</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Preferencias básicas</p>
           </div>
-          <button
-            onClick={closeRightSidebar}
-            aria-label="Cerrar panel de configuración"
-            className={cn(
-              "grid h-9 w-9 shrink-0 place-items-center cursor-pointer rounded-xl",
-              "border border-slate-200 bg-slate-100 text-slate-600",
-              "transition-colors duration-150 hover:bg-slate-200 hover:text-slate-900",
-              "dark:border-slate-700/60 dark:bg-slate-800/40 dark:text-slate-300",
-              "dark:hover:bg-slate-800/60 dark:hover:text-white",
-            )}
-          >
-            <X size={18} />
-          </button>
-        </div>
+          <button type="button" onClick={closeRightSidebar} aria-label="Cerrar panel de configuración" className="grid h-9 w-9 cursor-pointer place-items-center rounded-xl border border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-300 dark:hover:bg-slate-800"><X size={18} /></button>
+        </header>
 
-        {/* Secciones */}
-        <div className="flex-1 divide-y divide-slate-200 overflow-y-auto dark:divide-slate-800/60">
-          <DrawerSection title="Caja y ventas" icon={Briefcase}>
-            <div className="space-y-5">
-              <SettingRow
-                title="Ventas por cajas / turnos"
-                description="Exige abrir caja antes de cobrar y cerrarla al final de la jornada. Desactivado, se cobra sin apertura ni rendición de caja."
-                checked={ventasPorCajas}
-                onCheckedChange={alternarVentasPorCajas}
-              />
-              <SettingRow
-                title="Calculadora de vuelto"
-                description="Muestra la calculadora de vuelto en el ticket cuando se cobra en efectivo. Desactivada, el ticket se cobra igual pero sin el cálculo automático."
-                checked={calculadoraVueltoHabilitada}
-                onCheckedChange={setCalculadoraVueltoHabilitada}
-              />
+        <div className="flex-1 space-y-3 overflow-y-auto p-4">
+          <Button type="button" className="w-full" icon={<Settings size={17} />} onClick={openAdvancedSettings}>Configuración avanzada</Button>
+
+          <Card title="Información del negocio" description="Datos y logo del punto de venta." className="space-y-3">
+            <div className="flex items-center gap-3">
+              <BusinessLogoPicker>
+                {({ openFilePicker, isUploading }) => (
+                  <Tooltip content={negocioLogoUrl ? 'Ver logo' : 'Agregar logo'} placement="top">
+                    <button
+                      type="button"
+                      disabled={isUploading}
+                      onClick={() => negocioLogoUrl ? setVerLogoAbierto(true) : openFilePicker()}
+                      aria-label={negocioLogoUrl ? 'Ver logo del negocio' : 'Agregar logo del negocio'}
+                      className="grid h-20 w-20 shrink-0 cursor-pointer place-items-center overflow-hidden rounded-xl border border-slate-200 bg-emerald-50 text-emerald-600 transition-colors hover:bg-emerald-100 disabled:cursor-wait disabled:opacity-60 dark:border-slate-700 dark:bg-emerald-950/30 dark:text-emerald-400 dark:hover:bg-emerald-950/50"
+                    >
+                      {negocioLogoUrl ? (
+                        <img src={negocioLogoUrl} alt="Logo del negocio" className="h-full w-full object-cover" draggable={false} />
+                      ) : (
+                        <ImagePlus size={21} aria-hidden="true" />
+                      )}
+                    </button>
+                  </Tooltip>
+                )}
+              </BusinessLogoPicker>
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">Nombre</p>
+                <p className="truncate font-display text-sm font-semibold text-slate-900 dark:text-white">
+                  {negocioNombre || 'Sin nombre configurado'}
+                </p>
+              </div>
             </div>
-          </DrawerSection>
 
-          <DrawerSection title="Descuentos" icon={Percent}>
-            <div className="space-y-4">
-              <SettingRow
-                title="Descuento automático por cantidad"
-                description="Aplica el mayoreo en el ticket al alcanzar la cantidad indicada. Desactivado, cada unidad se cobra a precio de lista."
-                checked={descuentoAutomatico}
-                onCheckedChange={setDescuentoAutomatico}
-              />
-              {descuentoAutomatico && (
-                <div className="grid grid-cols-2 items-end gap-3">
-                  <Input
-                    label="Descuento (%)"
-                    type="number"
-                    min={0}
-                    max={90}
-                    value={descuentoPorcentaje}
-                    onChange={(evento) => {
-                      const valor = evento.target.valueAsNumber;
-                      if (!Number.isNaN(valor)) setDescuentoPorcentaje(valor);
-                    }}
-                  />
-                  <Input
-                    label="Cantidad mínima"
-                    type="number"
-                    min={2}
-                    max={99}
-                    value={descuentoDesdeUnidades}
-                    onChange={(evento) => {
-                      const valor = evento.target.valueAsNumber;
-                      if (!Number.isNaN(valor)) setDescuentoDesdeUnidades(valor);
-                    }}
-                  />
-                </div>
-              )}
-            </div>
-          </DrawerSection>
+            <dl className="grid grid-cols-2 gap-2 rounded-xl border border-slate-100 bg-slate-50/80 p-3 dark:border-slate-800 dark:bg-slate-900/60">
+              <div className="min-w-0">
+                <dt className="text-[11px] font-medium text-slate-500 dark:text-slate-400">Creado</dt>
+                <dd className="mt-0.5 truncate text-xs font-semibold tabular-nums text-slate-700 dark:text-slate-200">
+                  {formatearFecha(negocioCreadoEn)}
+                </dd>
+              </div>
+              <div className="min-w-0">
+                <dt className="text-[11px] font-medium text-slate-500 dark:text-slate-400">Última actualización</dt>
+                <dd className="mt-0.5 truncate text-xs font-semibold tabular-nums text-slate-700 dark:text-slate-200">
+                  {formatearFecha(negocioActualizadoEn)}
+                </dd>
+              </div>
+            </dl>
 
-          <DrawerSection title="Medios de pago" icon={Wallet}>
-            <div className="space-y-5">
-              <SettingRow
-                title="Tarjeta"
-                description="Muestra los botones de tarjeta de débito y de crédito entre los métodos de pago del ticket."
-                checked={tarjetaHabilitada}
-                onCheckedChange={setTarjetaHabilitada}
-              />
-              {tarjetaHabilitada && (
-                <Input
-                  label="Recargo tarjeta de crédito (%)"
-                  type="number"
-                  min={0}
-                  max={100}
-                  value={recargoTarjetaCredito}
-                  onChange={(evento) => {
-                    const valor = evento.target.valueAsNumber;
-                    if (!Number.isNaN(valor)) setRecargoTarjetaCredito(valor);
-                  }}
-                />
-              )}
-              <SettingRow
-                title="Cuenta corriente"
-                description="Permite fiar ventas desde el ticket y habilita la pestaña de cuentas corrientes."
-                checked={cuentaCorrienteHabilitada}
-                onCheckedChange={setCuentaCorrienteHabilitada}
-              />
-            </div>
-          </DrawerSection>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="w-full"
+              icon={negocioLogoUrl ? <Pencil size={15} /> : <Building2 size={15} />}
+              onClick={() => setEditarNegocioAbierto(true)}
+            >
+              Editar información
+            </Button>
+          </Card>
 
-          <DrawerSection title="Seguridad" icon={Shield}>
-            <div className="space-y-3">
-              <SettingRow
-                title="Pedir contraseña"
-                description="Pide la contraseña al abrir reportes, cuentas corrientes y al anular una venta. Sin contraseña creada, esas pantallas abren sin pedir nada."
-                checked={pedidoContrasenaHabilitado}
-                onCheckedChange={alternarPedidoContrasena}
-              />
-              {pedidoContrasenaHabilitado && (
-                mostrarFormulario ? (
-                  existeContrasena ? (
-                    <FormularioContrasena
-                      modo="cambiar"
-                      onGuardar={(actual, nueva) => seguridadService.changePin(actual, nueva)}
-                      onCambio={() => setMostrarFormulario(false)}
-                      onCancelar={() => setMostrarFormulario(false)}
-                    />
-                  ) : (
-                    <FormularioContrasena
-                      modo="crear"
-                      onGuardar={(_, nueva) => seguridadService.crearContrasena(nueva)}
-                      onCambio={() => {
-                        setExisteContrasena(true);
-                        setMostrarFormulario(false);
-                      }}
-                      onCancelar={() => setMostrarFormulario(false)}
-                    />
-                  )
-                ) : (
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="w-full"
-                    onClick={() => setMostrarFormulario(true)}
-                  >
-                    {existeContrasena ? "Cambiar contraseña" : "Crear contraseña"}
-                  </Button>
-                )
-              )}
-            </div>
-          </DrawerSection>
+          <Card title="Caja y cobro" description="Opciones para el uso diario del punto de venta." className="space-y-3">
+            <BasicSetting icon={<Briefcase size={17} />} title="Ventas por cajas / turnos" description="Requiere abrir y cerrar caja por turno." checked={ventasPorCajas} onCheckedChange={toggleCashRegister} />
+            <BasicSetting icon={<Wallet size={17} />} title="Calculadora de vuelto" description="Calcula el vuelto en pagos en efectivo." checked={calculadoraVuelto} onCheckedChange={setCalculadoraVuelto} />
+          </Card>
 
-          <DrawerSection title="Notificaciones" icon={Volume2}>
-            <SettingRow
-              title="Sonido de alertas"
-              description="Reproduce sonidos breves cuando llegan notificaciones nuevas y cuando se disparan alertas de stock."
-              checked={sonidoAlertas}
-              onCheckedChange={setSonidoAlertas}
-            />
-          </DrawerSection>
+          <Card title="Notificaciones" description="Elegí si querés escuchar alertas." className="space-y-3">
+            <BasicSetting icon={<Volume2 size={17} />} title="Sonido de alertas" description="Notificaciones y alertas de stock." checked={sonidoAlertas} onCheckedChange={setSonidoAlertas} />
+          </Card>
 
-          <DrawerSection title="Soporte técnico" icon={Headset}>
-            <ul className="space-y-2.5">
-              <li className="flex items-center justify-between gap-3">
-                <span className="text-[13px] font-semibold text-slate-700 dark:text-slate-200">
-                  Ivan Jaimes
-                </span>
-                <span className="text-[13px] tabular-nums text-slate-500 dark:text-slate-400">
-                  3813415138
-                </span>
-              </li>
-              <li className="flex items-center justify-between gap-3">
-                <span className="text-[13px] font-semibold text-slate-700 dark:text-slate-200">
-                  Christian Rios
-                </span>
-                <span className="text-[13px] tabular-nums text-slate-500 dark:text-slate-400">
-                  3816609713
-                </span>
-              </li>
+          <Card title="Soporte técnico" description="Contactanos si necesitás ayuda.">
+            <ul className="space-y-2 text-[13px]">
+              <li className="flex justify-between gap-3"><span className="font-medium text-slate-700 dark:text-slate-200">Ivan Jaimes</span><span className="tabular-nums text-slate-500 dark:text-slate-400">3813415138</span></li>
+              <li className="flex justify-between gap-3"><span className="font-medium text-slate-700 dark:text-slate-200">Christian Rios</span><span className="tabular-nums text-slate-500 dark:text-slate-400">3816609713</span></li>
             </ul>
-          </DrawerSection>
-        </div>
-      </aside>
+          </Card>
 
-      {verificandoApagado && (
-        <ModalContrasena
-          titulo="Desactivar pedido de contraseña"
-          subtitulo="Ingresá tu contraseña (o la maestra) para confirmar."
-          etiquetaCancelar="Cancelar"
-          onSubmit={async (contrasena) => {
-            const valida = await seguridadService.verifyPin(contrasena);
-            if (valida) {
-              setPedidoContrasenaHabilitado(false);
-              setMostrarFormulario(false);
-              setVerificandoApagado(false);
-            }
-            return valida;
-          }}
-          onCancelar={() => setVerificandoApagado(false)}
-        />
-      )}
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 dark:border-red-900/60 dark:text-red-400 dark:hover:bg-red-950/40"
+            icon={<LogOut size={16} />}
+            onClick={() => void exitApplication()}
+          >
+            Salir de la aplicación
+          </Button>
+        </div>
+
+        <footer className="shrink-0 border-t border-slate-200 bg-white px-4 py-3 text-center dark:border-slate-800 dark:bg-[#111827]">
+          <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Versión {packageInfo.version}</p>
+          <p className="mt-0.5 text-[11px] text-slate-400 dark:text-slate-500">© {new Date().getFullYear()} Panda Stock. Todos los derechos reservados.</p>
+        </footer>
+      </aside>
     </>
-  );
+  )
 }

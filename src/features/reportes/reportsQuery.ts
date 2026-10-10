@@ -280,6 +280,7 @@ export function pasoEje(cantidad: number): number {
 export const METODOS_AGRUPADOS: { metodo: MetodoPago; etiqueta: string }[] = [
   { metodo: 'efectivo', etiqueta: 'Efectivo' },
   { metodo: 'transferencia', etiqueta: 'Transferencia' },
+  { metodo: 'qr', etiqueta: 'QR' },
   { metodo: 'debito', etiqueta: 'Tarjeta' },
   { metodo: 'credito', etiqueta: 'Crédito' },
   { metodo: 'cuenta_corriente', etiqueta: 'Cuenta corriente' },

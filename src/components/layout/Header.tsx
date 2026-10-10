@@ -2,6 +2,7 @@ import { useState } from "react";
 import { NavLink } from "react-router-dom";
 import {
   Eye,
+  ImagePlus,
   Moon,
   Package,
   Pencil,
@@ -26,11 +27,11 @@ import {
   DropdownMenuTrigger,
 } from "../ui/DropdownMenu";
 import { BusinessSetupModal } from "../../features/onboarding/BusinessSetupModal";
+import { BusinessLogoPicker } from "../../features/onboarding/BusinessLogoPicker";
 import { CajaControl } from "../../features/caja/CajaControl";
 import { NotificacionesDropdown } from "../../features/notificaciones/NotificacionesDropdown";
 import { ImageLightbox } from "../ui/ImageLightbox";
 import pandaStockLogo from "../../assets/panda-stock-logo.svg";
-import { toast } from "sonner";
 
 interface MainNavItem {
   to: string;
@@ -112,6 +113,7 @@ export function Header() {
             ) : (
               <Tooltip key={to} content={label}>
                 <NavLink
+                  draggable={false}
                   to={to}
                   className={({ isActive }) =>
                     cn(
@@ -211,50 +213,54 @@ export function Header() {
         {/* Información del negocio */}
         {hayNegocio && (
           <>
-            <DropdownMenu placement="bottom-end">
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  aria-label="Opciones del negocio"
-                  className="flex cursor-pointer items-center gap-2.5 rounded-xl px-1 py-1 transition-colors duration-150 hover:bg-slate-100 dark:hover:bg-slate-800/60"
-                >
-                  {negocioLogoUrl && !logoCaido ? (
-                    <img
-                      key={negocioLogoUrl}
-                      src={negocioLogoUrl}
-                      alt="Logo del negocio"
-                      onError={() => setLogoFallidoUrl(negocioLogoUrl)}
-                      draggable={false}
-                      className="h-15.5 w-15.5 shrink-0 rounded-full border border-slate-200 object-cover object-center dark:border-slate-700"
-                    />
-                  ) : (
-                    <span className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                      <Store size={26} aria-hidden="true" />
-                    </span>
-                  )}
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent>
-                <DropdownMenuItem
-                  icon={<Eye size={16} />}
-                  onClick={() => {
-                    if (negocioLogoUrl) {
-                      setVerLogoAbierto(true);
-                    } else {
-                      toast.info("El negocio todavía no tiene un logo cargado");
-                    }
-                  }}
-                >
-                  Ver logo
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  icon={<Pencil size={16} />}
-                  onClick={() => setEditarNegocioAbierto(true)}
-                >
-                  Editar información
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <BusinessLogoPicker>
+              {({ openFilePicker }) => (
+                <DropdownMenu placement="bottom-end">
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label="Opciones del negocio"
+                      className="flex cursor-pointer items-center gap-2.5 rounded-xl px-1 py-1 transition-colors duration-150 hover:bg-slate-100 dark:hover:bg-slate-800/60"
+                    >
+                      {negocioLogoUrl && !logoCaido ? (
+                        <img
+                          key={negocioLogoUrl}
+                          src={negocioLogoUrl}
+                          alt="Logo del negocio"
+                          onError={() => setLogoFallidoUrl(negocioLogoUrl)}
+                          draggable={false}
+                          className="h-15.5 w-15.5 shrink-0 rounded-full border border-slate-200 object-cover object-center dark:border-slate-700"
+                        />
+                      ) : (
+                        <span className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                          <Store size={26} aria-hidden="true" />
+                        </span>
+                      )}
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent>
+                    <DropdownMenuItem
+                      icon={negocioLogoUrl ? <Eye size={16} /> : <ImagePlus size={16} />}
+                      onClick={() => {
+                        if (negocioLogoUrl) {
+                          setVerLogoAbierto(true);
+                        } else {
+                          openFilePicker();
+                        }
+                      }}
+                    >
+                      {negocioLogoUrl ? "Ver logo" : "Agregar logo"}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      icon={<Pencil size={16} />}
+                      onClick={() => setEditarNegocioAbierto(true)}
+                    >
+                      Editar información
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </BusinessLogoPicker>
           </>
         )}
       </div>

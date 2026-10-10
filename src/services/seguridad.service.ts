@@ -32,4 +32,12 @@ export const seguridadService = {
       throw new Error(toErrorMessage(error), { cause: error })
     }
   },
+
+  async quitarContrasena(pinActual: string): Promise<boolean> {
+    try {
+      return await window.electronAPI.seguridad.quitarContrasena(pinActual.trim())
+    } catch (error) {
+      throw new Error(toErrorMessage(error), { cause: error })
+    }
+  },
 }

@@ -13,7 +13,7 @@ import { CuentasCorrientesPage } from './Page'
  */
 export function CuentasCorrientesRoute() {
   const habilitada = useSettingsStore((estado) => estado.cuentaCorrienteHabilitada)
-  const { estado, unlock } = useGateContrasena()
+  const { estado, unlock } = useGateContrasena('cuentasCorrientes')
   const navigate = useNavigate()
 
   if (!habilitada) return <Navigate to="/pos" replace />

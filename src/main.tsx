@@ -3,11 +3,17 @@ import { createRoot } from 'react-dom/client'
 import './globals.css'
 import App from './App.tsx'
 import { ErrorBoundary } from './components/ui/ErrorBoundary.tsx'
+import { ConfiguracionInicialVentana } from './features/onboarding/ConfiguracionInicialVentana.tsx'
+
+// La ventana de configuración inicial carga el mismo index con `?vista=configuracion`
+// (electron/main.ts). Monta el wizard a pantalla completa en lugar de la app.
+const esConfiguracionInicial =
+  new URLSearchParams(window.location.search).get('vista') === 'configuracion'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>
-      <App />
+      {esConfiguracionInicial ? <ConfiguracionInicialVentana /> : <App />}
     </ErrorBoundary>
   </StrictMode>,
 )

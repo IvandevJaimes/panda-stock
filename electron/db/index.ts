@@ -70,7 +70,7 @@ export function initDatabase(): void {
   if (!negocioExistente) {
     database
       .insert(schema.negocio)
-      .values({ id: 1, nombre: null, logoPath: null, passwordHash: null, actualizadoEn: ahora })
+      .values({ id: 1, nombre: null, logoPath: null, passwordHash: null, creadoEn: null, actualizadoEn: ahora })
       .run()
   }
 }

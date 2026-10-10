@@ -1,11 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { RouterProvider } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import { router } from './app/router'
 import { useUIStore } from './stores/ui.store'
 import { useNegocioStore } from './stores/negocio.store'
 import { negocioService } from './services/negocio.service'
-import { BusinessSetupModal } from './features/onboarding/BusinessSetupModal'
 import { useScannerInit } from './hooks/useBarcodeScanner'
 import { StockAlertSound } from './components/ui/alerts/StockAlertSound'
 import { detectExpiryAlerts } from './services/expiryDetectionService'
@@ -13,8 +12,6 @@ import { detectExpiryAlerts } from './services/expiryDetectionService'
 function App() {
   const theme = useUIStore((state) => state.theme)
   const setNegocio = useNegocioStore((state) => state.setNegocio)
-  const [verificando, setVerificando] = useState(true)
-  const [onboardingAbierto, setOnboardingAbierto] = useState(false)
 
   // Inicialización global del lector de códigos de barras USB.
   useScannerInit()
@@ -30,18 +27,9 @@ function App() {
     negocioService
       .get()
       .then((negocio) => {
-        if (!activo) return
-        const configurado = Boolean(negocio?.nombre?.trim())
-        if (configurado && negocio) setNegocio(negocio)
-        setOnboardingAbierto(!configurado)
+        if (activo && negocio) setNegocio(negocio)
       })
-      .catch(() => {
-        if (activo) setOnboardingAbierto(false)
-      })
-      .finally(() => {
-        if (activo) setVerificando(false)
-      })
-
+      .catch(() => {})
     return () => {
       activo = false
     }
@@ -57,15 +45,6 @@ function App() {
     <>
       <StockAlertSound />
       <RouterProvider router={router} />
-      {!verificando && (
-        <BusinessSetupModal
-          isOpen={onboardingAbierto}
-          onSuccess={(negocio) => {
-            setNegocio(negocio)
-            setOnboardingAbierto(false)
-          }}
-        />
-      )}
       <Toaster position="bottom-left" theme={theme} richColors />
       <Toaster
         id="stock"

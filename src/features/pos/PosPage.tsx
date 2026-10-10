@@ -19,6 +19,7 @@ import {
   TrendingUp,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { useNavigate } from 'react-router-dom'
 import { cn } from '../../lib/cn'
 import { CustomSelect } from '../../components/ui/CustomSelect'
 import { Button } from '../../components/ui/Button'
@@ -26,6 +27,7 @@ import { Input } from '../../components/ui/Input'
 import { LoadingState } from '../../components/ui/LoadingState'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { CajaCerradaOverlay } from '../../components/ui/CajaCerradaOverlay'
+import { PosSinProductosOverlay } from './PosSinProductosOverlay'
 import { AbrirCajaModal } from '../caja/AbrirCajaModal'
 import { Tooltip } from '../../components/ui/Tooltip'
 import { MarcasModal, type ConteoMarca } from '../../components/inventory/MarcasModal'
@@ -97,6 +99,7 @@ const modAtajo = (tecla: string, shift = false) =>
 const ANCHO_MOBILE = 1024
 
 export function PosPage() {
+  const navigate = useNavigate()
   const [productosCrudos, setProductosCrudos] = useState<ProductoConLoteActivo[]>([])
   const [categorias, setCategorias] = useState<Categoria[]>([])
   const [marcas, setMarcas] = useState<Marca[]>([])
@@ -124,6 +127,10 @@ export function PosPage() {
   const rehidratar = usePosTicketsStore((estado) => estado.rehidratar)
 
   const tarjetaHabilitada = useSettingsStore((estado) => estado.tarjetaHabilitada)
+  const transferenciaHabilitada = useSettingsStore(
+    (estado) => estado.transferenciaHabilitada,
+  )
+  const qrHabilitado = useSettingsStore((estado) => estado.qrHabilitado)
   const cuentaCorrienteHabilitada = useSettingsStore(
     (estado) => estado.cuentaCorrienteHabilitada,
   )
@@ -145,9 +152,11 @@ export function PosPage() {
     () =>
       metodosHabilitados({
         tarjetaHabilitada,
+        transferenciaHabilitada,
+        qrHabilitado,
         cuentaCorrienteHabilitada,
       }),
-    [tarjetaHabilitada, cuentaCorrienteHabilitada],
+    [tarjetaHabilitada, transferenciaHabilitada, qrHabilitado, cuentaCorrienteHabilitada],
   )
 
   // Con control por caja activo, sin caja abierta no hay venta: el empleado
@@ -584,6 +593,18 @@ export function PosPage() {
 
   const grillaCerrada = ventasPorCajas && cajaCargada && !caja
 
+  // Sin un solo producto activo en el catálogo la pantalla entera de la izquierda
+  // pierde sentido: no hay nada que buscar ni filtrar. En vez del grid con su
+  // mensaje de "no coincide con la búsqueda" (que sería falso, nadie buscó), se
+  // tapa la grilla completa como con la caja cerrada y se ofrece crear el primero.
+  const sinProductos = !errorProductos && catalogo.length === 0
+
+  const irANuevoProducto = useCallback(() => {
+    // `?nuevo=1` es el handoff de estilo al de la campanita (`?q=`): la página
+    // de Inventario escucha el parámetro al montar y abre el formulario de alta.
+    navigate('/inventory?nuevo=1')
+  }, [navigate])
+
   /**
    * Candado del cobro en un ref y no en el estado: dos Enters en el mismo tick
    * llaman al MISMO closure, que todavía ve `cobrando` en `false` porque React no
@@ -769,6 +790,8 @@ export function PosPage() {
         <section className="relative flex min-w-0 min-h-0 flex-col overflow-hidden">
           {grillaCerrada ? (
             <CajaCerradaOverlay onAbrirCaja={() => setAbrirCajaAbierto(true)} />
+          ) : sinProductos ? (
+            <PosSinProductosOverlay onNuevoProducto={irANuevoProducto} />
           ) : (
             <>
               <div className="mb-4 flex shrink-0 flex-col gap-3">

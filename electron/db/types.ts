@@ -2,7 +2,13 @@ export type TipoVenta = 'unidad' | 'caja' | 'combo'
 export type UnidadMedida = 'unidad' | 'ml' | 'g'
 export type EstadoVenta = 'completada' | 'anulada'
 export type EstadoCaja = 'abierta' | 'cerrada'
-export type MetodoPago = 'efectivo' | 'transferencia' | 'debito' | 'credito' | 'cuenta_corriente'
+export type MetodoPago =
+  | 'efectivo'
+  | 'transferencia'
+  | 'qr'
+  | 'debito'
+  | 'credito'
+  | 'cuenta_corriente'
 export type TipoMovimientoCuentaCorriente = 'cargo' | 'abono' | 'devolucion' | 'reintegro'
 export type TipoTarifa = 'minorista' | 'mayoreo'
 export type TipoMovimientoStock = 'entrada' | 'venta' | 'ajuste_positivo' | 'ajuste_negativo' | 'merma' | 'devolucion'
@@ -12,6 +18,7 @@ export type Negocio = {
   id: number
   nombre: string | null
   logoPath: string | null
+  creadoEn: string | null
   actualizadoEn: string
 }
 
@@ -191,6 +198,7 @@ export type CajaSummary = {
   totalEfectivo: number
   totalEgresosEfectivo: number
   totalTransferencia: number
+  totalQr?: number
   totalTarjeta: number
   /** Ventas del turno cobradas en cuenta corriente. No son plata en la gaveta. */
   totalCuentaCorriente: number
@@ -274,7 +282,7 @@ export type VentaResult = {
 export type AnularVentaInput = {
   ventaId: number
   motivo: string
-  pin: string
+  pin?: string
 }
 
 export type ResultadoAnulacion = {
@@ -320,7 +328,7 @@ export type VentaDevolucionDetalle = {
 }
 
 export type ProcesarDevolucionInput = {
-  pin: string
+  pin?: string
   ventaId: number
 }
 

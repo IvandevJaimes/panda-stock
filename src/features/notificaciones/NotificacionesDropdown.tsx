@@ -127,20 +127,21 @@ function FilaNotificacion({
         </p>
       </div>
 
-      <button
-        type="button"
-        aria-label={`Descartar notificación de ${notificacion.producto}`}
-        title="Descartar"
-        onClick={handleEliminar}
-        className={cn(
-          'absolute top-1/2 -translate-y-1/2 right-2 grid h-6 w-6 place-items-center rounded-lg cursor-pointer',
-          'text-slate-400 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200',
-          'hover:bg-black/5 dark:hover:bg-white/10 active:scale-95 transition-all',
-          'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-slate-400',
-        )}
-      >
-        <X size={13} aria-hidden="true" />
-      </button>
+      <Tooltip content="Descartar" placement="left">
+        <button
+          type="button"
+          aria-label={`Descartar notificación de ${notificacion.producto}`}
+          onClick={handleEliminar}
+          className={cn(
+            'absolute top-1/2 -translate-y-1/2 right-2 grid h-6 w-6 place-items-center rounded-lg cursor-pointer',
+            'text-slate-400 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200',
+            'hover:bg-black/5 dark:hover:bg-white/10 active:scale-95 transition-all',
+            'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-slate-400',
+          )}
+        >
+          <X size={13} aria-hidden="true" />
+        </button>
+      </Tooltip>
     </div>
   )
 }

@@ -30,6 +30,7 @@ import { useSearchParams } from "react-router-dom";
 import { cn } from "../../lib/cn";
 import { Button } from "../../components/ui/Button";
 import { ConfirmModal } from "../../components/ui/ConfirmModal";
+import { ModalContrasena } from "../seguridad/ModalContrasena";
 import { CreateCategoryModal } from "../../components/inventory/CreateCategoryModal";
 import { EditCategoryModal } from "../../components/inventory/EditCategoryModal";
 import { CreateProductModal } from "./CreateProductModal";
@@ -71,6 +72,8 @@ import {
 import { ContextMenu, ContextMenuItem } from "../../components/ui/ContextMenu";
 import { Tooltip } from "../../components/ui/Tooltip";
 import { productoEnTicketAbierto } from "../../stores/pos-tickets.store";
+import { useSettingsStore } from "../../stores/settings.store";
+import { seguridadService } from "../../services/seguridad.service";
 import { productosService } from "../../services/productos.service";
 import { marcasService } from "../../services/marcas.service";
 import { lotesService } from "../../services/lotes.service";
@@ -256,7 +259,9 @@ export function InventoryPage() {
   const [deletingCategory, setDeletingCategory] = useState<Categoria | null>(
     null,
   );
+  const [categoriaAEliminarProtegida, setCategoriaAEliminarProtegida] = useState<Categoria | null>(null);
   const [deletingProduct, setDeletingProduct] = useState<Producto | null>(null);
+  const [productoAEliminarProtegido, setProductoAEliminarProtegido] = useState<Producto | null>(null);
   /** Menú contextual (click derecho) sobre una card: producto + coordenadas
    *  del cursor en el viewport. Un único panel para toda la grilla. */
   const [menuContextual, setMenuContextual] = useState<{
@@ -294,6 +299,17 @@ export function InventoryPage() {
     setSelectedCategory("all");
     setPaginaActual(1);
     setCardFoco(null);
+  }
+
+  // Handoff desde el POS: `?nuevo=1` abre el formulario de alta apenas llega.
+  // Mismo patrón "state desde props" que el `?q=` — el parámetro queda en la URL
+  // como deep link, y el flag evita reabrir el modal en cada render.
+  const nuevoDesdeUrl = params.get("nuevo") === "1";
+  const [nuevoAplicado, setNuevoAplicado] = useState(false);
+  if (nuevoDesdeUrl && !nuevoAplicado) {
+    setNuevoAplicado(true);
+    setBarcodeEscaneado(null);
+    setIsCreateProductOpen(true);
   }
 
   const obtenerProductos = useCallback(async (): Promise<
@@ -1305,6 +1321,10 @@ export function InventoryPage() {
         onClose={() => setDeletingCategory(null)}
         onConfirm={async () => {
           if (!deletingCategory) return;
+          if (useSettingsStore.getState().proteccionesSeguridad.eliminarCategorias) {
+            setCategoriaAEliminarProtegida(deletingCategory);
+            return;
+          }
           try {
             await removeCategory(deletingCategory.id);
             if (selectedCategory === String(deletingCategory.id)) {
@@ -1325,11 +1345,38 @@ export function InventoryPage() {
         description={`¿Estás seguro de que deseas eliminar la categoría "${deletingCategory?.nombre}"? Esta acción no se puede deshacer.`}
       />
 
+      {categoriaAEliminarProtegida && (
+        <ModalContrasena
+          titulo="Autorizar eliminación"
+          subtitulo={`Ingresá la contraseña para eliminar “${categoriaAEliminarProtegida.nombre}”.`}
+          etiquetaCancelar="Cancelar"
+          etiquetaConfirmar="Autorizar y eliminar"
+          confirmarVariant="danger"
+          onSubmit={(contrasena) => seguridadService.verifyPin(contrasena)}
+          onSuccess={async () => {
+            const categoria = categoriaAEliminarProtegida;
+            await removeCategory(categoria.id);
+            if (selectedCategory === String(categoria.id)) {
+              setSelectedCategory("all");
+              setPaginaActual(1);
+            }
+            setCategoriaAEliminarProtegida(null);
+            toast.success(`Categoría "${categoria.nombre}" eliminada`);
+          }}
+          onCancelar={() => setCategoriaAEliminarProtegida(null)}
+        />
+      )}
+
       <ConfirmModal
         isOpen={deletingProduct !== null}
         onClose={() => setDeletingProduct(null)}
         onConfirm={async () => {
           if (!deletingProduct) return;
+          const protecciones = useSettingsStore.getState().proteccionesSeguridad;
+          if (protecciones.eliminarProductos || protecciones.eliminarLotes) {
+            setProductoAEliminarProtegido(deletingProduct);
+            return;
+          }
           try {
             await productosService.delete(deletingProduct.id);
             setProductForQuickActions((prev) =>
@@ -1352,6 +1399,27 @@ export function InventoryPage() {
         title="Eliminar producto"
         description={`¿Estás seguro de que deseas eliminar "${deletingProduct?.nombre}"? Se eliminarán sus lotes. Los movimientos y las ventas históricas se conservan para auditoría, pero quedan desvinculados del producto. Esta acción no se puede deshacer.`}
       />
+
+      {productoAEliminarProtegido && (
+        <ModalContrasena
+          titulo="Autorizar eliminación"
+          subtitulo={`Ingresá la contraseña para eliminar “${productoAEliminarProtegido.nombre}”.`}
+          etiquetaCancelar="Cancelar"
+          etiquetaConfirmar="Autorizar y eliminar"
+          confirmarVariant="danger"
+          onSubmit={(contrasena) => seguridadService.verifyPin(contrasena)}
+          onSuccess={async () => {
+            const producto = productoAEliminarProtegido;
+            await productosService.delete(producto.id);
+            setProductForQuickActions((prev) => prev?.id === producto.id ? null : prev);
+            setLotesProducto((prev) => prev?.id === producto.id ? null : prev);
+            setProductoAEliminarProtegido(null);
+            toast.success(`Producto "${producto.nombre}" eliminado`);
+            void refreshProductos();
+          }}
+          onCancelar={() => setProductoAEliminarProtegido(null)}
+        />
+      )}
 
       <CreateProductModal
         isOpen={isCreateProductOpen}

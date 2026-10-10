@@ -61,6 +61,7 @@ declare global {
         changePin: (pinActual: string, pinNuevo: string) => Promise<boolean>
         tieneContrasena: () => Promise<boolean>
         crearContrasena: (pinNuevo: string) => Promise<boolean>
+        quitarContrasena: (pinActual: string) => Promise<boolean>
       }
       negocio: {
         get: () => Promise<Negocio | null>
@@ -161,6 +162,10 @@ declare global {
         onPedirCierre: (callback: () => void) => void
         /** Confirma que la caja ya se cerró y deja salir. */
         salir: () => Promise<void>
+      }
+      configuracion: {
+        /** El wizard de primer inicio terminó; cierra la ventana y abre la app. */
+        completada: () => Promise<void>
       }
     }
   }

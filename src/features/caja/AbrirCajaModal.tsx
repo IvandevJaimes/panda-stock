@@ -271,7 +271,7 @@ export function AbrirCajaModal({ isOpen, onClose }: AbrirCajaModalProps) {
             <Button
               key={monto}
               type="button"
-              variant="secondary"
+              variant="outline"
               size="sm"
               className="rounded-lg border border-slate-200/80 bg-white/90 px-2.5 py-1 text-xs font-medium shadow-sm transition-all hover:bg-slate-50 focus-visible:ring-slate-300 dark:border-slate-700/80 dark:bg-slate-800/90 dark:hover:bg-slate-700"
               onClick={() => {

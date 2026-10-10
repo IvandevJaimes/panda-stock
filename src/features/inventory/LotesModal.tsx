@@ -16,9 +16,12 @@ import { buildAssetUrl } from "../../lib/assets";
 import { getProductPlaceholder } from "../../lib/productPlaceholder";
 import { useSrcConFallback } from "../../hooks/useSrcConFallback";
 import { lotesService } from "../../services/lotes.service";
+import { seguridadService } from "../../services/seguridad.service";
+import { useSettingsStore } from "../../stores/settings.store";
 import { Button } from "../../components/ui/Button";
 import { ConfirmModal } from "../../components/ui/ConfirmModal";
 import { Modal } from "../../components/ui/Modal";
+import { ModalContrasena } from "../seguridad/ModalContrasena";
 import { TabsModal } from "../../components/ui/TabsModal";
 import { Tooltip } from "../../components/ui/Tooltip";
 import { ConfirmarPerdidaModal } from "./ConfirmarPerdidaModal";
@@ -122,6 +125,7 @@ export function LotesModal({
   const [lotes, setLotes] = useState<Lote[] | null>(null);
   const [quickActionsLote, setQuickActionsLote] = useState<Lote | null>(null);
   const [deletingLote, setDeletingLote] = useState<Lote | null>(null);
+  const [loteAEliminarProtegido, setLoteAEliminarProtegido] = useState<Lote | null>(null);
   const [agregarInventarioAbierto, setAgregarInventarioAbierto] =
     useState(false);
   const [submittingInventario, setSubmittingInventario] = useState(false);
@@ -180,6 +184,10 @@ export function LotesModal({
 
   const handleDeleteLote = async () => {
     if (!deletingLote) return;
+    if (useSettingsStore.getState().proteccionesSeguridad.eliminarLotes) {
+      setLoteAEliminarProtegido(deletingLote);
+      return;
+    }
     try {
       await lotesService.delete(deletingLote.id);
       toast.success("Lote eliminado correctamente");
@@ -464,6 +472,25 @@ export function LotesModal({
         }
         confirmText="Eliminar"
       />
+
+      {loteAEliminarProtegido && (
+        <ModalContrasena
+          titulo="Autorizar eliminación"
+          subtitulo="Ingresá la contraseña para eliminar este lote."
+          etiquetaCancelar="Cancelar"
+          etiquetaConfirmar="Autorizar y eliminar"
+          confirmarVariant="danger"
+          onSubmit={(contrasena) => seguridadService.verifyPin(contrasena)}
+          onSuccess={async () => {
+            const lote = loteAEliminarProtegido;
+            await lotesService.delete(lote.id);
+            setLoteAEliminarProtegido(null);
+            toast.success("Lote eliminado correctamente");
+            refreshData();
+          }}
+          onCancelar={() => setLoteAEliminarProtegido(null)}
+        />
+      )}
 
       <ConfirmarPerdidaModal
         isOpen={perdidaSeleccion !== null}

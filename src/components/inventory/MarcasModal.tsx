@@ -7,10 +7,13 @@ import { CustomSelect } from "../ui/CustomSelect";
 import { Tooltip } from "../ui/Tooltip";
 import { EmptyStateCompact } from "../ui/EmptyStateCompact";
 import { ConfirmModal } from "../ui/ConfirmModal";
+import { ModalContrasena } from "../../features/seguridad/ModalContrasena";
 import { Pagination } from "../ui/Pagination";
 import { CreateBrandModal } from "./CreateBrandModal";
 import { EditBrandModal } from "./EditBrandModal";
 import { marcasService } from "../../services/marcas.service";
+import { seguridadService } from "../../services/seguridad.service";
+import { useSettingsStore } from "../../stores/settings.store";
 import type { Marca, ProductoConLoteActivo } from "../../../electron/db/types";
 
 // ---------------------------------------------------------------------------
@@ -70,6 +73,7 @@ export function MarcasModal({ isOpen, onClose, marcas, productos, onChanged, onS
   const [creandoMarca, setCreandoMarca] = useState(false);
   const [editandoMarca, setEditandoMarca] = useState<Marca | null>(null);
   const [eliminando, setEliminando] = useState<Marca | null>(null);
+  const [marcaAEliminarProtegida, setMarcaAEliminarProtegida] = useState<Marca | null>(null);
   const [pagina, setPagina] = useState(1);
 
   // Reset de la página al reabrir el modal: ajuste durante el render (patrón
@@ -154,6 +158,10 @@ export function MarcasModal({ isOpen, onClose, marcas, productos, onChanged, onS
 
   const confirmarEliminar = async () => {
     if (!eliminando) return;
+    if (useSettingsStore.getState().proteccionesSeguridad.eliminarMarcas) {
+      setMarcaAEliminarProtegida(eliminando);
+      return;
+    }
     try {
       await marcasService.delete(eliminando.id);
       setEliminando(null);
@@ -396,6 +404,24 @@ export function MarcasModal({ isOpen, onClose, marcas, productos, onChanged, onS
               }
               confirmText="Eliminar"
             />
+            {marcaAEliminarProtegida && (
+              <ModalContrasena
+                titulo="Autorizar eliminación"
+                subtitulo={`Ingresá la contraseña para eliminar “${marcaAEliminarProtegida.nombre}”.`}
+                etiquetaCancelar="Cancelar"
+                etiquetaConfirmar="Autorizar y eliminar"
+                confirmarVariant="danger"
+                onSubmit={(contrasena) => seguridadService.verifyPin(contrasena)}
+                onSuccess={async () => {
+                  const marca = marcaAEliminarProtegida;
+                  await marcasService.delete(marca.id);
+                  setMarcaAEliminarProtegida(null);
+                  onChanged?.();
+                  toast.success(`Marca "${marca.nombre}" eliminada`);
+                }}
+                onCancelar={() => setMarcaAEliminarProtegida(null)}
+              />
+            )}
           </>
         )}
       </div>

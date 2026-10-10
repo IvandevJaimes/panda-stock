@@ -3,6 +3,7 @@ import { Database, Loader2, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '../../components/ui/Button'
 import { ConfirmModal } from '../../components/ui/ConfirmModal'
+import { Tooltip } from '../../components/ui/Tooltip'
 import { datosPruebaService } from '../../services/reportes.service'
 
 /**
@@ -85,16 +86,17 @@ export function BotonDatosPrueba({ alCambiar }: { alCambiar: () => void }) {
         </Button>
       )}
 
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => setConfirmaGenerar(true)}
-        disabled={ocupado}
-        title="Genera ventas, mermas y cortes de caja de ejemplo para ver los reportes con datos"
-      >
-        <Database size={14} />
-        Datos de prueba
-      </Button>
+      <Tooltip content="Genera ventas, mermas y cortes de caja de ejemplo para ver los reportes con datos">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setConfirmaGenerar(true)}
+          disabled={ocupado}
+        >
+          <Database size={14} />
+          Datos de prueba
+        </Button>
+      </Tooltip>
 
       <ConfirmModal
         isOpen={confirmaGenerar}

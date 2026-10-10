@@ -9,12 +9,16 @@ type UIState = {
   activeModal: string | null
   /** Estado del sidebar/drawer colapsable desde la derecha */
   isRightSidebarOpen: boolean
+  /** Modal de configuración avanzada: overlay sobre la pantalla actual, no una ruta. */
+  isSettingsOpen: boolean
   setTheme: (theme: Theme) => void
   toggleTheme: () => void
   openModal: (id: string) => void
   closeModal: () => void
   toggleRightSidebar: () => void
   closeRightSidebar: () => void
+  openSettings: () => void
+  closeSettings: () => void
 }
 
 function applyTheme(theme: Theme) {
@@ -29,6 +33,7 @@ export const useUIStore = create<UIState>()(
       theme: 'dark',
       activeModal: null,
       isRightSidebarOpen: false,
+      isSettingsOpen: false,
       setTheme: (theme) => {
         applyTheme(theme)
         set({ theme })
@@ -42,6 +47,8 @@ export const useUIStore = create<UIState>()(
       closeModal: () => set({ activeModal: null }),
       toggleRightSidebar: () => set((state) => ({ isRightSidebarOpen: !state.isRightSidebarOpen })),
       closeRightSidebar: () => set({ isRightSidebarOpen: false }),
+      openSettings: () => set({ isSettingsOpen: true }),
+      closeSettings: () => set({ isSettingsOpen: false }),
     }),
     {
       name: 'panda-ui-storage',

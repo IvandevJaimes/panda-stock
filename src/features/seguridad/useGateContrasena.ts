@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useSettingsStore } from '../../stores/settings.store'
 import { seguridadService } from '../../services/seguridad.service'
+import type { ClaveProteccion } from '../../types/security'
 
 export type EstadoGate = 'chequeando' | 'acceso' | 'bloqueado'
 
@@ -9,16 +10,18 @@ export interface UseGateContrasena {
   unlock: () => void
 }
 
-export function useGateContrasena(): UseGateContrasena {
+export function useGateContrasena(proteccion: ClaveProteccion): UseGateContrasena {
+  const protegido = useSettingsStore((state) => state.proteccionesSeguridad[proteccion])
   const [estado, setEstado] = useState<EstadoGate>('chequeando')
   const [unlocked, setUnlocked] = useState(false)
 
   useEffect(() => {
-    const habilitado = useSettingsStore.getState().pedidoContrasenaHabilitado
-    if (!habilitado) {
-      const timer = window.setTimeout(() => setEstado('acceso'))
-      return () => window.clearTimeout(timer)
+    setUnlocked(false)
+    if (!protegido) {
+      setEstado('acceso')
+      return
     }
+    setEstado('chequeando')
 
     let cancelado = false
     seguridadService
@@ -35,7 +38,7 @@ export function useGateContrasena(): UseGateContrasena {
     return () => {
       cancelado = true
     }
-  }, [])
+  }, [proteccion, protegido])
 
   return {
     estado: unlocked ? 'acceso' : estado,

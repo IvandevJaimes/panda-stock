@@ -19,6 +19,7 @@ import {
 import {
   changePin,
   createContrasena,
+  removeContrasena,
   closeCaja,
   createAjusteStock,
   crearMovimientoStock,
@@ -122,6 +123,11 @@ const isDev = !app.isPackaged;
  * lectura, y sin este flag el cierre volvería a interceptarse a sí mismo.
  */
 let salidaPermitida = false;
+
+// `configuracionCompletada` evita abrir la ventana principal dos veces cuando
+// el wizard termina (maneja + `closed`).
+let ventanaConfiguracion: BrowserWindow | null = null;
+let configuracionCompletada = false;
 
 /**
  * Interrumpe el cierre y le pide al renderer que muestre el aviso. Si no queda
@@ -229,6 +235,66 @@ function createWindow() {
   }
 }
 
+/**
+ * Ventana aparte del primer inicio: bienvenida + pasos de configuración.
+ * No es un modal: es una ventana propia, más chica, que se reemplaza por la
+ * ventana principal apenas el wizard confirma la configuración.
+ */
+function createSetupWindow() {
+  if (ventanaConfiguracion && !ventanaConfiguracion.isDestroyed()) {
+    ventanaConfiguracion.focus();
+    return;
+  }
+
+  configuracionCompletada = false;
+
+  const win = new BrowserWindow({
+    width: 800,
+    height: 680,
+    minWidth: 560,
+    minHeight: 560,
+    resizable: true,
+    autoHideMenuBar: true,
+    title: "Panda Stock — Configuración inicial",
+    webPreferences: {
+      preload: path.join(__dirname, "../dist-electron/preload.cjs"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+
+  win.setMenu(null);
+
+  win.on("closed", () => {
+    ventanaConfiguracion = null;
+    if (configuracionCompletada) return;
+    if (negocioConfigurado()) createWindow();
+    else app.quit();
+  });
+
+  win.webContents.on("console-message", (_evento, nivel, mensaje, linea, origen) => {
+    escribirLog("renderer-setup", `[${nivel}] ${mensaje} (${origen}:${linea})`);
+  });
+
+  // El renderer detecta `?vista=configuracion` y monta la ventana de inicio
+  // en lugar de la app completa (src/main.tsx).
+  if (isDev) {
+    win.loadURL("http://localhost:5173/?vista=configuracion");
+  } else {
+    win.loadFile(path.join(__dirname, "../dist/index.html"), {
+      query: { vista: "configuracion" },
+    });
+  }
+
+  ventanaConfiguracion = win;
+}
+
+function negocioConfigurado(): boolean {
+  const nombre = getNegocio()?.nombre;
+  return typeof nombre === "string" && nombre.trim().length >= 2;
+}
+
 function registerIpcHandlers() {
   ipcMain.handle("seguridad:verify-pin", (_event, pin: string) =>
     verifyPin(pin),
@@ -241,6 +307,9 @@ function registerIpcHandlers() {
   ipcMain.handle("seguridad:tiene-contrasena", () => tieneContrasena());
   ipcMain.handle("seguridad:crear-contrasena", (_event, pinNuevo: string) =>
     createContrasena(pinNuevo),
+  );
+  ipcMain.handle("seguridad:quitar-contrasena", (_event, pinActual: string) =>
+    removeContrasena(pinActual),
   );
 
   ipcMain.handle("negocio:get", () => getNegocio());
@@ -256,9 +325,22 @@ function registerIpcHandlers() {
     let logoPath: string | null | undefined;
     if (data.logo) {
       logoPath = saveLogoFile(data.logo.data, data.logo.extension);
+    } else if (data.logo === null) {
+      logoPath = null;
     }
 
     return updateNegocio({ nombre, logoPath });
+  });
+
+  // El wizard de primer inicio terminó: se abre la ventana principal y se
+  // cierra la de configuración.
+  ipcMain.handle("configuracion:completada", () => {
+    if (configuracionCompletada) return;
+    configuracionCompletada = true;
+    createWindow();
+    if (ventanaConfiguracion && !ventanaConfiguracion.isDestroyed()) {
+      ventanaConfiguracion.close();
+    }
   });
 
   ipcMain.handle("empleados:get-all", () => getEmpleados());
@@ -450,11 +532,19 @@ app.whenReady().then(() => {
   // Remueve el menú de aplicación global (también en desarrollo).
   Menu.setApplicationMenu(null);
 
-  createWindow();
+  if (negocioConfigurado()) {
+    createWindow();
+  } else {
+    createSetupWindow();
+  }
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
+      if (negocioConfigurado()) {
+        createWindow();
+      } else {
+        createSetupWindow();
+      }
     }
   });
 });

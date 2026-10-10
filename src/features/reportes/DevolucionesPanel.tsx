@@ -4,7 +4,6 @@ import { toast } from 'sonner'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { Modal } from '../../components/ui/Modal'
-import { ModalContrasena } from '../seguridad/ModalContrasena'
 import {
   Table,
   TableBody,
@@ -32,6 +31,7 @@ const POR_PAGINA = 10
 const ETIQUETAS_METODO: Record<MetodoPago, string> = {
   efectivo: 'Efectivo',
   transferencia: 'Transferencia',
+  qr: 'QR',
   debito: 'Débito',
   credito: 'Crédito',
   cuenta_corriente: 'Cuenta corriente',
@@ -62,7 +62,6 @@ export function DevolucionesPanel({ desde, hasta, onSuccess }: DevolucionesPanel
     ventaId: number
     detalle: VentaDevolucionDetalle
   } | null>(null)
-  const [pedirPin, setPedirPin] = useState(false)
   const resultadoPendiente = useRef<ResultadoDevolucion | null>(null)
 
   const filtroActual = `${vista}|${desde}|${hasta}|${buscar}`
@@ -138,14 +137,12 @@ export function DevolucionesPanel({ desde, hasta, onSuccess }: DevolucionesPanel
   const importeEstimado = detalle?.venta.total ?? 0
 
   const cerrarTicket = () => {
-    setPedirPin(false)
     setVentaId(null)
   }
 
   const completarDevolucion = () => {
     const resultado = resultadoPendiente.current
     resultadoPendiente.current = null
-    setPedirPin(false)
     cerrarTicket()
     setRecarga((valor) => valor + 1)
     onSuccess()
@@ -156,14 +153,15 @@ export function DevolucionesPanel({ desde, hasta, onSuccess }: DevolucionesPanel
     }
   }
 
-  const enviarDevolucion = async (pin: string): Promise<boolean> => {
-    if (!detalle) return false
-    const resultado = await devolucionesService.process({
-      pin,
-      ventaId: detalle.venta.id,
+  const confirmarDevolucion = () => {
+    if (!detalle) return
+    void devolucionesService.process({ ventaId: detalle.venta.id }).then((resultado) => {
+      resultadoPendiente.current = resultado
+      if (resultado) completarDevolucion()
+      else toast.error('No se pudo completar la devolución')
+    }).catch((error: unknown) => {
+      toast.error(error instanceof Error ? error.message : 'No se pudo completar la devolución')
     })
-    resultadoPendiente.current = resultado
-    return resultado !== null
   }
 
   const paginaMaxima = Math.max(
@@ -260,7 +258,7 @@ export function DevolucionesPanel({ desde, hasta, onSuccess }: DevolucionesPanel
             <Button variant="outline" onClick={cerrarTicket}>Cancelar</Button>
             <Button
               disabled={!detalle || detalle.items.length === 0 || importeEstimado <= 0}
-              onClick={() => setPedirPin(true)}
+              onClick={confirmarDevolucion}
             >
               Devolver ticket completo · {formatearMoneda(importeEstimado)}
             </Button>
@@ -310,16 +308,6 @@ export function DevolucionesPanel({ desde, hasta, onSuccess }: DevolucionesPanel
         )}
       </Modal>
 
-      {pedirPin && (
-        <ModalContrasena
-          titulo="Autorizar devolución"
-          subtitulo="Ingresá la contraseña vigente o la maestra para completar el reintegro."
-          etiquetaCancelar="Volver al ticket"
-          onSubmit={enviarDevolucion}
-          onSuccess={completarDevolucion}
-          onCancelar={() => setPedirPin(false)}
-        />
-      )}
     </section>
   )
 }

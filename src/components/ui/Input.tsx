@@ -56,6 +56,8 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
               'px-4 py-2.5 w-full rounded-xl border bg-white text-sm text-slate-900 outline-none transition-colors duration-150 placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 dark:bg-[#111827] dark:text-slate-100 dark:placeholder:text-slate-500',
               leftIcon && 'pl-10',
               (rightIcon || rightAction || mostrarClear) && 'pr-10',
+              props.type === 'number' &&
+                '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none',
               error ? 'border-red-500' : 'border-slate-200 dark:border-slate-800',
               className,
             )}

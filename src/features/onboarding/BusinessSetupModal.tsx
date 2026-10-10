@@ -29,6 +29,7 @@ export function BusinessSetupModal({
   initialLogoUrl,
 }: BusinessSetupModalProps) {
   const [guardando, setGuardando] = useState(false)
+  const [logoEliminado, setLogoEliminado] = useState(false)
   const { register, control, handleSubmit, formState, setError, clearErrors, reset } =
     useForm<BusinessSetupValues>({
       defaultValues: { nombre: '', logo: null },
@@ -37,6 +38,11 @@ export function BusinessSetupModal({
   useEffect(() => {
     if (isOpen) reset({ nombre: initialNombre ?? '', logo: null })
   }, [isOpen, initialNombre, reset])
+
+  const cerrar = () => {
+    setLogoEliminado(false)
+    onClose?.()
+  }
 
   const submit = handleSubmit(async (values) => {
     clearErrors()
@@ -54,11 +60,12 @@ export function BusinessSetupModal({
     try {
       const negocio = await negocioService.setup({
         nombre: parsed.data.nombre.trim(),
-        logo: logo
-          ? { data: await logo.arrayBuffer(), extension: MIME_A_EXTENSION[logo.type] ?? 'png' }
-          : null,
+        ...(logo
+          ? { logo: { data: await logo.arrayBuffer(), extension: MIME_A_EXTENSION[logo.type] ?? 'png' } }
+          : logoEliminado ? { logo: null } : {}),
       })
       toast.success('Negocio configurado correctamente')
+      setLogoEliminado(false)
       onSuccess(negocio)
     } catch {
       toast.error('No se pudo guardar la configuración, intentá de nuevo')
@@ -72,7 +79,7 @@ export function BusinessSetupModal({
   return (
     <Modal
       isOpen={isOpen}
-      onClose={onClose ?? (() => {})}
+      onClose={cerrar}
       closeable={closable}
       title={closable ? 'Editar información del negocio' : 'Configura tu negocio'}
       subtitle="Estos datos se muestran en la barra superior"
@@ -116,9 +123,10 @@ export function BusinessSetupModal({
           name="logo"
           render={({ field }) => (
             <ImageDropzone
-              value={field.value ?? initialLogoUrl ?? null}
+              value={field.value ?? (logoEliminado ? null : initialLogoUrl ?? null)}
               onChange={(file) => {
                 clearErrors('logo')
+                setLogoEliminado(file === null)
                 field.onChange(file)
               }}
               error={formState.errors.logo?.message}

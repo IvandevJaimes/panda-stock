@@ -176,8 +176,10 @@ export function CerrarCajaModal({ isOpen, caja, onClose, alCerrar }: CerrarCajaM
                 valor={formatearMoneda(resumen.totalEgresosEfectivo)}
               />
               <ResumenFila
-                termino="Tarjeta + transf."
-                valor={formatearMoneda(resumen.totalTarjeta + resumen.totalTransferencia)}
+                termino="Tarjeta + transf. + QR"
+                valor={formatearMoneda(
+                  resumen.totalTarjeta + resumen.totalTransferencia + (resumen.totalQr ?? 0),
+                )}
               />
               <ResumenFila
                 termino="Esperado en gaveta"

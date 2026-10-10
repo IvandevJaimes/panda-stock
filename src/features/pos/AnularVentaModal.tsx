@@ -4,6 +4,7 @@ import { Modal } from '../../components/ui/Modal'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { CustomSelect } from '../../components/ui/CustomSelect'
+import { ConfirmModal } from '../../components/ui/ConfirmModal'
 import { formatearMoneda } from './posQuery'
 import { buildAssetUrl } from '../../lib/assets'
 import { getProductPlaceholder } from '../../lib/productPlaceholder'
@@ -23,6 +24,7 @@ const OPCIONES_MOTIVO = MOTIVOS_PREDEFINIDOS.map((motivo) => ({ value: motivo, l
 const ETIQUETAS_METODO: Record<MetodoPago, string> = {
   efectivo: 'Efectivo',
   transferencia: 'Transferencia',
+  qr: 'QR',
   debito: 'Tarjeta',
   credito: 'Crédito',
   cuenta_corriente: 'Cuenta corriente',
@@ -58,6 +60,7 @@ function ItemMiniImagen({ item }: { item: VentaHistorial['items'][number] }) {
 type AnularVentaModalProps = {
   venta: VentaHistorial | null
   isOpen: boolean
+  requiereContrasena: boolean
   onClose: () => void
   onConfirmar: (motivo: string) => void
 }
@@ -65,11 +68,21 @@ type AnularVentaModalProps = {
 export function AnularVentaModal({
   venta,
   isOpen,
+  requiereContrasena,
   onClose,
   onConfirmar,
 }: AnularVentaModalProps) {
   const [motivoSeleccionado, setMotivoSeleccionado] = useState<string>('')
   const [motivoPersonalizado, setMotivoPersonalizado] = useState<string>('')
+  const [confirmacionAbierta, setConfirmacionAbierta] = useState(false)
+  const [ventaIdAnterior, setVentaIdAnterior] = useState<number | null>(venta?.id ?? null)
+
+  if (ventaIdAnterior !== (venta?.id ?? null)) {
+    setVentaIdAnterior(venta?.id ?? null)
+    setConfirmacionAbierta(false)
+    setMotivoSeleccionado('')
+    setMotivoPersonalizado('')
+  }
 
   if (!venta) return null
 
@@ -79,34 +92,39 @@ export function AnularVentaModal({
 
   const handleConfirmar = () => {
     if (!motivoValido) return
-    onConfirmar(motivoFinal)
+    if (requiereContrasena) {
+      onConfirmar(motivoFinal)
+      return
+    }
+    setConfirmacionAbierta(true)
   }
 
   return (
-    <Modal
-      isOpen={isOpen}
-      onClose={onClose}
-      title={`Anular venta #${venta.id}`}
-      subtitle={`Registrada el ${formatearMomento(venta.fechaHora)}`}
-      headerIcon={<Ban size={18} className="text-rose-600 dark:text-rose-400" aria-hidden="true" />}
-      maxWidth="lg"
-      footer={
-        <>
-          <Button variant="outline" onClick={onClose}>
-            Volver
-          </Button>
-          <Button
-            variant="danger"
-            onClick={handleConfirmar}
-            disabled={!motivoValido}
-            icon={<Ban size={16} aria-hidden="true" />}
-          >
-            Continuar
-          </Button>
-        </>
-      }
-    >
-      <div className="flex flex-col gap-4">
+    <>
+      <Modal
+        isOpen={isOpen}
+        onClose={onClose}
+        title={`Anular venta #${venta.id}`}
+        subtitle={`Registrada el ${formatearMomento(venta.fechaHora)}`}
+        headerIcon={<Ban size={18} className="text-rose-600 dark:text-rose-400" aria-hidden="true" />}
+        maxWidth="lg"
+        footer={
+          <>
+            <Button variant="outline" onClick={onClose}>
+              Volver
+            </Button>
+            <Button
+              variant="danger"
+              onClick={handleConfirmar}
+              disabled={!motivoValido}
+              icon={<Ban size={16} aria-hidden="true" />}
+            >
+              Continuar
+            </Button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-4">
         {/* Banner informativo de impacto */}
         <div className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/25 dark:text-amber-300">
           <AlertTriangle size={18} className="mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden="true" />
@@ -211,7 +229,17 @@ export function AnularVentaModal({
             </div>
           )}
         </div>
-      </div>
-    </Modal>
+        </div>
+      </Modal>
+      <ConfirmModal
+        isOpen={confirmacionAbierta}
+        onClose={() => setConfirmacionAbierta(false)}
+        onConfirm={() => onConfirmar(motivoFinal)}
+        title={`¿Anular la venta #${venta.id}?`}
+        description="La anulación es irreversible. Se reincorporarán los artículos al inventario y se descontará el importe de la caja correspondiente."
+        confirmText="Anular venta"
+        cancelText="Volver"
+      />
+    </>
   )
 }

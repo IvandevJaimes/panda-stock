@@ -28,6 +28,7 @@ const POR_PAGINA = 10
 const ETIQUETAS_METODO: Record<MetodoPago, string> = {
   efectivo: 'Efectivo',
   transferencia: 'Transferencia',
+  qr: 'QR',
   debito: 'Tarjeta',
   credito: 'Crédito',
   cuenta_corriente: 'Cuenta corriente',

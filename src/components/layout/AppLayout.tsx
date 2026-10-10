@@ -2,8 +2,10 @@ import { useEffect } from 'react'
 import { Outlet } from 'react-router-dom'
 import { Header } from './Header'
 import { SettingsDrawer } from './SettingsDrawer'
+import { SettingsPage } from '../../features/settings'
 import { AvisoCajaAbierta } from '../../features/caja/AvisoCajaAbierta'
 import { useCajaStore } from '../../stores/caja.store'
+import { useUIStore } from '../../stores/ui.store'
 import { toast } from 'sonner'
 
 /**
@@ -16,6 +18,9 @@ export function AppLayout() {
   // dos tienen que mirar la misma fila de la base. Si cada una leyera por su
   // cuenta, el botón Cobrar podría quedar habilitado con la caja ya cerrada.
   const cargar = useCajaStore((state) => state.cargar)
+  // El modal de configuración avanzada es un overlay sobre la pantalla actual:
+  // se monta sin navegar, así nunca se desmonta la página de atrás.
+  const isSettingsOpen = useUIStore((state) => state.isSettingsOpen)
 
   useEffect(() => {
     void cargar().catch((error: unknown) => {
@@ -45,6 +50,7 @@ export function AppLayout() {
         <Outlet />
       </main>
       <SettingsDrawer />
+      {isSettingsOpen && <SettingsPage />}
       <AvisoCajaAbierta />
     </div>
   )

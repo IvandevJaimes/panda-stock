@@ -1,4 +1,4 @@
-import { Banknote, CreditCard, Landmark, Wallet } from 'lucide-react'
+import { Banknote, CreditCard, Landmark, QrCode, Wallet } from 'lucide-react'
 import { KpiCard } from '../../components/ui/KpiCard'
 import { SOMBRA_CARD } from './estilos'
 import { formatearMoneda } from './reportsQuery'
@@ -59,7 +59,7 @@ export function CajaResumen({ caja, resumen }: CajaResumenProps) {
         200px y el monto se corta contra el ícono. Arriba de `xl` la caja ocupa
         el ancho completo, así que ahí sí rinde 4.
       */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5 xl:grid-cols-2">
         <KpiCard
           icon={<Wallet size={17} />}
           iconBgClass="bg-emerald-100 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400"
@@ -86,6 +86,14 @@ export function CajaResumen({ caja, resumen }: CajaResumenProps) {
           title="Transferencia"
           value={formatearMoneda(resumen?.totalTransferencia ?? 0)}
           subtitle="Transferencias bancarias"
+          className={SOMBRA_CARD}
+        />
+        <KpiCard
+          icon={<QrCode size={17} />}
+          iconBgClass="bg-fuchsia-100 text-fuchsia-600 dark:bg-fuchsia-950/40 dark:text-fuchsia-400"
+          title="QR"
+          value={formatearMoneda(resumen?.totalQr ?? 0)}
+          subtitle="Pagos con QR"
           className={SOMBRA_CARD}
         />
         <KpiCard

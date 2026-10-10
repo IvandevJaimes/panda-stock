@@ -3,6 +3,7 @@ import { Ban, ChevronDown, History, Receipt } from 'lucide-react'
 import { toast } from 'sonner'
 import { Modal } from '../../components/ui/Modal'
 import { Button } from '../../components/ui/Button'
+import { Tooltip } from '../../components/ui/Tooltip'
 import { LoadingState } from '../../components/ui/LoadingState'
 import { EmptyStateCompact } from '../../components/ui/EmptyStateCompact'
 import { ventasService, HISTORIAL_MINIMO } from '../../services/ventas.service'
@@ -12,6 +13,7 @@ import { useSrcConFallback } from '../../hooks/useSrcConFallback'
 import { formatearMoneda } from './posQuery'
 import { AnularVentaModal } from './AnularVentaModal'
 import { ModalContrasena } from '../seguridad/ModalContrasena'
+import { useSettingsStore } from '../../stores/settings.store'
 import type { MetodoPago, ResultadoAnulacion, VentaHistorial } from '../../../electron/db/types'
 
 /**
@@ -32,6 +34,7 @@ function cantidadEnTexto(cantidad: number): string {
 const ETIQUETAS_METODO: Record<MetodoPago, string> = {
   efectivo: 'Efectivo',
   transferencia: 'Transferencia',
+  qr: 'QR',
   debito: 'Tarjeta',
   credito: 'Crédito',
   cuenta_corriente: 'Cuenta corriente',
@@ -99,6 +102,7 @@ export function HistorialVentasModal({ isOpen, onClose }: HistorialVentasModalPr
   const [ventaAAnular, setVentaAAnular] = useState<VentaHistorial | null>(null)
   const [motivoAnulacion, setMotivoAnulacion] = useState('')
   const [pedirPin, setPedirPin] = useState(false)
+  const requiereContrasenaAnular = useSettingsStore((state) => state.proteccionesSeguridad.anularVentas)
   const resultadoAnulacion = useRef<ResultadoAnulacion | null>(null)
 
   // Reset al reabrir: ajuste durante el render (mismo patrón que `InactivosModal`).
@@ -136,11 +140,12 @@ export function HistorialVentasModal({ isOpen, onClose }: HistorialVentasModalPr
     setVentaAAnular(null)
   }
 
-  const enviarAnulacion = async (pin: string): Promise<boolean> => {
-    if (!ventaAAnular) return false
+  const enviarAnulacion = async (pin: string, ventaId = ventaAAnular?.id, motivo = motivoAnulacion): Promise<boolean> => {
+    if (!ventaId) return false
+    if (requiereContrasenaAnular && !pin.trim()) return false
     const resultado = await ventasService.anular({
-      ventaId: ventaAAnular.id,
-      motivo: motivoAnulacion,
+      ventaId,
+      motivo,
       pin,
     })
     resultadoAnulacion.current = resultado
@@ -218,13 +223,12 @@ export function HistorialVentasModal({ isOpen, onClose }: HistorialVentasModalPr
 
                     <div className="flex items-center gap-2">
                       {venta.estado === 'anulada' ? (
-                        <span
-                          title={venta.motivoAnulacion ?? undefined}
-                          className="inline-flex items-center gap-1 rounded-md bg-rose-500/10 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-rose-600 dark:bg-rose-950/40 dark:text-rose-400"
-                        >
-                          <Ban size={12} aria-hidden="true" />
-                          Anulada
-                        </span>
+                        <Tooltip content={venta.motivoAnulacion || 'Venta anulada'} placement="top">
+                          <span className="inline-flex items-center gap-1 rounded-md bg-rose-500/10 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-rose-600 dark:bg-rose-950/40 dark:text-rose-400">
+                            <Ban size={12} aria-hidden="true" />
+                            Anulada
+                          </span>
+                        </Tooltip>
                       ) : (
                         <Button
                           size="sm"
@@ -325,10 +329,23 @@ export function HistorialVentasModal({ isOpen, onClose }: HistorialVentasModalPr
       <AnularVentaModal
         venta={ventaAAnular}
         isOpen={ventaAAnular !== null && !pedirPin}
+        requiereContrasena={requiereContrasenaAnular}
         onClose={cerrarAnulacion}
         onConfirmar={(motivo) => {
           setMotivoAnulacion(motivo)
-          setPedirPin(true)
+          const venta = ventaAAnular
+          if (!venta) return
+          if (requiereContrasenaAnular) {
+            setPedirPin(true)
+            return
+          }
+          setVentaAAnular(null)
+          void enviarAnulacion('', venta.id, motivo).then((valida) => {
+            if (valida) completarAnulacion()
+            else toast.error('No se pudo anular la venta')
+          }).catch((error: unknown) => {
+            toast.error(error instanceof Error ? error.message : 'No se pudo anular la venta')
+          })
         }}
       />
 
