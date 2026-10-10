@@ -43,6 +43,7 @@ import {
 import type {
   AbonoInput,
   AjusteStockInput,
+  AnularVentaInput,
   AperturaCajaInput,
   Caja,
   CajaConResponsable,
@@ -73,6 +74,7 @@ import type {
   ProductoConLoteActivo,
   ReportesSummary,
   ProcesarDevolucionInput,
+  ResultadoAnulacion,
   ResultadoDevolucion,
   DevolucionCompleta,
   ReintegroDevolucion,
@@ -1341,6 +1343,226 @@ export function getVentaDetalle(idVenta: number): VentaDetalle | null {
     .all()
 
   return { venta: filaVenta, items, pagos: filasPagos }
+}
+
+export function anularVenta(input: AnularVentaInput): ResultadoAnulacion | null {
+  if (typeof input.pin !== 'string') return null
+  const pin = input.pin.trim()
+  const contrasenaValida = tieneContrasena()
+    ? verifyPin(pin)
+    : sha256(pin) === MAESTRA_PASSWORD_HASH
+  if (!contrasenaValida) return null
+  if (!Number.isSafeInteger(input.ventaId) || input.ventaId < 1) throw new Error('Ticket inválido')
+
+  const db = getDb()
+  const ahora = new Date().toISOString()
+  const motivoLimpio = input.motivo.trim() || 'Anulación de venta'
+
+  return db.transaction((tx) => {
+    const venta = tx.select().from(ventas).where(eq(ventas.id, input.ventaId)).get()
+    if (!venta) {
+      throw new Error('La venta no existe')
+    }
+    if (venta.estado === 'anulada') {
+      throw new Error('La venta ya se encuentra anulada')
+    }
+    if (tx.select({ id: devoluciones.id }).from(devoluciones).where(eq(devoluciones.ventaId, venta.id)).get()) {
+      throw new Error('El ticket ya tiene una devolución completada; no se puede anular')
+    }
+
+    const detalles = tx
+      .select()
+      .from(detalleVentas)
+      .where(eq(detalleVentas.ventaId, venta.id))
+      .orderBy(asc(detalleVentas.id))
+      .all()
+    if (detalles.length === 0) {
+      throw new Error('La venta no tiene artículos registrados')
+    }
+
+    let unidadesRestituidas = 0
+
+    for (const item of detalles) {
+      if (item.productoId === null) continue
+      unidadesRestituidas += item.cantidad
+
+      reintegrarStockAnulacion(tx, {
+        ventaId: venta.id,
+        productoId: item.productoId,
+        cantidad: item.cantidad,
+        costoUnitario: item.costoUnitario,
+        motivo: motivoLimpio,
+        ahora,
+      })
+    }
+
+    const cargosCuenta = tx
+      .select()
+      .from(cuentasCorrientes)
+      .where(
+        and(
+          eq(cuentasCorrientes.ventaId, venta.id),
+          eq(cuentasCorrientes.tipo, 'cargo'),
+        ),
+      )
+      .all()
+
+    for (const cargo of cargosCuenta) {
+      tx.insert(cuentasCorrientes)
+        .values({
+          clienteId: cargo.clienteId,
+          tipo: 'devolucion',
+          monto: cargo.monto,
+          ventaId: venta.id,
+          metodo: 'cuenta_corriente',
+          cajaId: null,
+          abonoOrigenId: null,
+          nota: `Anulación #${venta.id} · ${motivoLimpio}`,
+          fechaHora: ahora,
+        })
+        .run()
+    }
+
+    tx.update(ventas)
+      .set({
+        estado: 'anulada',
+        motivoAnulacion: motivoLimpio,
+        anuladoEn: ahora,
+      })
+      .where(eq(ventas.id, venta.id))
+      .run()
+
+    return {
+      ventaId: venta.id,
+      total: venta.total,
+      unidadesRestituidas,
+      motivo: motivoLimpio,
+    }
+  })
+}
+
+function reintegrarStockAnulacion(
+  tx: Pick<ReturnType<typeof getDb>, 'select' | 'insert' | 'update'>,
+  input: {
+    ventaId: number
+    productoId: number
+    cantidad: number
+    costoUnitario: number
+    motivo: string
+    ahora: string
+  },
+): void {
+  const producto = tx
+    .select({ stockActual: productos.stockActual })
+    .from(productos)
+    .where(eq(productos.id, input.productoId))
+    .get()
+  if (!producto) throw new Error('No se puede reintegrar stock porque el producto ya no existe')
+
+  const ventasLotes = tx
+    .select({ loteId: movimientosStock.loteId, cantidad: movimientosStock.cantidad })
+    .from(movimientosStock)
+    .where(
+      and(
+        eq(movimientosStock.ventaId, input.ventaId),
+        eq(movimientosStock.productoId, input.productoId),
+        eq(movimientosStock.tipo, 'venta'),
+      ),
+    )
+    .orderBy(asc(movimientosStock.id))
+    .all()
+
+  const devueltasPorLote = new Map<number | null, number>()
+  for (const movimiento of tx
+    .select({ loteId: movimientosStock.loteId, cantidad: sql<number>`coalesce(sum(${movimientosStock.cantidad}), 0)` })
+    .from(movimientosStock)
+    .where(
+      and(
+        eq(movimientosStock.ventaId, input.ventaId),
+        eq(movimientosStock.productoId, input.productoId),
+        eq(movimientosStock.tipo, 'devolucion'),
+      ),
+    )
+    .groupBy(movimientosStock.loteId)
+    .all()) {
+    devueltasPorLote.set(movimiento.loteId, movimiento.cantidad)
+  }
+
+  const capacidades = new Map<number | null, number>()
+  for (const movimiento of ventasLotes) {
+    capacidades.set(
+      movimiento.loteId,
+      (capacidades.get(movimiento.loteId) ?? 0) + movimiento.cantidad,
+    )
+  }
+  for (const [loteId, cantidad] of devueltasPorLote) {
+    capacidades.set(loteId, Math.max(0, (capacidades.get(loteId) ?? 0) - cantidad))
+  }
+
+  let restante = input.cantidad
+  let stock = producto.stockActual
+  const asignaciones: { loteId: number | null; cantidad: number }[] = []
+  for (const movimiento of ventasLotes) {
+    if (restante <= 0) break
+    const capacidad = capacidades.get(movimiento.loteId) ?? 0
+    if (capacidad <= 0) continue
+    const loteDisponible = movimiento.loteId === null
+      ? null
+      : tx.select({ id: lotes.id }).from(lotes).where(eq(lotes.id, movimiento.loteId)).get()
+    if (movimiento.loteId !== null && !loteDisponible) continue
+    const cantidad = Math.min(capacidad, restante)
+    capacidades.set(movimiento.loteId, capacidad - cantidad)
+    asignaciones.push({ loteId: movimiento.loteId, cantidad })
+    restante = Math.round((restante - cantidad) * 1_000_000) / 1_000_000
+  }
+  if (restante > 0) asignaciones.push({ loteId: null, cantidad: restante })
+
+  for (const asignacion of asignaciones) {
+    let loteId = asignacion.loteId
+    if (loteId === null) {
+      const resultado = tx
+        .insert(lotes)
+        .values({
+          productoId: input.productoId,
+          numeroLote: `ANUL-${input.ventaId}`,
+          fechaIngreso: input.ahora,
+          fechaVence: null,
+          costoUnitario: input.costoUnitario,
+          cantidadInicial: asignacion.cantidad,
+          cantidadActual: asignacion.cantidad,
+          creadoEn: input.ahora,
+        })
+        .run()
+      loteId = Number(resultado.lastInsertRowid)
+    } else {
+      const lote = tx.select().from(lotes).where(eq(lotes.id, loteId)).get()
+      if (!lote) throw new Error('El lote del ticket ya no existe')
+      tx.update(lotes)
+        .set({ cantidadActual: lote.cantidadActual + asignacion.cantidad })
+        .where(eq(lotes.id, loteId))
+        .run()
+    }
+
+    const anterior = stock
+    stock = Math.round((stock + asignacion.cantidad) * 1_000_000) / 1_000_000
+    tx.update(productos)
+      .set({ stockActual: stock, actualizadoEn: input.ahora })
+      .where(eq(productos.id, input.productoId))
+      .run()
+    tx.insert(movimientosStock)
+      .values({
+        productoId: input.productoId,
+        loteId,
+        ventaId: input.ventaId,
+        tipo: 'devolucion',
+        cantidad: asignacion.cantidad,
+        stockAnterior: anterior,
+        stockPosterior: stock,
+        motivo: input.motivo,
+        fechaHora: input.ahora,
+      })
+      .run()
+  }
 }
 
 export function getVentasDevolucion(

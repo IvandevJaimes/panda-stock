@@ -8,6 +8,7 @@ import {
   marcarAlertaStockIniciada,
   marcarAlertaStockFinalizada,
 } from "../../../lib/prioridadSonidos";
+import { useSettingsStore } from "../../../stores/settings.store";
 
 const SOUND_FILES: Record<StockAlertHistoryType, string> = {
   expired: "stock_out.mp3",
@@ -56,6 +57,7 @@ export function StockAlertSound() {
   const activeIsPlayingRef = useRef<boolean>(false);
   const lastCriticalPlayTimeRef = useRef<number>(0);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
+  const sonidoAlertas = useSettingsStore((state) => state.sonidoAlertas);
 
   useEffect(() => {
     // Balancea el contador del coordinador: solo cuenta lo que se reproduce.
@@ -69,6 +71,13 @@ export function StockAlertSound() {
       const types = pendingBatchRef.current;
       pendingBatchRef.current = [];
       if (types.length === 0) return;
+
+      // Con los sonidos apagados: la reserva de prioridad se libera y la
+      // alerta llega a la campanita muda, sin callar nada más.
+      if (!useSettingsStore.getState().sonidoAlertas) {
+        marcarAlertaStockFinalizada();
+        return;
+      }
 
       // Determinar la alerta de mayor gravedad en el lote recibido
       let highestType: StockAlertHistoryType = types[0];
@@ -91,6 +100,7 @@ export function StockAlertSound() {
         !isCritical &&
         now - lastCriticalPlayTimeRef.current < SUPPRESSION_WINDOW_MS
       ) {
+        marcarAlertaStockFinalizada();
         return;
       }
 
@@ -98,22 +108,20 @@ export function StockAlertSound() {
       if (activeIsPlayingRef.current && currentAudioRef.current) {
         // Si el sonido activo tiene mayor o igual prioridad, no lo interrumpimos
         if (activePriorityRef.current >= highestPriority) {
+          marcarAlertaStockFinalizada();
           return;
         }
         // Si el nuevo sonido tiene mayor prioridad (ej: roja interrumpiendo a ámbar),
-        // detenemos el audio en curso inmediatamente.
+        // detenemos el audio en curso y liberamos su reserva; la del lote pasa
+        // a la reproducción que arranca ahora, sin que el contador baje a 0.
         currentAudioRef.current.pause();
         currentAudioRef.current = null;
+        marcarAlertaStockFinalizada();
       }
 
       if (isCritical) {
         lastCriticalPlayTimeRef.current = now;
       }
-
-      // Inicia el nuevo antes de finalizar el interrumpido para que el contador
-      // del coordinador nunca baje a 0 entre alertas (la venta no debe colarse).
-      marcarAlertaStockIniciada();
-      finalizarAlertaActiva();
 
       activePriorityRef.current = highestPriority;
       activeIsPlayingRef.current = true;
@@ -152,9 +160,11 @@ export function StockAlertSound() {
     const unsubscribe = onAlertCreated((entry) => {
       pendingBatchRef.current.push(entry.type);
 
-      // Si ya hay una alerta roja en el lote acumulado y la que llega es ámbar,
-      // la roja ya tiene garantizada la prioridad.
+      // Desde que la alerta llega se reserva la prioridad: aunque el loteo
+      // (60ms) todavía no arrancó el audio, la venta no debe sonar "por un
+      // instante" y colarse antes de la alerta.
       if (batchTimerRef.current === null) {
+        marcarAlertaStockIniciada();
         batchTimerRef.current = window.setTimeout(() => {
           batchTimerRef.current = null;
           processBatch();
@@ -167,6 +177,8 @@ export function StockAlertSound() {
       if (batchTimerRef.current !== null) {
         window.clearTimeout(batchTimerRef.current);
         batchTimerRef.current = null;
+        // El lote pendiente tenía reservada su prioridad.
+        marcarAlertaStockFinalizada();
       }
       if (currentAudioRef.current) {
         currentAudioRef.current.pause();
@@ -175,6 +187,21 @@ export function StockAlertSound() {
       finalizarAlertaActiva();
     };
   }, []);
+
+  useEffect(() => {
+    // Si se apagan los sonidos en plena reproducción, la alerta en curso se
+    // corta y libera su prioridad para no silenciar otros sonidos del POS.
+    if (sonidoAlertas) return;
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause();
+      currentAudioRef.current = null;
+    }
+    if (activeIsPlayingRef.current) {
+      activeIsPlayingRef.current = false;
+      activePriorityRef.current = 0;
+      marcarAlertaStockFinalizada();
+    }
+  }, [sonidoAlertas]);
 
   return null;
 }

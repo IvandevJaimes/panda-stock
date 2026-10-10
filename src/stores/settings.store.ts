@@ -36,6 +36,9 @@ type SettingsState = {
   /** Pide contraseña al abrir reportes, cuentas corrientes y al anular ventas. */
   pedidoContrasenaHabilitado: boolean
   setPedidoContrasenaHabilitado: (active: boolean) => void
+  /** Muestra la calculadora de vuelto en el ticket cuando se cobra en efectivo. */
+  calculadoraVueltoHabilitada: boolean
+  setCalculadoraVueltoHabilitada: (active: boolean) => void
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -45,7 +48,7 @@ export const useSettingsStore = create<SettingsState>()(
       setStoreName: (storeName) => set({ storeName }),
       ventasPorCajas: true,
       setVentasPorCajas: (ventasPorCajas) => set({ ventasPorCajas }),
-      sonidoAlertas: false,
+      sonidoAlertas: true,
       setSonidoAlertas: (sonidoAlertas) => set({ sonidoAlertas }),
       tarjetaHabilitada: true,
       setTarjetaHabilitada: (tarjetaHabilitada) => set({ tarjetaHabilitada }),
@@ -66,6 +69,9 @@ export const useSettingsStore = create<SettingsState>()(
       pedidoContrasenaHabilitado: true,
       setPedidoContrasenaHabilitado: (pedidoContrasenaHabilitado) =>
         set({ pedidoContrasenaHabilitado }),
+      calculadoraVueltoHabilitada: true,
+      setCalculadoraVueltoHabilitada: (calculadoraVueltoHabilitada) =>
+        set({ calculadoraVueltoHabilitada }),
     }),
     {
       name: 'panda-settings-storage',
@@ -74,14 +80,15 @@ export const useSettingsStore = create<SettingsState>()(
         storeName: state.storeName,
         ventasPorCajas: state.ventasPorCajas,
         sonidoAlertas: state.sonidoAlertas,
-      tarjetaHabilitada: state.tarjetaHabilitada,
-      cuentaCorrienteHabilitada: state.cuentaCorrienteHabilitada,
-      recargoTarjetaCredito: state.recargoTarjetaCredito,
-      descuentoAutomatico: state.descuentoAutomatico,
-      descuentoPorcentaje: state.descuentoPorcentaje,
-      descuentoDesdeUnidades: state.descuentoDesdeUnidades,
-      pedidoContrasenaHabilitado: state.pedidoContrasenaHabilitado,
-    }),
+        tarjetaHabilitada: state.tarjetaHabilitada,
+        cuentaCorrienteHabilitada: state.cuentaCorrienteHabilitada,
+        recargoTarjetaCredito: state.recargoTarjetaCredito,
+        descuentoAutomatico: state.descuentoAutomatico,
+        descuentoPorcentaje: state.descuentoPorcentaje,
+        descuentoDesdeUnidades: state.descuentoDesdeUnidades,
+        pedidoContrasenaHabilitado: state.pedidoContrasenaHabilitado,
+        calculadoraVueltoHabilitada: state.calculadoraVueltoHabilitada,
+      }),
     },
   ),
 )

@@ -4,6 +4,7 @@ import { cn } from '../../lib/cn'
 import { Button } from '../../components/ui/Button'
 import { ConfirmModal } from '../../components/ui/ConfirmModal'
 import { Tooltip } from '../../components/ui/Tooltip'
+import { useSettingsStore } from '../../stores/settings.store'
 import { CartItem } from './CartItem'
 import { PaymentMethodSelector } from './PaymentMethodSelector'
 import { ClienteSeleccionModal } from './ClienteSeleccionModal'
@@ -177,6 +178,9 @@ export function Cart({
   const cobroBloqueado = motivoCobroBloqueado !== null
   const [selectorClienteAbierto, setSelectorClienteAbierto] = useState(false)
   const esCuentaCorriente = metodoPago === 'cuenta_corriente'
+  const calculadoraVueltoHabilitada = useSettingsStore(
+    (estado) => estado.calculadoraVueltoHabilitada,
+  )
 
   return (
     // `min-h-0 flex-1` en vez de `sticky`: el alto lo reparte el flex de la
@@ -312,7 +316,7 @@ export function Cart({
       />
 
       {/* Calculadora de vuelto opcional: solo activa cuando se paga en efectivo */}
-      {metodoPago === 'efectivo' && !vacio && (
+      {metodoPago === 'efectivo' && !vacio && calculadoraVueltoHabilitada && (
         <CalculadoraVuelto
           key={`calc-${activeTicketId}`}
           total={resumen.total}

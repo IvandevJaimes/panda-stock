@@ -207,6 +207,8 @@ export type Venta = {
   impuesto: number
   total: number
   estado: EstadoVenta
+  motivoAnulacion?: string | null
+  anuladoEn?: string | null
   fechaHora: string
 }
 
@@ -267,6 +269,19 @@ export type VentaCompletaInput = {
 export type VentaResult = {
   success: boolean
   ventaId: number
+}
+
+export type AnularVentaInput = {
+  ventaId: number
+  motivo: string
+  pin: string
+}
+
+export type ResultadoAnulacion = {
+  ventaId: number
+  total: number
+  unidadesRestituidas: number
+  motivo: string
 }
 
 export type FiltrosVentas = {

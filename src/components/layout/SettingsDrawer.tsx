@@ -221,6 +221,12 @@ export function SettingsDrawer() {
   const setPedidoContrasenaHabilitado = useSettingsStore(
     (state) => state.setPedidoContrasenaHabilitado,
   );
+  const calculadoraVueltoHabilitada = useSettingsStore(
+    (state) => state.calculadoraVueltoHabilitada,
+  );
+  const setCalculadoraVueltoHabilitada = useSettingsStore(
+    (state) => state.setCalculadoraVueltoHabilitada,
+  );
 
   const cajaAbierta = useCajaStore((state) => state.caja);
 
@@ -294,7 +300,7 @@ export function SettingsDrawer() {
       <aside
         aria-hidden={!isOpen}
         className={cn(
-          "fixed right-0 top-0 z-50 flex h-full w-[340px] max-w-[90vw] flex-col",
+          "fixed right-0 top-0 z-50 flex h-full w-[440px] max-w-[90vw] flex-col",
           "border-l border-slate-200 bg-white text-slate-900",
           "dark:border-slate-800/80 dark:bg-[#0f172a] dark:text-slate-200",
           "shadow-2xl shadow-black/20 dark:shadow-black/40 transition-transform duration-300 ease-out",
@@ -329,12 +335,20 @@ export function SettingsDrawer() {
         {/* Secciones */}
         <div className="flex-1 divide-y divide-slate-200 overflow-y-auto dark:divide-slate-800/60">
           <DrawerSection title="Caja y ventas" icon={Briefcase}>
-            <SettingRow
-              title="Ventas por cajas / turnos"
-              description="Exige abrir caja antes de cobrar y cerrarla al final de la jornada. Desactivado, se cobra sin apertura ni rendición de caja."
-              checked={ventasPorCajas}
-              onCheckedChange={alternarVentasPorCajas}
-            />
+            <div className="space-y-5">
+              <SettingRow
+                title="Ventas por cajas / turnos"
+                description="Exige abrir caja antes de cobrar y cerrarla al final de la jornada. Desactivado, se cobra sin apertura ni rendición de caja."
+                checked={ventasPorCajas}
+                onCheckedChange={alternarVentasPorCajas}
+              />
+              <SettingRow
+                title="Calculadora de vuelto"
+                description="Muestra la calculadora de vuelto en el ticket cuando se cobra en efectivo. Desactivada, el ticket se cobra igual pero sin el cálculo automático."
+                checked={calculadoraVueltoHabilitada}
+                onCheckedChange={setCalculadoraVueltoHabilitada}
+              />
+            </div>
           </DrawerSection>
 
           <DrawerSection title="Descuentos" icon={Percent}>
@@ -449,7 +463,7 @@ export function SettingsDrawer() {
           <DrawerSection title="Notificaciones" icon={Volume2}>
             <SettingRow
               title="Sonido de alertas"
-              description="Reproduce un sonido breve cuando llega una notificación nueva."
+              description="Reproduce sonidos breves cuando llegan notificaciones nuevas y cuando se disparan alertas de stock."
               checked={sonidoAlertas}
               onCheckedChange={setSonidoAlertas}
             />

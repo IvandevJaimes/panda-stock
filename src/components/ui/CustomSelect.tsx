@@ -24,6 +24,11 @@ export interface CustomSelectProps {
   displayLabel?: string;
   footerLabel?: string;
   onFooterClick?: () => void;
+  /**
+   * Lado hacia el que despliega el listado. `top` lo abre por encima del botón,
+   * útil cuando el select está pegado al pie de un modal y abajo se recortaría.
+   */
+  placement?: "bottom" | "top";
 }
 
 export function CustomSelect({
@@ -38,6 +43,7 @@ export function CustomSelect({
   displayLabel,
   footerLabel,
   onFooterClick,
+  placement = "bottom",
 }: CustomSelectProps) {
   const [isOpen, setIsOpen] = React.useState(false);
   const containerRef = React.useRef<HTMLDivElement>(null);
@@ -101,7 +107,12 @@ export function CustomSelect({
       {isOpen && (
         <div
           role="listbox"
-          className="absolute left-0 top-[calc(100%+6px)] z-[100] w-full animate-entry-up overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-800 dark:bg-[#0B1120]"
+          className={cn(
+            "absolute left-0 z-[100] w-full animate-entry-up overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-800 dark:bg-[#0B1120]",
+            placement === "bottom"
+              ? "top-[calc(100%+6px)]"
+              : "bottom-[calc(100%+6px)]",
+          )}
         >
           <div className="max-h-56 w-full overflow-y-auto py-1.5">
             {options.length === 0 ? (

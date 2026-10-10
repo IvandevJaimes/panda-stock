@@ -1,4 +1,4 @@
-﻿import { useState, type FormEvent } from 'react'
+﻿import { useState, type FormEvent, type ReactNode } from 'react'
 import { Eye, EyeOff, Lock } from 'lucide-react'
 import { toast } from 'sonner'
 import { Modal } from '../../components/ui/Modal'
@@ -8,11 +8,17 @@ import { toErrorMessage } from '../../services/errors'
 
 interface ModalContrasenaProps {
   titulo: string
-  subtitulo: string
+  subtitulo?: string
   onSubmit: (contrasena: string) => Promise<boolean>
   onCancelar: () => void
   /** Etiqueta del botón de cancelar. Por defecto el del ruteador, "Volver al POS". */
   etiquetaCancelar?: string
+  /** Etiqueta del botón de confirmar. Por defecto "Entrar". */
+  etiquetaConfirmar?: string
+  /** Variante del botón de confirmar. Por defecto la primaria (emerald). */
+  confirmarVariant?: 'primary' | 'danger'
+  /** Icono del botón de confirmar. */
+  confirmarIcon?: ReactNode
   /** Se ejecuta cuando la contraseña es válida */
   onSuccess?: () => void
 
@@ -24,6 +30,9 @@ export function ModalContrasena({
   onSubmit,
   onCancelar,
   etiquetaCancelar = 'Volver al POS',
+  etiquetaConfirmar = 'Entrar',
+  confirmarVariant = 'primary',
+  confirmarIcon,
   onSuccess,
 }: ModalContrasenaProps) {
   const [contrasena, setContrasena] = useState('')
@@ -79,7 +88,7 @@ export function ModalContrasena({
               type="button"
               onClick={() => setMostrarContrasena((visible) => !visible)}
               aria-label={mostrarContrasena ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-              className="cursor-pointer text-slate-400 transition-colors hover:text-slate-600 dark:hover:text-slate-200"
+              className="grid h-9 w-9 cursor-pointer place-items-center rounded-lg text-slate-400 transition-colors hover:text-slate-600 dark:hover:text-slate-200"
             >
               {mostrarContrasena ? <EyeOff size={16} /> : <Eye size={16} />}
             </button>
@@ -94,8 +103,8 @@ export function ModalContrasena({
           >
             {etiquetaCancelar}
           </Button>
-          <Button type="submit" loading={enviando}>
-            Entrar
+          <Button type="submit" variant={confirmarVariant} loading={enviando} icon={confirmarIcon}>
+            {etiquetaConfirmar}
           </Button>
         </div>
       </form>

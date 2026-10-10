@@ -129,6 +129,8 @@ export const ventas = sqliteTable('ventas', {
   impuesto: real('impuesto').notNull().default(0),
   total: real('total').notNull(),
   estado: text('estado').$type<EstadoVenta>().notNull().default('completada'),
+  motivoAnulacion: text('motivo_anulacion'),
+  anuladoEn: text('anulado_en'),
   fechaHora: text('fecha_hora').notNull(),
 })
 

@@ -2,6 +2,7 @@ import {
   alIniciarAlertaStock,
   hayAlertaStockActiva,
 } from '../../lib/prioridadSonidos'
+import { useSettingsStore } from '../../stores/settings.store'
 
 const NOTAS_HZ = [523.25, 659.25, 783.99, 1046.5] // C5, E5, G5, C6: acorde ascendente agradable
 const VOLUMEN = 0.16
@@ -34,6 +35,9 @@ function silenciarVentaEnCurso(): void {
 alIniciarAlertaStock(silenciarVentaEnCurso)
 
 export function reproducirSonidoVentaExitosa(): void {
+  // El toggle de sonido apaga también el pitido de cobro: sin excepciones.
+  if (!useSettingsStore.getState().sonidoAlertas) return
+
   const ahora = Date.now()
   if (ahora - ultimaReproduccion < INTERVALO_MINIMO_MS) return
 

@@ -59,15 +59,20 @@ class MockAudioContext {
   });
 }
 
-// sonidoVenta y prioridadSonidos deben compartir la misma instancia de módulo,
-// por eso se importan dinámicamente después de resetModules.
+// sonidoVenta, prioridadSonidos y el store de settings deben compartir la
+// misma instancia de módulo, por eso se importan dinámicamente tras resetModules.
 async function importar() {
   vi.resetModules();
-  const [sonidoVenta, prioridad] = await Promise.all([
+  const [sonidoVenta, prioridad, settings] = await Promise.all([
     import("./sonidoVenta"),
     import("../../lib/prioridadSonidos"),
+    import("../../stores/settings.store"),
   ]);
-  return { ...sonidoVenta, prioridad: prioridad as typeof PrioridadSonidos };
+  return {
+    ...sonidoVenta,
+    prioridad: prioridad as typeof PrioridadSonidos,
+    settings: settings as typeof import("../../stores/settings.store"),
+  };
 }
 
 describe("sonidoVenta vs alertas de stock", () => {
@@ -89,6 +94,15 @@ describe("sonidoVenta vs alertas de stock", () => {
 
     expect(oscillators.length).toBeGreaterThan(0);
     expect(oscillators[0].start).toHaveBeenCalled();
+  });
+
+  it("no reproduce si los sonidos están desactivados en configuraciones", async () => {
+    const { reproducirSonidoVentaExitosa, settings } = await importar();
+    settings.useSettingsStore.getState().setSonidoAlertas(false);
+
+    reproducirSonidoVentaExitosa();
+
+    expect(oscillators.length).toBe(0);
   });
 
   it("no reproduce si ya hay una alerta crítica sonando", async () => {

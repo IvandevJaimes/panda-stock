@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { render } from "@testing-library/react";
+import { render, act } from "@testing-library/react";
 import { StockAlertSound } from "./StockAlertSound";
 import { useStockAlertHistoryStore } from "../../../stores/stockAlertHistoryStore";
 import { hayAlertaStockActiva } from "../../../lib/prioridadSonidos";
+import { useSettingsStore } from "../../../stores/settings.store";
 
 describe("StockAlertSound", () => {
   let playMock: ReturnType<typeof vi.fn>;
@@ -12,6 +13,7 @@ describe("StockAlertSound", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     useStockAlertHistoryStore.getState().clearAll();
+    useSettingsStore.setState({ sonidoAlertas: true });
 
     playMock = vi.fn().mockResolvedValue(undefined);
     pauseMock = vi.fn();
@@ -34,6 +36,7 @@ describe("StockAlertSound", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    useSettingsStore.setState({ sonidoAlertas: true });
     vi.restoreAllMocks();
   });
 
@@ -196,6 +199,116 @@ describe("StockAlertSound", () => {
     expect(hayAlertaStockActiva()).toBe(true);
 
     audioInstances[0].onended?.();
+    expect(hayAlertaStockActiva()).toBe(false);
+  });
+
+  it("no suena ni reclama prioridad si los sonidos están desactivados", async () => {
+    useSettingsStore.setState({ sonidoAlertas: false });
+    render(<StockAlertSound />);
+
+    useStockAlertHistoryStore.getState().addAlert("out-of-stock", "Sin stock", [
+      {
+        id: 1,
+        name: "Prod 1",
+        remainingStock: 0,
+        unit: "u",
+        minimumStock: 5,
+      },
+    ]);
+
+    vi.advanceTimersByTime(100);
+
+    expect(audioInstances.length).toBe(0);
+    expect(playMock).not.toHaveBeenCalled();
+    expect(pauseMock).not.toHaveBeenCalled();
+    expect(hayAlertaStockActiva()).toBe(false);
+  });
+
+  it("corta en seco la alerta sonando cuando se desactivan los sonidos", async () => {
+    render(<StockAlertSound />);
+
+    useStockAlertHistoryStore.getState().addAlert("expired", "Vencido", [
+      {
+        id: 1,
+        name: "Prod 1",
+        remainingStock: 5,
+        unit: "u",
+        minimumStock: 5,
+      },
+    ]);
+
+    vi.advanceTimersByTime(100);
+    expect(audioInstances.length).toBe(1);
+    expect(hayAlertaStockActiva()).toBe(true);
+
+    act(() => {
+      useSettingsStore.setState({ sonidoAlertas: false });
+    });
+
+    expect(pauseMock).toHaveBeenCalledTimes(1);
+    expect(hayAlertaStockActiva()).toBe(false);
+  });
+
+  it("reserva la prioridad en cuanto llega la alerta, aunque el audio no haya arrancado", async () => {
+    render(<StockAlertSound />);
+
+    useStockAlertHistoryStore.getState().addAlert("out-of-stock", "Sin stock", [
+      {
+        id: 1,
+        name: "Prod 1",
+        remainingStock: 0,
+        unit: "u",
+        minimumStock: 5,
+      },
+    ]);
+
+    // Sin avanzar el loteo (60ms) todavía: la venta ya no debe poder sonar.
+    expect(hayAlertaStockActiva()).toBe(true);
+    expect(audioInstances.length).toBe(0);
+
+    vi.advanceTimersByTime(100);
+    expect(audioInstances.length).toBe(1);
+    expect(hayAlertaStockActiva()).toBe(true);
+
+    audioInstances[0].onended?.();
+    expect(hayAlertaStockActiva()).toBe(false);
+  });
+
+  it("una roja interrumpe la ámbar y el contador de prioridad queda balanceado", async () => {
+    render(<StockAlertSound />);
+
+    useStockAlertHistoryStore.getState().addAlert("low-stock", "Stock bajo", [
+      {
+        id: 1,
+        name: "Prod 1",
+        remainingStock: 2,
+        unit: "u",
+        minimumStock: 5,
+      },
+    ]);
+
+    vi.advanceTimersByTime(100);
+    expect(audioInstances.length).toBe(1);
+    expect(hayAlertaStockActiva()).toBe(true);
+
+    useStockAlertHistoryStore.getState().addAlert("out-of-stock", "Sin stock", [
+      {
+        id: 2,
+        name: "Prod 2",
+        remainingStock: 0,
+        unit: "u",
+        minimumStock: 5,
+      },
+    ]);
+
+    vi.advanceTimersByTime(100);
+
+    expect(pauseMock).toHaveBeenCalledTimes(1);
+    expect(audioInstances.length).toBe(2);
+    expect(audioInstances[1].url).toContain("stock_out.mp3");
+    expect(hayAlertaStockActiva()).toBe(true);
+
+    audioInstances[1].onended?.();
     expect(hayAlertaStockActiva()).toBe(false);
   });
 });

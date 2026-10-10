@@ -1,4 +1,13 @@
-import type { FiltrosVentas, Venta, VentaCompletaInput, VentaDetalle, VentaHistorial, VentaResult } from '../../electron/db/types'
+import type {
+  AnularVentaInput,
+  FiltrosVentas,
+  ResultadoAnulacion,
+  Venta,
+  VentaCompletaInput,
+  VentaDetalle,
+  VentaHistorial,
+  VentaResult,
+} from '../../electron/db/types'
 import { toErrorMessage } from './errors'
 
 /** Mínimo que siempre alcanza para una sesión de mostrador; el modal pagina más si hace falta. */
@@ -38,6 +47,18 @@ export const ventasService = {
 
     try {
       return await window.electronAPI.ventas.getRecientes(limite)
+    } catch (error) {
+      throw new Error(toErrorMessage(error), { cause: error })
+    }
+  },
+
+  async anular(input: AnularVentaInput): Promise<ResultadoAnulacion | null> {
+    if (!input.ventaId) throw new Error('El ID de venta es obligatorio')
+    if (!input.motivo?.trim()) throw new Error('El motivo de anulación es obligatorio')
+    if (typeof input.pin !== 'string') throw new Error('La contraseña es obligatoria')
+
+    try {
+      return await window.electronAPI.ventas.anular(input)
     } catch (error) {
       throw new Error(toErrorMessage(error), { cause: error })
     }

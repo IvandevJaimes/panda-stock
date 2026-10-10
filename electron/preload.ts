@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from "electron";
 import type {
   AbonoInput,
   AjusteStockInput,
+  AnularVentaInput,
   AperturaCajaInput,
   CargoManualInput,
   CierreCajaInput,
@@ -116,6 +117,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.invoke("ventas:get-detail", idVenta),
     getRecientes: (limite: number) =>
       ipcRenderer.invoke("ventas:get-recientes", limite),
+    anular: (input: AnularVentaInput) =>
+      ipcRenderer.invoke("ventas:anular", input),
   },
   devoluciones: {
     getVentas: (filtros?: FiltrosDevoluciones) =>

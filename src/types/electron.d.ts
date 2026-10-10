@@ -1,6 +1,7 @@
 import type {
   AbonoInput,
   AjusteStockInput,
+  AnularVentaInput,
   AperturaCajaInput,
   Caja,
   CajaConResponsable,
@@ -40,6 +41,7 @@ import type {
   VentaHistorial,
   VentaResult,
   ProcesarDevolucionInput,
+  ResultadoAnulacion,
   ResultadoDevolucion,
   VentaDevolucionDetalle,
   VentaDevolucionResumen,
@@ -116,6 +118,7 @@ declare global {
         getAll: (filtros?: FiltrosVentas) => Promise<Venta[]>
         getDetail: (idVenta: number) => Promise<VentaDetalle | null>
         getRecientes: (limite: number) => Promise<VentaHistorial[]>
+        anular: (input: AnularVentaInput) => Promise<ResultadoAnulacion | null>
       }
       devoluciones: {
         getVentas: (filtros?: FiltrosDevoluciones) => Promise<{ items: VentaDevolucionResumen[]; total: number }>

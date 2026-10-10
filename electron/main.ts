@@ -54,6 +54,7 @@ import {
   getVentasRecientes,
   openCaja,
   processSale,
+  anularVenta,
   processDevolucion,
   scanProductByCode,
   toggleEmpleado,
@@ -86,6 +87,7 @@ import type { ExportarExcelInput } from "./exportaciones.types.ts";
 import type {
   AjusteStockInput,
   AbonoInput,
+  AnularVentaInput,
   AperturaCajaInput,
   CargoManualInput,
   ClienteInput,
@@ -364,6 +366,9 @@ function registerIpcHandlers() {
   );
   ipcMain.handle("ventas:get-recientes", (_event, limite: number) =>
     getVentasRecientes(limite),
+  );
+  ipcMain.handle("ventas:anular", (_event, input: AnularVentaInput) =>
+    anularVenta(input),
   );
 
   ipcMain.handle("devoluciones:get-ventas", (_event, filtros?: FiltrosDevoluciones) =>
