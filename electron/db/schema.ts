@@ -11,15 +11,16 @@ import type {
   UnidadMedida,
 } from './types.ts'
 
-export const seguridadReportes = sqliteTable('seguridad_reportes', {
+export const seguridad = sqliteTable('seguridad', {
   id: integer('id').primaryKey(),
-  pinHash: text('pin_hash').notNull(),
-  actualizadoEn: text('actualizado_en').notNull(),
-})
-
-export const seguridadCuentas = sqliteTable('seguridad_cuentas', {
-  id: integer('id').primaryKey(),
-  pinHash: text('pin_hash').notNull(),
+  recoveryId: text('recovery_id').notNull().default(''),
+  pinHash: text('pin_hash'),
+  passwordConfigured: integer('password_configured', { mode: 'boolean' }).notNull().default(false),
+  protectionsInitialized: integer('protections_initialized', { mode: 'boolean' }).notNull().default(false),
+  proteccionesJson: text('protecciones_json').notNull().default('{"reportes":false,"cuentasCorrientes":false,"anularVentas":false,"eliminarProductos":false,"eliminarLotes":false,"eliminarCategorias":false,"eliminarMarcas":false}'),
+  failedAttempts: integer('failed_attempts').notNull().default(0),
+  lockoutLevel: integer('lockout_level').notNull().default(0),
+  lockedUntil: integer('locked_until'),
   actualizadoEn: text('actualizado_en').notNull(),
 })
 
@@ -27,7 +28,6 @@ export const negocio = sqliteTable('negocio', {
   id: integer('id').primaryKey(),
   nombre: text('nombre'),
   logoPath: text('logo_path'),
-  passwordHash: text('password_hash'),
   creadoEn: text('creado_en'),
   actualizadoEn: text('actualizado_en').notNull(),
 })

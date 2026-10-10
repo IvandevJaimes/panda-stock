@@ -31,7 +31,7 @@ export function ReportesRoute() {
       <ModalContrasena
         titulo="Reportes bloqueados"
         subtitulo="Ingresá tu contraseña para verlos."
-        onSubmit={(contrasena) => seguridadService.verifyPin(contrasena)}
+        onSubmit={(contrasena) => seguridadService.verifyPin(contrasena, 'reportes')}
         onSuccess={unlock}
         onCancelar={() => navigate('/pos', { replace: true })}
       />

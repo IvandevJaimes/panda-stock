@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ModalContrasena } from './ModalContrasena'
+import { ErrorSeguridad } from '../../services/errors'
 
 describe('ModalContrasena', () => {
   it('envía la contraseña al entrar', async () => {
@@ -37,7 +38,23 @@ describe('ModalContrasena', () => {
     await userEvent.type(screen.getByLabelText('Contraseña'), 'clave123')
     await userEvent.click(screen.getByRole('button', { name: 'Entrar' }))
 
-    expect(onSuccess).toHaveBeenCalledTimes(1)
+    expect(onSuccess).toHaveBeenCalledWith('clave123')
+  })
+
+  it('muestra el error tipado de PIN incorrecto dentro del formulario', async () => {
+    const onSubmit = vi.fn().mockRejectedValue(new ErrorSeguridad('INVALID_PIN', 'La contraseña es incorrecta'))
+    render(
+      <ModalContrasena
+        titulo="Bloqueado"
+        onSubmit={onSubmit}
+        onCancelar={vi.fn()}
+      />,
+    )
+
+    await userEvent.type(screen.getByLabelText('Contraseña'), 'mal')
+    await userEvent.click(screen.getByRole('button', { name: 'Entrar' }))
+
+    expect(await screen.findByText('Contraseña incorrecta')).toBeTruthy()
   })
 
   it('muestra error y limpia el input si la contraseña es incorrecta', async () => {

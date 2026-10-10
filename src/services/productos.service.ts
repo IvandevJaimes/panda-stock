@@ -5,7 +5,7 @@ import type {
   Producto,
   ProductoConLoteActivo,
 } from '../../electron/db/types'
-import { toErrorMessage } from './errors'
+import { desenvolverResultadoSeguro, normalizarError, toErrorMessage } from './errors'
 import { bumpAssetVersion } from '../lib/assets'
 import { MIME_A_EXTENSION, MAX_LOGO_SIZE } from '../features/onboarding/business.schema'
 import { separarCodigos } from '../lib/codigosBarras'
@@ -119,11 +119,11 @@ export const productosService = {
     }
   },
 
-  async delete(id: number): Promise<void> {
+  async delete(id: number, pin?: string): Promise<void> {
     try {
-      await window.electronAPI.productos.delete(id)
+      desenvolverResultadoSeguro(await window.electronAPI.productos.delete(id, pin))
     } catch (error) {
-      throw new Error(toErrorMessage(error), { cause: error })
+      throw normalizarError(error)
     }
   },
 

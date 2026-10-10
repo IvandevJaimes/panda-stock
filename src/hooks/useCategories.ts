@@ -56,8 +56,8 @@ export function useCategories() {
     );
   }, []);
 
-  const removeCategory = useCallback(async (id: number) => {
-    await categoriasService.delete(id);
+  const removeCategory = useCallback(async (id: number, pin?: string) => {
+    await categoriasService.delete(id, pin);
     setCategories((prev) => prev.filter((c) => c.id !== id));
   }, []);
 

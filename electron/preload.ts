@@ -20,6 +20,19 @@ import type {
   NegocioSetupInput,
   VentaCompletaInput,
   ProcesarDevolucionInput,
+  ClaveProteccion,
+  ProteccionesSeguridad,
+  ResultadoSeguro,
+  ResultadoAnulacion,
+  ResultadoDevolucion,
+  ReportesSummary,
+  Cliente,
+  ClienteConSaldo,
+  MovimientoCuentaCorriente,
+  ResumenCuentasCorrientes,
+  VentaDevolucionResumen,
+  VentaDevolucionDetalle,
+  DevolucionCompleta,
 } from "./db/types.ts";
 import type { ExportarExcelInput } from "./exportaciones.types.ts";
 
@@ -34,14 +47,22 @@ webFrame.setVisualZoomLevelLimits(1, 1);
 contextBridge.exposeInMainWorld("electronAPI", {
   platform: process.platform,
   seguridad: {
-    verifyPin: (pin: string) => ipcRenderer.invoke("seguridad:verify-pin", pin),
+    verifyPin: (pin: string, scope?: ClaveProteccion): Promise<ResultadoSeguro<boolean>> =>
+      ipcRenderer.invoke("seguridad:verify-pin", pin, scope),
     changePin: (pinActual: string, pinNuevo: string) =>
       ipcRenderer.invoke("seguridad:change-pin", pinActual, pinNuevo),
     tieneContrasena: () => ipcRenderer.invoke("seguridad:tiene-contrasena"),
+    getRecoveryId: () => ipcRenderer.invoke("seguridad:get-recovery-id"),
+    resetearConClave: (codigo: string, pinNuevo: string) =>
+      ipcRenderer.invoke("seguridad:resetear-con-clave", codigo, pinNuevo),
     crearContrasena: (pinNuevo: string) =>
       ipcRenderer.invoke("seguridad:crear-contrasena", pinNuevo),
     quitarContrasena: (pinActual: string) =>
       ipcRenderer.invoke("seguridad:quitar-contrasena", pinActual),
+    getProtecciones: (seed: ProteccionesSeguridad): Promise<ResultadoSeguro<ProteccionesSeguridad>> =>
+      ipcRenderer.invoke("seguridad:get-protecciones", seed),
+    setProtecciones: (protecciones: ProteccionesSeguridad, pin?: string): Promise<ResultadoSeguro<ProteccionesSeguridad>> =>
+      ipcRenderer.invoke("seguridad:set-protecciones", protecciones, pin),
   },
   negocio: {
     get: () => ipcRenderer.invoke("negocio:get"),
@@ -61,14 +82,14 @@ contextBridge.exposeInMainWorld("electronAPI", {
     create: (nombre: string) => ipcRenderer.invoke("categorias:create", nombre),
     update: (id: number, nombre: string) =>
       ipcRenderer.invoke("categorias:update", id, nombre),
-    delete: (id: number) => ipcRenderer.invoke("categorias:delete", id),
+    delete: (id: number, pin?: string): Promise<ResultadoSeguro<void>> => ipcRenderer.invoke("categorias:delete", id, pin),
   },
   marcas: {
     getAll: () => ipcRenderer.invoke("marcas:get-all"),
     create: (nombre: string) => ipcRenderer.invoke("marcas:create", nombre),
     update: (id: number, nombre: string) =>
       ipcRenderer.invoke("marcas:update", id, nombre),
-    delete: (id: number) => ipcRenderer.invoke("marcas:delete", id),
+    delete: (id: number, pin?: string): Promise<ResultadoSeguro<void>> => ipcRenderer.invoke("marcas:delete", id, pin),
   },
   productos: {
     scan: (codigo: string) => ipcRenderer.invoke("productos:scan", codigo),
@@ -83,7 +104,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.invoke("productos:create", data),
     update: (id: number, data: Record<string, unknown>) =>
       ipcRenderer.invoke("productos:update", id, data),
-    delete: (id: number) => ipcRenderer.invoke("productos:delete", id),
+    delete: (id: number, pin?: string): Promise<ResultadoSeguro<void>> => ipcRenderer.invoke("productos:delete", id, pin),
     toggle: (id: number, activo: boolean) =>
       ipcRenderer.invoke("productos:toggle", id, activo),
     setImage: (productoId: number, data: ArrayBuffer, extension: string) =>
@@ -100,7 +121,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.invoke("lotes:get-expiring", diasLimite),
     update: (id: number, data: { fechaVence?: string | null; costoUnitario?: number; cantidadActual?: number; motivo?: string }) =>
       ipcRenderer.invoke("lotes:update", id, data),
-    delete: (id: number) => ipcRenderer.invoke("lotes:delete", id),
+    delete: (id: number, pin?: string): Promise<ResultadoSeguro<void>> => ipcRenderer.invoke("lotes:delete", id, pin),
   },
   cajas: {
     getActive: () => ipcRenderer.invoke("cajas:get-active"),
@@ -119,17 +140,17 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.invoke("ventas:get-detail", idVenta),
     getRecientes: (limite: number) =>
       ipcRenderer.invoke("ventas:get-recientes", limite),
-    anular: (input: AnularVentaInput) =>
+    anular: (input: AnularVentaInput): Promise<ResultadoSeguro<ResultadoAnulacion>> =>
       ipcRenderer.invoke("ventas:anular", input),
   },
   devoluciones: {
-    getVentas: (filtros?: FiltrosDevoluciones) =>
+    getVentas: (filtros?: FiltrosDevoluciones): Promise<ResultadoSeguro<{ items: VentaDevolucionResumen[]; total: number }>> =>
       ipcRenderer.invoke("devoluciones:get-ventas", filtros),
-    getVentaDetail: (ventaId: number) =>
+    getVentaDetail: (ventaId: number): Promise<ResultadoSeguro<VentaDevolucionDetalle | null>> =>
       ipcRenderer.invoke("devoluciones:get-venta-detail", ventaId),
-    getHistorial: (filtros?: FiltrosDevoluciones) =>
+    getHistorial: (filtros?: FiltrosDevoluciones): Promise<ResultadoSeguro<{ items: DevolucionCompleta[]; total: number }>> =>
       ipcRenderer.invoke("devoluciones:get-historial", filtros),
-    process: (input: ProcesarDevolucionInput) =>
+    process: (input: ProcesarDevolucionInput): Promise<ResultadoSeguro<ResultadoDevolucion>> =>
       ipcRenderer.invoke("devoluciones:process", input),
   },
   movimientos: {
@@ -141,26 +162,26 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.invoke("movimientos:crear", data),
   },
   reportes: {
-    getSummary: (filtros?: FiltrosReportes) =>
+    getSummary: (filtros?: FiltrosReportes): Promise<ResultadoSeguro<ReportesSummary>> =>
       ipcRenderer.invoke("reportes:summary", filtros),
-    exportarExcel: (input: ExportarExcelInput) =>
+    exportarExcel: (input: ExportarExcelInput): Promise<ResultadoSeguro<string | null>> =>
       ipcRenderer.invoke("reportes:exportar-excel", input),
   },
   cuentasCorrientes: {
-    getClientes: (opciones?: { incluirInactivos?: boolean }) =>
+    getClientes: (opciones?: { incluirInactivos?: boolean }): Promise<ResultadoSeguro<ClienteConSaldo[]>> =>
       ipcRenderer.invoke("cuentas-corrientes:clientes", opciones),
-    crearCliente: (data: ClienteInput) =>
+    crearCliente: (data: ClienteInput): Promise<ResultadoSeguro<Cliente>> =>
       ipcRenderer.invoke("cuentas-corrientes:cliente-crear", data),
-    actualizarCliente: (id: number, data: ClienteInput) =>
+    actualizarCliente: (id: number, data: ClienteInput): Promise<ResultadoSeguro<void>> =>
       ipcRenderer.invoke("cuentas-corrientes:cliente-actualizar", id, data),
-    archivarCliente: (id: number) =>
+    archivarCliente: (id: number): Promise<ResultadoSeguro<void>> =>
       ipcRenderer.invoke("cuentas-corrientes:cliente-archivar", id),
-    getMovimientos: (filtros?: FiltrosCuentaCorriente) =>
+    getMovimientos: (filtros?: FiltrosCuentaCorriente): Promise<ResultadoSeguro<MovimientoCuentaCorriente[]>> =>
       ipcRenderer.invoke("cuentas-corrientes:movimientos", filtros),
-    getResumen: () => ipcRenderer.invoke("cuentas-corrientes:resumen"),
-    registrarAbono: (data: AbonoInput) =>
+    getResumen: (): Promise<ResultadoSeguro<ResumenCuentasCorrientes>> => ipcRenderer.invoke("cuentas-corrientes:resumen"),
+    registrarAbono: (data: AbonoInput): Promise<ResultadoSeguro<void>> =>
       ipcRenderer.invoke("cuentas-corrientes:abono", data),
-    registrarCargo: (data: CargoManualInput) =>
+    registrarCargo: (data: CargoManualInput): Promise<ResultadoSeguro<void>> =>
       ipcRenderer.invoke("cuentas-corrientes:cargo", data),
   },
   datosPrueba: {

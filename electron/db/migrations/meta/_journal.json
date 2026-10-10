@@ -85,6 +85,20 @@
       "when": 1791658012906,
       "tag": "0011_oval_omega_flight",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1791662974417,
+      "tag": "0012_endurecer_seguridad",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1791665268062,
+      "tag": "0013_fixed_bushwacker",
+      "breakpoints": true
     }
   ]
 }

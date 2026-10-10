@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs'
-import { createHash } from 'node:crypto'
+import { randomUUID } from 'node:crypto'
 import { createRequire } from 'node:module'
 import path from 'node:path'
 import Database from 'better-sqlite3'
@@ -13,10 +13,6 @@ const app = (require('electron') as { app?: { getPath(name: string): string } })
 
 let sqlite: Database.Database | null = null
 let database: BetterSQLite3Database<typeof schema> | null = null
-
-export function sha256(text: string): string {
-  return createHash('sha256').update(text).digest('hex')
-}
 
 export function getDb(): BetterSQLite3Database<typeof schema> {
   if (!database) {
@@ -48,16 +44,25 @@ export function initDatabase(): void {
   migrate(database, { migrationsFolder })
 
   const ahora = new Date().toISOString()
-  const existente = database
-    .select({ id: schema.seguridadReportes.id })
-    .from(schema.seguridadReportes)
-    .where(eq(schema.seguridadReportes.id, 1))
+  const seguridadExistente = database
+    .select({ id: schema.seguridad.id })
+    .from(schema.seguridad)
+    .where(eq(schema.seguridad.id, 1))
     .get()
 
-  if (!existente) {
-    database
-      .insert(schema.seguridadReportes)
-      .values({ id: 1, pinHash: sha256('1234'), actualizadoEn: ahora })
+  if (!seguridadExistente) {
+    database.insert(schema.seguridad).values({ id: 1, actualizadoEn: ahora }).run()
+  }
+
+  const seguridadActual = database
+    .select({ recoveryId: schema.seguridad.recoveryId })
+    .from(schema.seguridad)
+    .where(eq(schema.seguridad.id, 1))
+    .get()
+  if (seguridadActual && !seguridadActual.recoveryId) {
+    database.update(schema.seguridad)
+      .set({ recoveryId: randomUUID() })
+      .where(eq(schema.seguridad.id, 1))
       .run()
   }
 
@@ -70,7 +75,7 @@ export function initDatabase(): void {
   if (!negocioExistente) {
     database
       .insert(schema.negocio)
-      .values({ id: 1, nombre: null, logoPath: null, passwordHash: null, creadoEn: null, actualizadoEn: ahora })
+      .values({ id: 1, nombre: null, logoPath: null, creadoEn: null, actualizadoEn: ahora })
       .run()
   }
 }

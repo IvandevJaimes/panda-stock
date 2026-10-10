@@ -1,5 +1,5 @@
 import type { Categoria } from '../../electron/db/types'
-import { toErrorMessage } from './errors'
+import { desenvolverResultadoSeguro, normalizarError } from './errors'
 
 export const categoriasService = {
   async getAll(): Promise<Categoria[]> {
@@ -32,11 +32,11 @@ export const categoriasService = {
     }
   },
 
-  async delete(id: number): Promise<void> {
+  async delete(id: number, pin?: string): Promise<void> {
     try {
-      await window.electronAPI.categorias.delete(id)
+      desenvolverResultadoSeguro(await window.electronAPI.categorias.delete(id, pin))
     } catch (error) {
-      throw new Error(toErrorMessage(error), { cause: error })
+      throw normalizarError(error)
     }
   },
 }

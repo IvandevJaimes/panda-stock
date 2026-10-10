@@ -2,6 +2,7 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { beforeAll, describe, expect, it } from 'vitest'
+import { PROTECCIONES_INICIALES } from './types.ts'
 
 const carpeta = mkdtempSync(path.join(tmpdir(), 'panda-devoluciones-test-'))
 process.env.PANDA_STOCK_DB = path.join(carpeta, 'test.db')
@@ -15,6 +16,7 @@ let empleadoId = 0
 beforeAll(() => {
   initDatabase()
   expect(repo.createContrasena('8877')).toBe(true)
+  repo.setProtecciones({ protecciones: { ...PROTECCIONES_INICIALES, anularVentas: true }, pin: '8877' })
   empleadoId = repo.createEmpleado({ nombre: 'Caja Devoluciones' }).id
   cajaId = repo.openCaja({ responsable: 'Caja Devoluciones', montoInicial: 100 }).id
 })
@@ -68,17 +70,16 @@ describe('devoluciones de ticket completo', () => {
 
     expect(repo.getVentasDevolucion({ buscar: 'Artículo de prueba' }).items).toHaveLength(1)
 
-    expect(repo.processDevolucion({
+    expect(() => repo.processDevolucion({
+      ventaId: venta.ventaId,
+    })).toThrow(expect.objectContaining({ code: 'AUTHORIZATION_REQUIRED' }))
+    expect(() => repo.processDevolucion({
       pin: 'incorrecta',
       ventaId: venta.ventaId,
-    })).toBeNull()
-    expect(repo.processDevolucion({
-      pin: '1234',
-      ventaId: venta.ventaId,
-    })).toBeNull()
+    })).toThrow(expect.objectContaining({ code: 'INVALID_PIN' }))
 
     const resultado = repo.processDevolucion({
-      pin: 'Panda2026',
+      pin: '8877',
       ventaId: venta.ventaId,
     })!
 

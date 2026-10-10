@@ -8,7 +8,7 @@ import type {
   VentaHistorial,
   VentaResult,
 } from '../../electron/db/types'
-import { toErrorMessage } from './errors'
+import { desenvolverResultadoSeguro, normalizarError, toErrorMessage } from './errors'
 
 /** Mínimo que siempre alcanza para una sesión de mostrador; el modal pagina más si hace falta. */
 export const HISTORIAL_MINIMO = 20
@@ -58,9 +58,9 @@ export const ventasService = {
     if (typeof input.pin !== 'string') throw new Error('La contraseña es obligatoria')
 
     try {
-      return await window.electronAPI.ventas.anular(input)
+      return desenvolverResultadoSeguro(await window.electronAPI.ventas.anular(input))
     } catch (error) {
-      throw new Error(toErrorMessage(error), { cause: error })
+      throw normalizarError(error)
     }
   },
 }

@@ -1,56 +1,86 @@
+import { createHash, generateKeyPairSync, sign } from 'node:crypto'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { eq } from 'drizzle-orm'
+import { seguridad } from './schema.ts'
+import { PROTECCIONES_INICIALES } from './types.ts'
+import { verificarClaveRecuperacion } from './security.ts'
 
-/*
-  Reportes, cuentas corrientes y anulaciones comparten UNA sola contraseña
-  (`seguridad_reportes`). La maestra "Panda2026" funciona siempre como respaldo,
-  pero nunca se muestra en la interfaz. La contraseña con la que arranca la base
-  ("1234") es solo el centinela de "no se creó ninguna".
-*/
 const carpeta = mkdtempSync(path.join(tmpdir(), 'panda-seguridad-test-'))
 process.env.PANDA_STOCK_DB = path.join(carpeta, 'test.db')
 
-const { initDatabase } = await import('./index.ts')
+const { getDb, initDatabase } = await import('./index.ts')
 const repo = await import('./repository.ts')
 
 initDatabase()
 
-describe('contraseña compartida', () => {
-  it('arranca sin contraseña creada (solo el centinela sembrado)', () => {
+describe('seguridad por contraseña', () => {
+  it('permite acciones protegidas mientras no exista contraseña configurada', () => {
     expect(repo.tieneContrasena()).toBe(false)
+    const protecciones = { ...PROTECCIONES_INICIALES, eliminarCategorias: true }
+    expect(repo.getProtecciones(protecciones)).toEqual(protecciones)
+    expect(repo.getProtecciones(PROTECCIONES_INICIALES)).toEqual(protecciones)
+    const categoria = repo.createCategoria('Sin contraseña')
+
+    expect(() => repo.deleteCategoria(categoria.id)).not.toThrow()
   })
 
-  it('crear contraseña la activa y la valida', () => {
-    expect(repo.createContrasena('7788')).toBe(true)
+  it('usa KDF con salt y admite una contraseña real igual a 1234', () => {
+    expect(repo.createContrasena('1234')).toBe(true)
     expect(repo.tieneContrasena()).toBe(true)
+    const hash = getDb().select({ pinHash: seguridad.pinHash }).from(seguridad).get()?.pinHash
+    expect(hash).toMatch(/^scrypt\$32768\$8\$1\$/)
+    expect(repo.verifyPin('1234')).toBe(true)
+    expect(repo.verifyPin('5678')).toBe(false)
+  })
+
+  it('rechaza PIN vacío e incorrecto en una operación protegida', () => {
+    const protecciones = { ...PROTECCIONES_INICIALES, eliminarCategorias: true }
+    expect(repo.setProtecciones({ protecciones, pin: '1234' })).toEqual(protecciones)
+    const categoriaVacia = repo.createCategoria('Pin vacío')
+    const categoriaIncorrecta = repo.createCategoria('Pin incorrecto')
+
+    expect(() => repo.deleteCategoria(categoriaVacia.id)).toThrow(expect.objectContaining({ code: 'AUTHORIZATION_REQUIRED' }))
+    expect(() => repo.deleteCategoria(categoriaIncorrecta.id, 'incorrecto')).toThrow(expect.objectContaining({ code: 'INVALID_PIN' }))
+    expect(repo.deleteCategoria(categoriaVacia.id, '1234')).toBeUndefined()
+  })
+
+  it('migra un SHA-256 válido a scrypt al verificarlo', () => {
+    const legacy = createHash('sha256').update('7788').digest('hex')
+    getDb().update(seguridad).set({ pinHash: legacy, passwordConfigured: true }).where(eq(seguridad.id, 1)).run()
+
     expect(repo.verifyPin('7788')).toBe(true)
-    expect(repo.verifyPin('1234')).toBe(false)
+    const hashActualizado = getDb().select({ pinHash: seguridad.pinHash }).from(seguridad).get()?.pinHash
+    expect(hashActualizado).toMatch(/^scrypt\$32768\$8\$1\$/)
   })
 
-  it('no permite crear dos veces: existe una contraseña vigente', () => {
-    expect(repo.createContrasena('9999')).toBe(false)
-    expect(repo.verifyPin('7788')).toBe(true)
-    expect(repo.verifyPin('9999')).toBe(false)
+  it('persiste el lockout después de cinco intentos fallidos', () => {
+    for (let intento = 0; intento < 5; intento += 1) {
+      expect(repo.verifyPin('incorrecto')).toBe(false)
+    }
+
+    expect(() => repo.verifyPin('incorrecto')).toThrow(expect.objectContaining({ code: 'PIN_LOCKED' }))
+    const bloqueo = getDb().select({ lockedUntil: seguridad.lockedUntil, lockoutLevel: seguridad.lockoutLevel }).from(seguridad).get()
+    expect(bloqueo?.lockedUntil).toBeGreaterThan(Date.now())
+    expect(bloqueo?.lockoutLevel).toBe(1)
   })
 
-  it('acepta la maestra como respaldo permanente', () => {
-    expect(repo.verifyPin('Panda2026')).toBe(true)
+  it('vincula la clave de recuperación al código de instalación', () => {
+    const { privateKey, publicKey } = generateKeyPairSync('ed25519')
+    const recoveryId = repo.getRecoveryId()
+    const mensaje = Buffer.from(`panda-stock-recovery-v1:${recoveryId}`)
+    const codigo = sign(null, mensaje, privateKey).toString('base64url')
+
+    expect(verificarClaveRecuperacion(codigo, recoveryId, publicKey)).toBe(true)
+    expect(verificarClaveRecuperacion(codigo, 'otra-instalacion', publicKey)).toBe(false)
   })
 
-  it('rechaza una contraseña incorrecta', () => {
-    expect(repo.verifyPin('incorrecta')).toBe(false)
-  })
-
-  it('permite cambiar la contraseña con la maestra como actual', () => {
-    expect(repo.changePin('Panda2026', '3344')).toBe(true)
-    expect(repo.verifyPin('3344')).toBe(true)
-    expect(repo.verifyPin('7788')).toBe(false)
-  })
-
-  it('rechaza el cambio si la contraseña actual no coincide', () => {
-    expect(repo.changePin('9999', '1111')).toBe(false)
-    expect(repo.verifyPin('1111')).toBe(false)
+  it('no restablece la contraseña con una clave inválida', () => {
+    const hashAnterior = getDb().select({ pinHash: seguridad.pinHash }).from(seguridad).get()?.pinHash
+    expect(repo.resetearContrasenaConClave('clave-invalida', 'nueva-clave')).toBe(false)
+    const hashActual = getDb().select({ pinHash: seguridad.pinHash }).from(seguridad).get()?.pinHash
+    expect(hashActual).toBe(hashAnterior)
   })
 })

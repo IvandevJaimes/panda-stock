@@ -44,6 +44,11 @@ type SettingsState = {
   setDescuentoDesdeUnidades: (unidades: number) => void
   /** Áreas y acciones que requieren contraseña cuando existe una. */
   proteccionesSeguridad: ProteccionesSeguridad
+  proteccionesSeedLocal: ProteccionesSeguridad | null
+  proteccionesCargadas: boolean
+  contrasenaConfigurada: boolean
+  hidratarSeguridad: (protecciones: ProteccionesSeguridad, contrasenaConfigurada: boolean) => void
+  setContrasenaConfigurada: (contrasenaConfigurada: boolean) => void
   setProteccionesSeguridad: (protecciones: ProteccionesSeguridad) => void
   /** Muestra la calculadora de vuelto en el ticket cuando se cobra en efectivo. */
   calculadoraVueltoHabilitada: boolean
@@ -79,6 +84,12 @@ export const useSettingsStore = create<SettingsState>()(
       setDescuentoDesdeUnidades: (unidades) =>
         set({ descuentoDesdeUnidades: Math.min(99, Math.max(2, unidades)) }),
       proteccionesSeguridad: PROTECCIONES_INICIALES,
+      proteccionesSeedLocal: null,
+      proteccionesCargadas: false,
+      contrasenaConfigurada: false,
+      hidratarSeguridad: (proteccionesSeguridad, contrasenaConfigurada) =>
+        set({ proteccionesSeguridad, contrasenaConfigurada, proteccionesCargadas: true }),
+      setContrasenaConfigurada: (contrasenaConfigurada) => set({ contrasenaConfigurada }),
       setProteccionesSeguridad: (proteccionesSeguridad) => set({ proteccionesSeguridad }),
       calculadoraVueltoHabilitada: true,
       setCalculadoraVueltoHabilitada: (calculadoraVueltoHabilitada) =>
@@ -98,7 +109,6 @@ export const useSettingsStore = create<SettingsState>()(
         descuentoAutomatico: state.descuentoAutomatico,
         descuentoPorcentaje: state.descuentoPorcentaje,
         descuentoDesdeUnidades: state.descuentoDesdeUnidades,
-        proteccionesSeguridad: state.proteccionesSeguridad,
         calculadoraVueltoHabilitada: state.calculadoraVueltoHabilitada,
       }),
       merge: (persistido, estadoActual) => {
@@ -112,7 +122,8 @@ export const useSettingsStore = create<SettingsState>()(
           ...estadoActual,
           ...ajustes,
           transferenciaHabilitada: true,
-          proteccionesSeguridad: {
+          proteccionesSeguridad: PROTECCIONES_INICIALES,
+          proteccionesSeedLocal: {
             ...PROTECCIONES_INICIALES,
             reportes: proteccionesGuardadas?.reportes ?? legado,
             cuentasCorrientes: proteccionesGuardadas?.cuentasCorrientes ?? legado,

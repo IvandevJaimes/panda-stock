@@ -25,6 +25,9 @@ import type {
 import { formatearMoneda, formatearUnidades } from './reportsQuery'
 import { SOMBRA_CARD } from './estilos'
 import { cn } from '../../lib/cn'
+import { ModalContrasena } from '../seguridad/ModalContrasena'
+import { seguridadService } from '../../services/seguridad.service'
+import { useSettingsStore } from '../../stores/settings.store'
 
 const POR_PAGINA = 10
 
@@ -58,6 +61,10 @@ export function DevolucionesPanel({ desde, hasta, onSuccess }: DevolucionesPanel
   const [tickets, setTickets] = useState<{ items: VentaDevolucionResumen[]; total: number } | null>(null)
   const [historial, setHistorial] = useState<{ items: DevolucionCompleta[]; total: number } | null>(null)
   const [ventaId, setVentaId] = useState<number | null>(null)
+  const [pedirPin, setPedirPin] = useState(false)
+  const requierePin = useSettingsStore((state) =>
+    state.proteccionesCargadas && state.contrasenaConfigurada && state.proteccionesSeguridad.anularVentas,
+  )
   const [detalleCargado, setDetalleCargado] = useState<{
     ventaId: number
     detalle: VentaDevolucionDetalle
@@ -137,6 +144,7 @@ export function DevolucionesPanel({ desde, hasta, onSuccess }: DevolucionesPanel
   const importeEstimado = detalle?.venta.total ?? 0
 
   const cerrarTicket = () => {
+    setPedirPin(false)
     setVentaId(null)
   }
 
@@ -153,15 +161,25 @@ export function DevolucionesPanel({ desde, hasta, onSuccess }: DevolucionesPanel
     }
   }
 
-  const confirmarDevolucion = () => {
+  const ejecutarDevolucion = async (pin: string) => {
     if (!detalle) return
-    void devolucionesService.process({ ventaId: detalle.venta.id }).then((resultado) => {
+    try {
+      const resultado = await devolucionesService.process({ ventaId: detalle.venta.id, pin })
       resultadoPendiente.current = resultado
       if (resultado) completarDevolucion()
       else toast.error('No se pudo completar la devolución')
-    }).catch((error: unknown) => {
+    } catch (error: unknown) {
       toast.error(error instanceof Error ? error.message : 'No se pudo completar la devolución')
-    })
+    }
+  }
+
+  const confirmarDevolucion = () => {
+    if (!detalle) return
+    if (requierePin) {
+      setPedirPin(true)
+      return
+    }
+    void ejecutarDevolucion('')
   }
 
   const paginaMaxima = Math.max(
@@ -247,7 +265,7 @@ export function DevolucionesPanel({ desde, hasta, onSuccess }: DevolucionesPanel
       )}
 
       <Modal
-        isOpen={ventaId !== null}
+        isOpen={ventaId !== null && !pedirPin}
         onClose={cerrarTicket}
         title={detalle ? `Devolver ticket #${detalle.venta.id}` : 'Cargar ticket'}
         subtitle={detalle ? `Venta del ${fechaHora(detalle.venta.fechaHora)}` : 'Consultando artículos y devoluciones anteriores'}
@@ -307,6 +325,18 @@ export function DevolucionesPanel({ desde, hasta, onSuccess }: DevolucionesPanel
           <p className="py-8 text-center text-sm text-slate-500 dark:text-slate-400">Cargando ticket…</p>
         )}
       </Modal>
+
+      {pedirPin && detalle && (
+        <ModalContrasena
+          titulo="Autorizar devolución"
+          subtitulo="Ingresá la contraseña para completar la devolución."
+          etiquetaCancelar="Cancelar"
+          etiquetaConfirmar="Confirmar devolución"
+          onSubmit={(pin) => seguridadService.verifyPin(pin)}
+          onSuccess={ejecutarDevolucion}
+          onCancelar={() => setPedirPin(false)}
+        />
+      )}
 
     </section>
   )

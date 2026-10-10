@@ -292,7 +292,7 @@ export function ConfiguracionInicialVentana() {
       case 1:
         return renderConTitulo(
           'Seguridad opcional',
-          'Podés crear una contraseña ahora o configurarla más adelante desde Ajustes. Si la olvidás, podés recuperarla con el PIN maestro de los desarrolladores.',
+          'Podés crear una contraseña ahora o configurarla más adelante desde Ajustes. Si la olvidás, contactá al soporte para restablecer la seguridad de este equipo.',
           <div className="flex flex-col gap-4">
             <Input
               autoFocus

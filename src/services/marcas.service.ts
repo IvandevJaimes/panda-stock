@@ -1,5 +1,5 @@
 import type { Marca } from '../../electron/db/types'
-import { toErrorMessage } from './errors'
+import { desenvolverResultadoSeguro, normalizarError } from './errors'
 
 export const marcasService = {
   async getAll(): Promise<Marca[]> {
@@ -32,11 +32,11 @@ export const marcasService = {
     }
   },
 
-  async delete(id: number): Promise<void> {
+  async delete(id: number, pin?: string): Promise<void> {
     try {
-      await window.electronAPI.marcas.delete(id)
+      desenvolverResultadoSeguro(await window.electronAPI.marcas.delete(id, pin))
     } catch (error) {
-      throw new Error(toErrorMessage(error), { cause: error })
+      throw normalizarError(error)
     }
   },
 }

@@ -1,5 +1,5 @@
 import type { Lote, NuevoLote } from '../../electron/db/types'
-import { toErrorMessage } from './errors'
+import { desenvolverResultadoSeguro, normalizarError, toErrorMessage } from './errors'
 
 export const lotesService = {
   async getByProducto(productoId: number): Promise<Lote[]> {
@@ -41,11 +41,11 @@ export const lotesService = {
     }
   },
 
-  async delete(id: number): Promise<void> {
+  async delete(id: number, pin?: string): Promise<void> {
     try {
-      await window.electronAPI.lotes.delete(id)
+      desenvolverResultadoSeguro(await window.electronAPI.lotes.delete(id, pin))
     } catch (error) {
-      throw new Error(toErrorMessage(error), { cause: error })
+      throw normalizarError(error)
     }
   },
 }

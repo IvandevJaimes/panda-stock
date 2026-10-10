@@ -8,6 +8,9 @@ import { negocioService } from './services/negocio.service'
 import { useScannerInit } from './hooks/useBarcodeScanner'
 import { StockAlertSound } from './components/ui/alerts/StockAlertSound'
 import { detectExpiryAlerts } from './services/expiryDetectionService'
+import { seguridadService } from './services/seguridad.service'
+import { PROTECCIONES_INICIALES } from './types/security'
+import { useSettingsStore } from './stores/settings.store'
 
 function App() {
   const theme = useUIStore((state) => state.theme)
@@ -34,6 +37,21 @@ function App() {
       activo = false
     }
   }, [setNegocio])
+
+  useEffect(() => {
+    const store = useSettingsStore.getState()
+    const protecciones = store.proteccionesSeedLocal ?? PROTECCIONES_INICIALES
+    Promise.all([seguridadService.getProtecciones(protecciones), seguridadService.tieneContrasena()])
+      .then(([proteccionesDb, tieneContrasena]) => {
+        useSettingsStore.getState().hidratarSeguridad(proteccionesDb, tieneContrasena)
+      })
+      .catch(() => {
+        const todasProtegidas = Object.fromEntries(
+          Object.keys(PROTECCIONES_INICIALES).map((clave) => [clave, true]),
+        ) as typeof PROTECCIONES_INICIALES
+        useSettingsStore.getState().hidratarSeguridad(todasProtegidas, true)
+      })
+  }, [])
 
   useEffect(() => {
     detectExpiryAlerts().catch((err) => {

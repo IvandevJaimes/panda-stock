@@ -1321,7 +1321,8 @@ export function InventoryPage() {
         onClose={() => setDeletingCategory(null)}
         onConfirm={async () => {
           if (!deletingCategory) return;
-          if (useSettingsStore.getState().proteccionesSeguridad.eliminarCategorias) {
+          const seguridad = useSettingsStore.getState()
+          if (seguridad.contrasenaConfigurada && seguridad.proteccionesSeguridad.eliminarCategorias) {
             setCategoriaAEliminarProtegida(deletingCategory);
             return;
           }
@@ -1353,9 +1354,9 @@ export function InventoryPage() {
           etiquetaConfirmar="Autorizar y eliminar"
           confirmarVariant="danger"
           onSubmit={(contrasena) => seguridadService.verifyPin(contrasena)}
-          onSuccess={async () => {
+          onSuccess={async (pin) => {
             const categoria = categoriaAEliminarProtegida;
-            await removeCategory(categoria.id);
+            await removeCategory(categoria.id, pin);
             if (selectedCategory === String(categoria.id)) {
               setSelectedCategory("all");
               setPaginaActual(1);
@@ -1373,7 +1374,7 @@ export function InventoryPage() {
         onConfirm={async () => {
           if (!deletingProduct) return;
           const protecciones = useSettingsStore.getState().proteccionesSeguridad;
-          if (protecciones.eliminarProductos || protecciones.eliminarLotes) {
+          if (useSettingsStore.getState().contrasenaConfigurada && protecciones.eliminarProductos) {
             setProductoAEliminarProtegido(deletingProduct);
             return;
           }
@@ -1408,9 +1409,9 @@ export function InventoryPage() {
           etiquetaConfirmar="Autorizar y eliminar"
           confirmarVariant="danger"
           onSubmit={(contrasena) => seguridadService.verifyPin(contrasena)}
-          onSuccess={async () => {
+          onSuccess={async (pin) => {
             const producto = productoAEliminarProtegido;
-            await productosService.delete(producto.id);
+            await productosService.delete(producto.id, pin);
             setProductForQuickActions((prev) => prev?.id === producto.id ? null : prev);
             setLotesProducto((prev) => prev?.id === producto.id ? null : prev);
             setProductoAEliminarProtegido(null);

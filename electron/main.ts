@@ -68,6 +68,11 @@ import {
   updateNegocio,
   verifyPin,
   tieneContrasena,
+  getRecoveryId,
+  resetearContrasenaConClave,
+  getProtecciones,
+  setProtecciones,
+  requiereProteccion,
   verificarCodigosEnUso,
   getClientes,
   createCliente,
@@ -105,11 +110,57 @@ import type {
   NuevoEmpleado,
   NuevoLote,
   VentaCompletaInput,
+  ClaveProteccion,
+  ProteccionesSeguridad,
+  ResultadoSeguro,
 } from "./db/types.ts";
+import { ErrorAutorizacion } from "./db/security.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const isDev = !app.isPackaged;
+const accesosVerificados = new Map<number, Set<ClaveProteccion>>();
+
+function resultadoSeguro<T>(accion: () => T): ResultadoSeguro<T> {
+  try {
+    return { ok: true, value: accion() };
+  } catch (error) {
+    if (error instanceof ErrorAutorizacion) {
+      return {
+        ok: false,
+        error: {
+          code: error.code,
+          message: error.message,
+          ...(error.retryAt === undefined ? {} : { retryAt: error.retryAt }),
+        },
+      };
+    }
+    throw error;
+  }
+}
+
+function requerirAccesoVerificado(idWebContents: number, proteccion: ClaveProteccion): void {
+  if (!requiereProteccion(proteccion)) return;
+  if (accesosVerificados.get(idWebContents)?.has(proteccion)) return;
+  throw new ErrorAutorizacion('AUTHORIZATION_REQUIRED', 'Ingresá la contraseña para acceder a esta sección');
+}
+
+function esSeedProtecciones(valor: unknown): valor is ProteccionesSeguridad {
+  if (typeof valor !== 'object' || valor === null) return false;
+  const claves: ClaveProteccion[] = [
+    'reportes', 'cuentasCorrientes', 'anularVentas', 'eliminarProductos',
+    'eliminarLotes', 'eliminarCategorias', 'eliminarMarcas',
+  ];
+  const registro = valor as Record<string, unknown>;
+  return claves.every((clave) => typeof registro[clave] === 'boolean');
+}
+
+function esClaveProteccion(valor: unknown): valor is ClaveProteccion {
+  return typeof valor === 'string' && [
+    'reportes', 'cuentasCorrientes', 'anularVentas', 'eliminarProductos',
+    'eliminarLotes', 'eliminarCategorias', 'eliminarMarcas',
+  ].includes(valor)
+}
 
 /**
  * La app no sale con la caja abierta. El arqueo es lo único que deja constancia
@@ -187,6 +238,7 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      devTools: isDev,
     },
   });
 
@@ -198,6 +250,10 @@ function createWindow() {
   // los dos: `close` alcanza cuando el cajero aprieta la X, y `before-quit` cuando
   // el SO le pide salir a la app entera.
   win.on("close", (evento) => interceptarCierreSiHayCaja(evento, win));
+  win.webContents.on("did-start-navigation", (_event, _url, _inPlace, isMainFrame) => {
+    if (isMainFrame) accesosVerificados.delete(win.webContents.id);
+  });
+  win.webContents.on("destroyed", () => accesosVerificados.delete(win.webContents.id));
 
   // Volcado de errores del renderer a userData/panda-stock.log para diagnosticar
   // desde la VM sin DevTools.
@@ -220,13 +276,14 @@ function createWindow() {
     }
   });
 
-  // DevTools solo en desarrollo, alternadas con F12.
-  win.webContents.on("before-input-event", (_event, input) => {
-    if (input.type === "keyDown" && input.key === "F12") {
-      _event.preventDefault();
-      win.webContents.toggleDevTools();
-    }
-  });
+  if (isDev) {
+    win.webContents.on("before-input-event", (event, input) => {
+      if (input.type === "keyDown" && input.key === "F12") {
+        event.preventDefault();
+        win.webContents.toggleDevTools();
+      }
+    });
+  }
 
   if (isDev) {
     win.loadURL("http://localhost:5173");
@@ -261,6 +318,7 @@ function createSetupWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      devTools: isDev,
     },
   });
 
@@ -296,20 +354,66 @@ function negocioConfigurado(): boolean {
 }
 
 function registerIpcHandlers() {
-  ipcMain.handle("seguridad:verify-pin", (_event, pin: string) =>
-    verifyPin(pin),
+  ipcMain.handle("seguridad:verify-pin", (event, pin: string, scope?: ClaveProteccion) =>
+    resultadoSeguro(() => {
+      if (scope !== undefined && !esClaveProteccion(scope)) {
+        throw new Error("La sección protegida no es válida")
+      }
+      const validado = verifyPin(pin);
+      if (!validado) throw new ErrorAutorizacion('INVALID_PIN', 'La contraseña es incorrecta');
+      if (scope) {
+        const scopes = accesosVerificados.get(event.sender.id) ?? new Set<ClaveProteccion>();
+        scopes.add(scope);
+        accesosVerificados.set(event.sender.id, scopes);
+      }
+      return true;
+    }),
   );
   ipcMain.handle(
     "seguridad:change-pin",
     (_event, pinActual: string, pinNuevo: string) =>
-      changePin(pinActual, pinNuevo),
+      resultadoSeguro(() => {
+        const cambio = changePin(pinActual, pinNuevo);
+        if (cambio) accesosVerificados.clear();
+        return cambio;
+      }),
   );
   ipcMain.handle("seguridad:tiene-contrasena", () => tieneContrasena());
+  ipcMain.handle("seguridad:get-recovery-id", () => getRecoveryId());
+  ipcMain.handle("seguridad:resetear-con-clave", (_event, codigo: string, pinNuevo: string) =>
+    resultadoSeguro(() => {
+      const reseteada = resetearContrasenaConClave(codigo, pinNuevo);
+      if (reseteada) accesosVerificados.clear();
+      return reseteada;
+    }),
+  );
   ipcMain.handle("seguridad:crear-contrasena", (_event, pinNuevo: string) =>
-    createContrasena(pinNuevo),
+    resultadoSeguro(() => {
+      const creada = createContrasena(pinNuevo);
+      if (creada) accesosVerificados.clear();
+      return creada;
+    }),
   );
   ipcMain.handle("seguridad:quitar-contrasena", (_event, pinActual: string) =>
-    removeContrasena(pinActual),
+    resultadoSeguro(() => {
+      const quitada = removeContrasena(pinActual);
+      if (quitada) accesosVerificados.clear();
+      return quitada;
+    }),
+  );
+  ipcMain.handle("seguridad:get-protecciones", (_event, seed: unknown) =>
+    resultadoSeguro(() => {
+      if (!esSeedProtecciones(seed)) throw new Error("La configuración de protecciones no es válida");
+      return getProtecciones(seed);
+    }),
+  );
+  ipcMain.handle("seguridad:set-protecciones", (_event, protecciones: ProteccionesSeguridad, pin?: string) =>
+    resultadoSeguro(() => {
+      if (!esSeedProtecciones(protecciones)) throw new Error("La configuración de protecciones no es válida");
+      const guardadas = setProtecciones({ protecciones, pin });
+      accesosVerificados.clear();
+      return guardadas;
+    }),
   );
 
   ipcMain.handle("negocio:get", () => getNegocio());
@@ -358,8 +462,8 @@ function registerIpcHandlers() {
   ipcMain.handle("categorias:update", (_event, id: number, nombre: string) =>
     updateCategoria(id, nombre),
   );
-  ipcMain.handle("categorias:delete", (_event, id: number) =>
-    deleteCategoria(id),
+  ipcMain.handle("categorias:delete", (_event, id: number, pin?: string) =>
+    resultadoSeguro(() => deleteCategoria(id, pin)),
   );
 
   ipcMain.handle("marcas:get-all", () => getMarcas());
@@ -369,7 +473,9 @@ function registerIpcHandlers() {
   ipcMain.handle("marcas:update", (_event, id: number, nombre: string) =>
     updateMarca(id, nombre),
   );
-  ipcMain.handle("marcas:delete", (_event, id: number) => deleteMarca(id));
+  ipcMain.handle("marcas:delete", (_event, id: number, pin?: string) =>
+    resultadoSeguro(() => deleteMarca(id, pin)),
+  );
 
   ipcMain.handle("productos:scan", (_event, codigo: string) =>
     scanProductByCode(codigo),
@@ -392,8 +498,8 @@ function registerIpcHandlers() {
   ipcMain.handle("productos:update", (_event, id: number, data) =>
     updateProducto(id, data),
   );
-  ipcMain.handle("productos:delete", (_event, id: number) =>
-    deleteProducto(id),
+  ipcMain.handle("productos:delete", (_event, id: number, pin?: string) =>
+    resultadoSeguro(() => deleteProducto(id, pin)),
   );
   ipcMain.handle("productos:toggle", (_event, id: number, activo: boolean) =>
     toggleProducto(id, activo),
@@ -422,7 +528,9 @@ function registerIpcHandlers() {
   ipcMain.handle("lotes:update", (_event, id: number, data: { fechaVence?: string | null; costoUnitario?: number; cantidadActual?: number; motivo?: string }) =>
     updateLote(id, data),
   );
-  ipcMain.handle("lotes:delete", (_event, id: number) => deleteLote(id));
+  ipcMain.handle("lotes:delete", (_event, id: number, pin?: string) =>
+    resultadoSeguro(() => deleteLote(id, pin)),
+  );
 
   ipcMain.handle("cajas:get-active", () => getActiveCaja());
   ipcMain.handle("cajas:get-ultimos-responsables", () => getUltimosResponsables());
@@ -450,20 +558,29 @@ function registerIpcHandlers() {
     getVentasRecientes(limite),
   );
   ipcMain.handle("ventas:anular", (_event, input: AnularVentaInput) =>
-    anularVenta(input),
+    resultadoSeguro(() => anularVenta(input)),
   );
 
-  ipcMain.handle("devoluciones:get-ventas", (_event, filtros?: FiltrosDevoluciones) =>
-    getVentasDevolucion(filtros),
+  ipcMain.handle("devoluciones:get-ventas", (event, filtros?: FiltrosDevoluciones) =>
+    resultadoSeguro(() => {
+      requerirAccesoVerificado(event.sender.id, 'reportes');
+      return getVentasDevolucion(filtros);
+    }),
   );
-  ipcMain.handle("devoluciones:get-venta-detail", (_event, ventaId: number) =>
-    getVentaDevolucionDetalle(ventaId),
+  ipcMain.handle("devoluciones:get-venta-detail", (event, ventaId: number) =>
+    resultadoSeguro(() => {
+      requerirAccesoVerificado(event.sender.id, 'reportes');
+      return getVentaDevolucionDetalle(ventaId);
+    }),
   );
-  ipcMain.handle("devoluciones:get-historial", (_event, filtros?: FiltrosDevoluciones) =>
-    getHistorialDevoluciones(filtros),
+  ipcMain.handle("devoluciones:get-historial", (event, filtros?: FiltrosDevoluciones) =>
+    resultadoSeguro(() => {
+      requerirAccesoVerificado(event.sender.id, 'reportes');
+      return getHistorialDevoluciones(filtros);
+    }),
   );
   ipcMain.handle("devoluciones:process", (_event, input: ProcesarDevolucionInput) =>
-    processDevolucion(input),
+    resultadoSeguro(() => processDevolucion(input)),
   );
 
   ipcMain.handle(
@@ -478,35 +595,67 @@ function registerIpcHandlers() {
     crearMovimientoStock(data),
   );
 
-  ipcMain.handle("reportes:summary", (_event, filtros?: FiltrosReportes) =>
-    getReportesSummary(filtros),
+  ipcMain.handle("reportes:summary", (event, filtros?: FiltrosReportes) =>
+    resultadoSeguro(() => {
+      requerirAccesoVerificado(event.sender.id, 'reportes');
+      return getReportesSummary(filtros);
+    }),
   );
 
-  ipcMain.handle("reportes:exportar-excel", (_event, input: ExportarExcelInput) =>
-    exportarExcel(input),
+  ipcMain.handle("reportes:exportar-excel", (event, input: ExportarExcelInput) =>
+    resultadoSeguro(() => {
+      requerirAccesoVerificado(event.sender.id, 'reportes');
+      return exportarExcel(input);
+    }),
   );
 
-  ipcMain.handle("cuentas-corrientes:clientes", (_event, opciones?: { incluirInactivos?: boolean }) =>
-    getClientes(opciones),
+  ipcMain.handle("cuentas-corrientes:clientes", (event, opciones?: { incluirInactivos?: boolean }) =>
+    resultadoSeguro(() => {
+      requerirAccesoVerificado(event.sender.id, 'cuentasCorrientes');
+      return getClientes(opciones);
+    }),
   );
-  ipcMain.handle("cuentas-corrientes:cliente-crear", (_event, data: ClienteInput) =>
-    createCliente(data),
+  ipcMain.handle("cuentas-corrientes:cliente-crear", (event, data: ClienteInput) =>
+    resultadoSeguro(() => {
+      requerirAccesoVerificado(event.sender.id, 'cuentasCorrientes');
+      return createCliente(data);
+    }),
   );
-  ipcMain.handle("cuentas-corrientes:cliente-actualizar", (_event, id: number, data: ClienteInput) =>
-    updateCliente(id, data),
+  ipcMain.handle("cuentas-corrientes:cliente-actualizar", (event, id: number, data: ClienteInput) =>
+    resultadoSeguro(() => {
+      requerirAccesoVerificado(event.sender.id, 'cuentasCorrientes');
+      return updateCliente(id, data);
+    }),
   );
-  ipcMain.handle("cuentas-corrientes:cliente-archivar", (_event, id: number) =>
-    archivarCliente(id),
+  ipcMain.handle("cuentas-corrientes:cliente-archivar", (event, id: number) =>
+    resultadoSeguro(() => {
+      requerirAccesoVerificado(event.sender.id, 'cuentasCorrientes');
+      return archivarCliente(id);
+    }),
   );
-  ipcMain.handle("cuentas-corrientes:movimientos", (_event, filtros?: FiltrosCuentaCorriente) =>
-    getMovimientosCuentaCorriente(filtros),
+  ipcMain.handle("cuentas-corrientes:movimientos", (event, filtros?: FiltrosCuentaCorriente) =>
+    resultadoSeguro(() => {
+      requerirAccesoVerificado(event.sender.id, 'cuentasCorrientes');
+      return getMovimientosCuentaCorriente(filtros);
+    }),
   );
-  ipcMain.handle("cuentas-corrientes:resumen", () => getResumenCuentasCorrientes());
-  ipcMain.handle("cuentas-corrientes:abono", (_event, data: AbonoInput) =>
-    registrarAbono(data),
+  ipcMain.handle("cuentas-corrientes:resumen", (event) =>
+    resultadoSeguro(() => {
+      requerirAccesoVerificado(event.sender.id, 'cuentasCorrientes');
+      return getResumenCuentasCorrientes();
+    }),
   );
-  ipcMain.handle("cuentas-corrientes:cargo", (_event, data: CargoManualInput) =>
-    registrarCargoManual(data),
+  ipcMain.handle("cuentas-corrientes:abono", (event, data: AbonoInput) =>
+    resultadoSeguro(() => {
+      requerirAccesoVerificado(event.sender.id, 'cuentasCorrientes');
+      return registrarAbono(data);
+    }),
+  );
+  ipcMain.handle("cuentas-corrientes:cargo", (event, data: CargoManualInput) =>
+    resultadoSeguro(() => {
+      requerirAccesoVerificado(event.sender.id, 'cuentasCorrientes');
+      return registrarCargoManual(data);
+    }),
   );
 
   ipcMain.handle("datosPrueba:hay", () => hayDatosPrueba());

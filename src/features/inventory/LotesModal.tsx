@@ -184,7 +184,8 @@ export function LotesModal({
 
   const handleDeleteLote = async () => {
     if (!deletingLote) return;
-    if (useSettingsStore.getState().proteccionesSeguridad.eliminarLotes) {
+    const seguridad = useSettingsStore.getState()
+    if (seguridad.contrasenaConfigurada && seguridad.proteccionesSeguridad.eliminarLotes) {
       setLoteAEliminarProtegido(deletingLote);
       return;
     }
@@ -481,9 +482,9 @@ export function LotesModal({
           etiquetaConfirmar="Autorizar y eliminar"
           confirmarVariant="danger"
           onSubmit={(contrasena) => seguridadService.verifyPin(contrasena)}
-          onSuccess={async () => {
+          onSuccess={async (pin) => {
             const lote = loteAEliminarProtegido;
-            await lotesService.delete(lote.id);
+            await lotesService.delete(lote.id, pin);
             setLoteAEliminarProtegido(null);
             toast.success("Lote eliminado correctamente");
             refreshData();

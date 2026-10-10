@@ -2,16 +2,23 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DevolucionesPanel } from './DevolucionesPanel'
+import { useSettingsStore } from '../../stores/settings.store'
+import { PROTECCIONES_INICIALES } from '../../types/security'
 
 const mocks = vi.hoisted(() => ({
   getVentas: vi.fn(),
   getVentaDetalle: vi.fn(),
   getHistorial: vi.fn(),
   process: vi.fn(),
+  verifyPin: vi.fn(),
 }))
 
 vi.mock('../../services/devoluciones.service', () => ({
   devolucionesService: mocks,
+}))
+
+vi.mock('../../services/seguridad.service', () => ({
+  seguridadService: { verifyPin: mocks.verifyPin },
 }))
 
 const ticket = {
@@ -58,6 +65,12 @@ const detalle = {
 
 describe('DevolucionesPanel', () => {
   beforeEach(() => {
+    mocks.verifyPin.mockReset().mockResolvedValue(true)
+    useSettingsStore.setState({
+      proteccionesCargadas: true,
+      contrasenaConfigurada: true,
+      proteccionesSeguridad: { ...PROTECCIONES_INICIALES, anularVentas: true },
+    })
     mocks.getVentas.mockReset().mockResolvedValue({ items: [ticket], total: 1 })
     mocks.getVentaDetalle.mockReset().mockResolvedValue(detalle)
     mocks.getHistorial.mockReset().mockResolvedValue({ items: [], total: 0 })
@@ -80,7 +93,7 @@ describe('DevolucionesPanel', () => {
 
     await user.click(screen.getByRole('button', { name: 'Devolver ticket completo · $100.00' }))
     await user.type(screen.getByLabelText('Contraseña'), '1234')
-    await user.click(screen.getByRole('button', { name: 'Entrar' }))
+    await user.click(screen.getByRole('button', { name: 'Confirmar devolución' }))
 
     await waitFor(() => expect(mocks.process).toHaveBeenCalledWith({
       pin: '1234',

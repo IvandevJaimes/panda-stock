@@ -2,6 +2,37 @@ export type TipoVenta = 'unidad' | 'caja' | 'combo'
 export type UnidadMedida = 'unidad' | 'ml' | 'g'
 export type EstadoVenta = 'completada' | 'anulada'
 export type EstadoCaja = 'abierta' | 'cerrada'
+export type ClaveProteccion =
+  | 'reportes'
+  | 'cuentasCorrientes'
+  | 'anularVentas'
+  | 'eliminarProductos'
+  | 'eliminarLotes'
+  | 'eliminarCategorias'
+  | 'eliminarMarcas'
+export type ProteccionesSeguridad = Record<ClaveProteccion, boolean>
+export const CLAVES_PROTECCION: readonly ClaveProteccion[] = [
+  'reportes',
+  'cuentasCorrientes',
+  'anularVentas',
+  'eliminarProductos',
+  'eliminarLotes',
+  'eliminarCategorias',
+  'eliminarMarcas',
+]
+export const PROTECCIONES_INICIALES: ProteccionesSeguridad = {
+  reportes: false,
+  cuentasCorrientes: false,
+  anularVentas: false,
+  eliminarProductos: false,
+  eliminarLotes: false,
+  eliminarCategorias: false,
+  eliminarMarcas: false,
+}
+export type ErrorSeguridadCode = 'AUTHORIZATION_REQUIRED' | 'INVALID_PIN' | 'PIN_LOCKED'
+export type ResultadoSeguro<T> =
+  | { ok: true; value: T }
+  | { ok: false; error: { code: ErrorSeguridadCode; message: string; retryAt?: number } }
 export type MetodoPago =
   | 'efectivo'
   | 'transferencia'
@@ -25,7 +56,6 @@ export type Negocio = {
 export type NegocioInput = {
   nombre?: string | null
   logoPath?: string | null
-  password?: string
 }
 
 export type NegocioLogoUpload = {
@@ -330,6 +360,11 @@ export type VentaDevolucionDetalle = {
 export type ProcesarDevolucionInput = {
   pin?: string
   ventaId: number
+}
+
+export type CambiarProteccionesInput = {
+  protecciones: ProteccionesSeguridad
+  pin?: string
 }
 
 export type Devolucion = {

@@ -25,7 +25,7 @@ export function CuentasCorrientesRoute() {
       <ModalContrasena
         titulo="Cuentas corrientes bloqueadas"
         subtitulo="Ingresá tu contraseña para verlas."
-        onSubmit={(contrasena) => seguridadService.verifyPin(contrasena)}
+        onSubmit={(contrasena) => seguridadService.verifyPin(contrasena, 'cuentasCorrientes')}
         onSuccess={unlock}
         onCancelar={() => navigate('/pos', { replace: true })}
       />

@@ -46,6 +46,9 @@ import type {
   VentaDevolucionDetalle,
   VentaDevolucionResumen,
   DevolucionCompleta,
+  ClaveProteccion,
+  ProteccionesSeguridad,
+  ResultadoSeguro,
 } from '../../electron/db/types'
 import type { ExportarExcelInput } from '../../electron/exportaciones.types'
 import type { ResultadoDatosPrueba } from '../../electron/db/testdata.repository'
@@ -57,11 +60,15 @@ declare global {
     electronAPI: {
       platform: string
       seguridad: {
-        verifyPin: (pin: string) => Promise<boolean>
-        changePin: (pinActual: string, pinNuevo: string) => Promise<boolean>
+        verifyPin: (pin: string, scope?: ClaveProteccion) => Promise<ResultadoSeguro<boolean>>
+        changePin: (pinActual: string, pinNuevo: string) => Promise<ResultadoSeguro<boolean>>
         tieneContrasena: () => Promise<boolean>
-        crearContrasena: (pinNuevo: string) => Promise<boolean>
-        quitarContrasena: (pinActual: string) => Promise<boolean>
+        getRecoveryId: () => Promise<string>
+        resetearConClave: (codigo: string, pinNuevo: string) => Promise<ResultadoSeguro<boolean>>
+        crearContrasena: (pinNuevo: string) => Promise<ResultadoSeguro<boolean>>
+        quitarContrasena: (pinActual: string) => Promise<ResultadoSeguro<boolean>>
+        getProtecciones: (seed: ProteccionesSeguridad) => Promise<ResultadoSeguro<ProteccionesSeguridad>>
+        setProtecciones: (protecciones: ProteccionesSeguridad, pin?: string) => Promise<ResultadoSeguro<ProteccionesSeguridad>>
       }
       negocio: {
         get: () => Promise<Negocio | null>
@@ -77,13 +84,13 @@ declare global {
         getAll: () => Promise<Categoria[]>
         create: (nombre: string) => Promise<Categoria>
         update: (id: number, nombre: string) => Promise<void>
-        delete: (id: number) => Promise<void>
+        delete: (id: number, pin?: string) => Promise<ResultadoSeguro<void>>
       }
       marcas: {
         getAll: () => Promise<Marca[]>
         create: (nombre: string) => Promise<Marca>
         update: (id: number, nombre: string) => Promise<void>
-        delete: (id: number) => Promise<void>
+        delete: (id: number, pin?: string) => Promise<ResultadoSeguro<void>>
       }
       productos: {
         scan: (codigo: string) => Promise<ProductoConLoteActivo | null>
@@ -93,7 +100,7 @@ declare global {
         getById: (id: number) => Promise<Producto | null>
         create: (data: Record<string, unknown>) => Promise<Producto>
         update: (id: number, data: Record<string, unknown>) => Promise<Producto>
-        delete: (id: number) => Promise<void>
+        delete: (id: number, pin?: string) => Promise<ResultadoSeguro<void>>
         toggle: (id: number, activo: boolean) => Promise<Producto>
         setImage: (productoId: number, data: ArrayBuffer, extension: string) => Promise<Producto>
         removeImage: (productoId: number) => Promise<Producto>
@@ -104,7 +111,7 @@ declare global {
         create: (data: NuevoLote) => Promise<Lote>
         getExpiring: (diasLimite: number) => Promise<Lote[]>
         update: (id: number, data: { fechaVence?: string | null; costoUnitario?: number; cantidadActual?: number; motivo?: string }) => Promise<Lote>
-        delete: (id: number) => Promise<void>
+        delete: (id: number, pin?: string) => Promise<ResultadoSeguro<void>>
       }
       cajas: {
         getActive: () => Promise<CajaConResponsable | null>
@@ -119,13 +126,13 @@ declare global {
         getAll: (filtros?: FiltrosVentas) => Promise<Venta[]>
         getDetail: (idVenta: number) => Promise<VentaDetalle | null>
         getRecientes: (limite: number) => Promise<VentaHistorial[]>
-        anular: (input: AnularVentaInput) => Promise<ResultadoAnulacion | null>
+        anular: (input: AnularVentaInput) => Promise<ResultadoSeguro<ResultadoAnulacion>>
       }
       devoluciones: {
-        getVentas: (filtros?: FiltrosDevoluciones) => Promise<{ items: VentaDevolucionResumen[]; total: number }>
-        getVentaDetail: (ventaId: number) => Promise<VentaDevolucionDetalle | null>
-        getHistorial: (filtros?: FiltrosDevoluciones) => Promise<{ items: DevolucionCompleta[]; total: number }>
-        process: (input: ProcesarDevolucionInput) => Promise<ResultadoDevolucion | null>
+        getVentas: (filtros?: FiltrosDevoluciones) => Promise<ResultadoSeguro<{ items: VentaDevolucionResumen[]; total: number }>>
+        getVentaDetail: (ventaId: number) => Promise<ResultadoSeguro<VentaDevolucionDetalle | null>>
+        getHistorial: (filtros?: FiltrosDevoluciones) => Promise<ResultadoSeguro<{ items: DevolucionCompleta[]; total: number }>>
+        process: (input: ProcesarDevolucionInput) => Promise<ResultadoSeguro<ResultadoDevolucion>>
       }
       movimientos: {
         getAll: (filtros?: FiltrosMovimientos) => Promise<MovimientoStock[]>
@@ -133,24 +140,24 @@ declare global {
       crear: (data: CrearMovimientoInput) => Promise<void>
       }
       reportes: {
-        getSummary: (filtros?: FiltrosReportes) => Promise<ReportesSummary>
+        getSummary: (filtros?: FiltrosReportes) => Promise<ResultadoSeguro<ReportesSummary>>
         exportarExcel: (
           input: ExportarExcelInput,
-        ) => Promise<string | null>
+        ) => Promise<ResultadoSeguro<string | null>>
       }
       cuentasCorrientes: {
         getClientes: (opciones?: {
           incluirInactivos?: boolean
-        }) => Promise<ClienteConSaldo[]>
-        crearCliente: (data: ClienteInput) => Promise<Cliente>
-        actualizarCliente: (id: number, data: ClienteInput) => Promise<void>
-        archivarCliente: (id: number) => Promise<void>
-        getResumen: () => Promise<ResumenCuentasCorrientes>
+        }) => Promise<ResultadoSeguro<ClienteConSaldo[]>>
+        crearCliente: (data: ClienteInput) => Promise<ResultadoSeguro<Cliente>>
+        actualizarCliente: (id: number, data: ClienteInput) => Promise<ResultadoSeguro<void>>
+        archivarCliente: (id: number) => Promise<ResultadoSeguro<void>>
+        getResumen: () => Promise<ResultadoSeguro<ResumenCuentasCorrientes>>
         getMovimientos: (
           filtros?: FiltrosCuentaCorriente,
-        ) => Promise<MovimientoCuentaCorriente[]>
-        registrarAbono: (data: AbonoInput) => Promise<void>
-        registrarCargo: (data: CargoManualInput) => Promise<void>
+        ) => Promise<ResultadoSeguro<MovimientoCuentaCorriente[]>>
+        registrarAbono: (data: AbonoInput) => Promise<ResultadoSeguro<void>>
+        registrarCargo: (data: CargoManualInput) => Promise<ResultadoSeguro<void>>
       }
       datosPrueba: {
         hay: () => Promise<boolean>

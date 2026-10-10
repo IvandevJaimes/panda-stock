@@ -19,7 +19,9 @@ import {
   inArray,
   type SQL,
 } from 'drizzle-orm'
-import { getDb, sha256 } from './index.ts'
+import { randomUUID } from 'node:crypto'
+import { getDb } from './index.ts'
+import { PROTECCIONES_INICIALES } from './types.ts'
 import {
   cajas,
   categorias,
@@ -37,7 +39,7 @@ import {
   negocio,
   pagos,
   productos,
-  seguridadReportes,
+  seguridad,
   ventas,
 } from './schema.ts'
 import type {
@@ -50,7 +52,9 @@ import type {
   CajaSummary,
   Categoria,
   CargoManualInput,
+  ClaveProteccion,
   CierreCajaInput,
+  CambiarProteccionesInput,
   Cliente,
   ClienteConSaldo,
   ClienteInput,
@@ -95,85 +99,194 @@ import type {
   MetodoPago,
   MasVendido,
   ProductoRanking,
+  ProteccionesSeguridad,
   CrearMovimientoInput,
 } from './types.ts'
+import { ErrorAutorizacion, hashPin, verificarClaveRecuperacion, verificarHashPin } from './security.ts'
 
-// Contraseña maestra de respaldo permanente. Se compara contra su hash para no
-// tener el secreto en texto plano (SHA-256 de "Panda2026").
-const MAESTRA_PASSWORD_HASH = '5e7d00f3e1ecc560f2d12d8dd015d2e456f0ef4836f9c853ae359b83b9f06cfe'
+function leerSeguridad() {
+  const fila = getDb().select().from(seguridad).where(eq(seguridad.id, 1)).get()
+  if (!fila) throw new Error('No se encontró la configuración de seguridad')
+  return fila
+}
 
-function hashValida(pinHash: string, pin: string): boolean {
-  return sha256(pin) === pinHash || sha256(pin) === MAESTRA_PASSWORD_HASH
+function parsearProtecciones(texto: string): ProteccionesSeguridad {
+  try {
+    const valor: unknown = JSON.parse(texto)
+    if (typeof valor !== 'object' || valor === null) return { ...PROTECCIONES_INICIALES }
+    return Object.fromEntries(
+      Object.keys(PROTECCIONES_INICIALES).map((clave) => [
+        clave,
+        (valor as Record<string, unknown>)[clave] === true,
+      ]),
+    ) as ProteccionesSeguridad
+  } catch {
+    return { ...PROTECCIONES_INICIALES }
+  }
+}
+
+function normalizarProtecciones(valor: ProteccionesSeguridad): ProteccionesSeguridad {
+  return Object.fromEntries(
+    Object.keys(PROTECCIONES_INICIALES).map((clave) => [clave, valor[clave as ClaveProteccion] === true]),
+  ) as ProteccionesSeguridad
+}
+
+export function getProtecciones(seed: ProteccionesSeguridad): ProteccionesSeguridad {
+  const db = getDb()
+  const fila = leerSeguridad()
+  if (!fila.protectionsInitialized) {
+    const protecciones = normalizarProtecciones(seed)
+    db.update(seguridad)
+      .set({ protectionsInitialized: true, proteccionesJson: JSON.stringify(protecciones) })
+      .where(eq(seguridad.id, 1))
+      .run()
+    return protecciones
+  }
+  return parsearProtecciones(fila.proteccionesJson)
+}
+
+export function requiereProteccion(proteccion: ClaveProteccion): boolean {
+  const fila = leerSeguridad()
+  return fila.passwordConfigured && parsearProtecciones(fila.proteccionesJson)[proteccion]
+}
+
+export function setProtecciones(input: CambiarProteccionesInput): ProteccionesSeguridad {
+  if (tieneContrasena()) {
+    if (typeof input.pin !== 'string' || !input.pin.trim()) throw new ErrorAutorizacion('AUTHORIZATION_REQUIRED', 'Ingresá la contraseña para cambiar las protecciones')
+    if (!verifyPin(input.pin)) throw new ErrorAutorizacion('INVALID_PIN', 'La contraseña es incorrecta')
+  }
+  const protecciones = normalizarProtecciones(input.protecciones)
+  getDb().update(seguridad)
+    .set({ protectionsInitialized: true, proteccionesJson: JSON.stringify(protecciones), actualizadoEn: new Date().toISOString() })
+    .where(eq(seguridad.id, 1))
+    .run()
+  return protecciones
+}
+
+const MAX_INTENTOS = 5
+const DURACION_BLOQUEO_INICIAL_MS = 30_000
+const DURACION_BLOQUEO_MAXIMA_MS = 15 * 60_000
+
+function registrarIntentoFallido(fallidos: number, nivelBloqueo: number): void {
+  const db = getDb()
+  const nuevosFallidos = fallidos + 1
+  if (nuevosFallidos < MAX_INTENTOS) {
+    db.update(seguridad).set({ failedAttempts: nuevosFallidos }).where(eq(seguridad.id, 1)).run()
+    return
+  }
+
+  const nuevoNivel = nivelBloqueo + 1
+  const duracion = Math.min(DURACION_BLOQUEO_INICIAL_MS * 2 ** (nuevoNivel - 1), DURACION_BLOQUEO_MAXIMA_MS)
+  db.update(seguridad)
+    .set({ failedAttempts: 0, lockoutLevel: nuevoNivel, lockedUntil: Date.now() + duracion })
+    .where(eq(seguridad.id, 1))
+    .run()
 }
 
 export function verifyPin(pin: string): boolean {
-  const pinNormalizado = pin.trim()
-  if (!pinNormalizado) return false
+  const fila = leerSeguridad()
+  if (!fila.passwordConfigured || !fila.pinHash) return false
 
-  const db = getDb()
-  const fila = db
-    .select({ pinHash: seguridadReportes.pinHash })
-    .from(seguridadReportes)
-    .where(eq(seguridadReportes.id, 1))
-    .get()
+  const ahora = Date.now()
+  if (fila.lockedUntil !== null && fila.lockedUntil > ahora) {
+    throw new ErrorAutorizacion('PIN_LOCKED', 'Demasiados intentos. Esperá antes de volver a intentar.', fila.lockedUntil)
+  }
 
-  if (!fila) return false
-  return hashValida(fila.pinHash, pinNormalizado)
-}
+  const pinNormalizado = typeof pin === 'string' && pin.length <= 256 ? pin.trim() : ''
+  const resultado = pinNormalizado ? verificarHashPin(pinNormalizado, fila.pinHash) : { valido: false, necesitaMigracion: false }
+  if (!resultado.valido) {
+    registrarIntentoFallido(fila.failedAttempts, fila.lockoutLevel)
+    return false
+  }
 
-export function changePin(pinActual: string, pinNuevo: string): boolean {
-  const pinNuevoNormalizado = pinNuevo.trim()
-  if (!pinNuevoNormalizado) return false
-
-  const db = getDb()
-  if (!verifyPin(pinActual)) return false
-
-  db.update(seguridadReportes)
-    .set({ pinHash: sha256(pinNuevoNormalizado), actualizadoEn: new Date().toISOString() })
-    .where(eq(seguridadReportes.id, 1))
-    .run()
-
+  getDb().update(seguridad).set({
+    ...(resultado.necesitaMigracion ? { pinHash: hashPin(pinNormalizado) } : {}),
+    failedAttempts: 0,
+    lockoutLevel: 0,
+    lockedUntil: null,
+  }).where(eq(seguridad.id, 1)).run()
   return true
 }
 
-// Contraseña con la que arranca la base nueva: sirve como centinela de "todavía
-// no se creó ninguna". No se la puede usar como respaldo: `hashValida` solo
-// acepta la guardada o la maestra.
-const PIN_INICIAL_HASH = sha256('1234')
-
 export function tieneContrasena(): boolean {
-  const fila = getDb()
-    .select({ pinHash: seguridadReportes.pinHash })
-    .from(seguridadReportes)
-    .where(eq(seguridadReportes.id, 1))
-    .get()
+  return leerSeguridad().passwordConfigured
+}
 
-  return fila !== undefined && fila.pinHash !== PIN_INICIAL_HASH
+export function getRecoveryId(): string {
+  return leerSeguridad().recoveryId
+}
+
+export function resetearContrasenaConClave(codigo: string, pinNuevo: string): boolean {
+  const fila = leerSeguridad()
+  const pinNormalizado = typeof pinNuevo === 'string' ? pinNuevo.trim() : ''
+  if (
+    !fila.passwordConfigured ||
+    typeof codigo !== 'string' ||
+    !pinNormalizado ||
+    pinNormalizado.length > 256 ||
+    !verificarClaveRecuperacion(codigo.trim(), fila.recoveryId)
+  ) return false
+
+  getDb().update(seguridad).set({
+    pinHash: hashPin(pinNormalizado),
+    recoveryId: randomUUID(),
+    failedAttempts: 0,
+    lockoutLevel: 0,
+    lockedUntil: null,
+    actualizadoEn: new Date().toISOString(),
+  }).where(eq(seguridad.id, 1)).run()
+  return true
 }
 
 export function createContrasena(pinNuevo: string): boolean {
-  const db = getDb()
-  const pinNuevoNormalizado = pinNuevo.trim()
-  if (!pinNuevoNormalizado || tieneContrasena()) return false
+  const pinNormalizado = typeof pinNuevo === 'string' ? pinNuevo.trim() : ''
+  if (!pinNormalizado || pinNormalizado.length > 256 || tieneContrasena()) return false
 
-  db.update(seguridadReportes)
-    .set({ pinHash: sha256(pinNuevoNormalizado), actualizadoEn: new Date().toISOString() })
-    .where(eq(seguridadReportes.id, 1))
-    .run()
+  getDb().update(seguridad).set({
+    pinHash: hashPin(pinNormalizado),
+    passwordConfigured: true,
+    failedAttempts: 0,
+    lockoutLevel: 0,
+    lockedUntil: null,
+    actualizadoEn: new Date().toISOString(),
+  }).where(eq(seguridad.id, 1)).run()
+  return true
+}
 
+export function changePin(pinActual: string, pinNuevo: string): boolean {
+  const pinNuevoNormalizado = typeof pinNuevo === 'string' ? pinNuevo.trim() : ''
+  if (!pinNuevoNormalizado || pinNuevoNormalizado.length > 256 || !tieneContrasena()) return false
+  if (!verifyPin(pinActual)) return false
+
+  getDb().update(seguridad).set({
+    pinHash: hashPin(pinNuevoNormalizado),
+    failedAttempts: 0,
+    lockoutLevel: 0,
+    lockedUntil: null,
+    actualizadoEn: new Date().toISOString(),
+  }).where(eq(seguridad.id, 1)).run()
   return true
 }
 
 export function removeContrasena(pinActual: string): boolean {
   if (!tieneContrasena() || !verifyPin(pinActual)) return false
 
-  getDb()
-    .update(seguridadReportes)
-    .set({ pinHash: PIN_INICIAL_HASH, actualizadoEn: new Date().toISOString() })
-    .where(eq(seguridadReportes.id, 1))
-    .run()
-
+  getDb().update(seguridad).set({
+    pinHash: null,
+    passwordConfigured: false,
+    failedAttempts: 0,
+    lockoutLevel: 0,
+    lockedUntil: null,
+    actualizadoEn: new Date().toISOString(),
+  }).where(eq(seguridad.id, 1)).run()
   return true
+}
+
+export function autorizarProteccion(proteccion: ClaveProteccion, pin?: string): void {
+  const fila = leerSeguridad()
+  if (!fila.passwordConfigured || !parsearProtecciones(fila.proteccionesJson)[proteccion]) return
+  if (typeof pin !== 'string' || !pin.trim()) throw new ErrorAutorizacion('AUTHORIZATION_REQUIRED', 'Ingresá la contraseña para autorizar esta acción')
+  if (!verifyPin(pin)) throw new ErrorAutorizacion('INVALID_PIN', 'La contraseña es incorrecta')
 }
 
 export function getNegocio(): Negocio | null {
@@ -199,7 +312,6 @@ export function updateNegocio(data: NegocioInput): Negocio {
 
   if (data.nombre !== undefined) set.nombre = (data.nombre as string | null | undefined)?.trim() ?? null
   if (data.logoPath !== undefined) set.logoPath = (data.logoPath as string | null | undefined) ?? null
-  if (data.password !== undefined && data.password) set.passwordHash = sha256(data.password)
 
   const existente = db
     .select({ id: negocio.id, creadoEn: negocio.creadoEn })
@@ -213,7 +325,6 @@ export function updateNegocio(data: NegocioInput): Negocio {
         id: 1,
         nombre: (data.nombre as string | null | undefined)?.trim() ?? null,
         logoPath: (data.logoPath as string | null | undefined) ?? null,
-        passwordHash: data.password ? sha256(data.password) : null,
         creadoEn: ahora,
         actualizadoEn: ahora,
       })
@@ -289,7 +400,8 @@ export function updateCategoria(id: number, nombre: string): void {
     .run()
 }
 
-export function deleteCategoria(id: number): void {
+export function deleteCategoria(id: number, pin?: string): void {
+  autorizarProteccion('eliminarCategorias', pin)
   const productosAsociados = getDb()
     .select({ count: count() })
     .from(productos)
@@ -378,7 +490,8 @@ export function updateMarca(id: number, nombre: string): void {
     .run()
 }
 
-export function deleteMarca(id: number): void {
+export function deleteMarca(id: number, pin?: string): void {
+  autorizarProteccion('eliminarMarcas', pin)
   getDb()
     .update(marcas)
     .set({ activo: false })
@@ -679,7 +792,8 @@ export function toggleProducto(id: number, activo: boolean): Producto {
     .get()
 }
 
-export function deleteProducto(id: number): void {
+export function deleteProducto(id: number, pin?: string): void {
+  autorizarProteccion('eliminarProductos', pin)
   getDb().transaction((tx) => {
     const lotesDelProducto = tx
       .select()
@@ -1374,9 +1488,8 @@ export function getVentaDetalle(idVenta: number): VentaDetalle | null {
   return { venta: filaVenta, items, pagos: filasPagos }
 }
 
-export function anularVenta(input: AnularVentaInput): ResultadoAnulacion | null {
-  const pin = input.pin?.trim() ?? ''
-  if (pin && !(tieneContrasena() ? verifyPin(pin) : sha256(pin) === MAESTRA_PASSWORD_HASH)) return null
+export function anularVenta(input: AnularVentaInput): ResultadoAnulacion {
+  autorizarProteccion('anularVentas', input.pin)
   if (!Number.isSafeInteger(input.ventaId) || input.ventaId < 1) throw new Error('Ticket inválido')
 
   const db = getDb()
@@ -2044,9 +2157,8 @@ function aplicacionesFifoCuentaCorriente(
   return { deudaPorVenta, abonosPorVenta }
 }
 
-export function processDevolucion(input: ProcesarDevolucionInput): ResultadoDevolucion | null {
-  const pin = input.pin?.trim() ?? ''
-  if (pin && !(tieneContrasena() ? verifyPin(pin) : sha256(pin) === MAESTRA_PASSWORD_HASH)) return null
+export function processDevolucion(input: ProcesarDevolucionInput): ResultadoDevolucion {
+  autorizarProteccion('anularVentas', input.pin)
   if (!Number.isSafeInteger(input.ventaId) || input.ventaId < 1) throw new Error('Ticket inválido')
 
   const db = getDb()
@@ -2976,7 +3088,8 @@ export function updateLote(
   })
 }
 
-export function deleteLote(id: number): void {
+export function deleteLote(id: number, pin?: string): void {
+  autorizarProteccion('eliminarLotes', pin)
   const db = getDb()
   const ahora = new Date().toISOString()
 

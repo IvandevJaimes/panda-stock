@@ -1,0 +1,1 @@
+ALTER TABLE `seguridad` ADD `recovery_id` text DEFAULT '' NOT NULL;

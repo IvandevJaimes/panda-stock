@@ -158,7 +158,8 @@ export function MarcasModal({ isOpen, onClose, marcas, productos, onChanged, onS
 
   const confirmarEliminar = async () => {
     if (!eliminando) return;
-    if (useSettingsStore.getState().proteccionesSeguridad.eliminarMarcas) {
+    const seguridad = useSettingsStore.getState()
+    if (seguridad.contrasenaConfigurada && seguridad.proteccionesSeguridad.eliminarMarcas) {
       setMarcaAEliminarProtegida(eliminando);
       return;
     }
@@ -412,9 +413,9 @@ export function MarcasModal({ isOpen, onClose, marcas, productos, onChanged, onS
                 etiquetaConfirmar="Autorizar y eliminar"
                 confirmarVariant="danger"
                 onSubmit={(contrasena) => seguridadService.verifyPin(contrasena)}
-                onSuccess={async () => {
+                onSuccess={async (pin) => {
                   const marca = marcaAEliminarProtegida;
-                  await marcasService.delete(marca.id);
+                  await marcasService.delete(marca.id, pin);
                   setMarcaAEliminarProtegida(null);
                   onChanged?.();
                   toast.success(`Marca "${marca.nombre}" eliminada`);

@@ -19,13 +19,13 @@ import { Switch } from '../../components/ui/Switch'
 import { Modal } from '../../components/ui/Modal'
 import { ConfirmModal } from '../../components/ui/ConfirmModal'
 import { ModalContrasena } from '../seguridad/ModalContrasena'
+import { ModalRecuperarContrasena } from '../seguridad/ModalRecuperarContrasena'
 import { seguridadService } from '../../services/seguridad.service'
 import { toErrorMessage } from '../../services/errors'
 import { useSettingsStore } from '../../stores/settings.store'
 import { useUIStore } from '../../stores/ui.store'
 import {
   CLAVES_PROTECCION,
-  PROTECCIONES_INICIALES,
   type ClaveProteccion,
   type ProteccionesSeguridad,
 } from '../../types/security'
@@ -139,56 +139,11 @@ function PasswordForm({ mode, onSave, onChange, onCancel, onForgot }: {
   )
 }
 
-function PasswordRecoveryForm({ onRecover, onCancel }: {
-  onRecover: (masterPin: string, nextPassword: string) => Promise<boolean>
+function PasswordRecoveryInfo({ onCancel, onSuccess }: {
   onCancel: () => void
+  onSuccess: (pinNuevo: string) => void
 }) {
-  const [masterPin, setMasterPin] = useState('')
-  const [nextPassword, setNextPassword] = useState('')
-  const [repeatPassword, setRepeatPassword] = useState('')
-  const [saving, setSaving] = useState(false)
-  const matches = repeatPassword.trim().length > 0 && nextPassword.trim() === repeatPassword.trim()
-  const canSave = masterPin.trim().length > 0 && nextPassword.trim().length > 0 && matches && !saving
-
-  async function recover() {
-    if (!canSave) return
-    setSaving(true)
-    try {
-      if (await onRecover(masterPin, nextPassword)) {
-        toast.success('Contraseña actualizada con el PIN maestro')
-        onCancel()
-      } else {
-        toast.error('El PIN maestro no es correcto')
-        setMasterPin('')
-      }
-    } catch (error) {
-      toast.error(toErrorMessage(error))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <Modal
-      isOpen
-      onClose={onCancel}
-      title="Recuperar contraseña"
-      subtitle="Validá el PIN maestro y elegí una contraseña nueva"
-      headerIcon={<KeyRound size={18} />}
-      maxWidth="md"
-      footer={<>
-        <Button type="button" variant="ghost" onClick={onCancel}>Cancelar</Button>
-        <Button type="button" loading={saving} disabled={!canSave} onClick={() => void recover()}>Validar PIN y cambiar</Button>
-      </>}
-    >
-      <div className="space-y-4">
-        <p className="text-sm text-slate-600 dark:text-slate-300">Ingresá el PIN maestro de los desarrolladores para recuperar el acceso.</p>
-        <PasswordInput label="PIN maestro" autoComplete="off" value={masterPin} onChange={(event) => setMasterPin(event.target.value)} />
-        <PasswordInput label="Nueva contraseña" autoComplete="new-password" value={nextPassword} onChange={(event) => setNextPassword(event.target.value)} />
-        <PasswordInput label="Repetir nueva contraseña" autoComplete="new-password" value={repeatPassword} onChange={(event) => setRepeatPassword(event.target.value)} error={repeatPassword.length > 0 && !matches ? 'Las contraseñas no coinciden' : undefined} />
-      </div>
-    </Modal>
-  )
+  return <ModalRecuperarContrasena onCancel={onCancel} onSuccess={onSuccess} />
 }
 
 export function SecuritySettingsPanel({
@@ -201,7 +156,6 @@ export function SecuritySettingsPanel({
   const [hasPassword, setHasPassword] = useState(false)
   const [showPasswordForm, setShowPasswordForm] = useState(false)
   const [showRecoveryForm, setShowRecoveryForm] = useState(false)
-  const [confirmPasswordRemoval, setConfirmPasswordRemoval] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -221,19 +175,21 @@ export function SecuritySettingsPanel({
               </div>
               <span className={cn('rounded-full px-3 py-1 text-xs font-bold', hasPassword ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-300')}>{hasPassword ? 'Configurada' : 'Opcional'}</span>
             </div>
-            {showPasswordForm ? <div className="mt-4"><PasswordForm mode={hasPassword ? 'change' : 'create'} onSave={(current, next) => hasPassword ? seguridadService.changePin(current, next) : seguridadService.crearContrasena(next)} onChange={() => { if (!hasPassword) setHasPassword(true); setShowPasswordForm(false) }} onCancel={() => setShowPasswordForm(false)} onForgot={() => { setShowPasswordForm(false); setShowRecoveryForm(true) }} /></div> : <div className="mt-4 flex flex-wrap gap-2">
+            {showPasswordForm ? <div className="mt-4"><PasswordForm mode={hasPassword ? 'change' : 'create'} onSave={(current, next) => hasPassword ? seguridadService.changePin(current, next) : seguridadService.crearContrasena(next)} onChange={() => { if (!hasPassword) { setHasPassword(true); useSettingsStore.getState().setContrasenaConfigurada(true) } setShowPasswordForm(false) }} onCancel={() => setShowPasswordForm(false)} onForgot={() => { setShowPasswordForm(false); setShowRecoveryForm(true) }} /></div> : <div className="mt-4 flex flex-wrap gap-2">
               <Button type="button" size="sm" onClick={() => { setShowRecoveryForm(false); setShowPasswordForm(true) }}>{hasPassword ? 'Cambiar contraseña' : 'Crear contraseña'}</Button>
-              {hasPassword && <Button type="button" size="sm" variant="outline" onClick={() => setConfirmPasswordRemoval(true)}>Quitar contraseña</Button>}
             </div>}
-            {showRecoveryForm && <PasswordRecoveryForm onRecover={(master, next) => seguridadService.changePin(master, next)} onCancel={() => setShowRecoveryForm(false)} />}
-            <p className="mt-3 text-xs leading-relaxed text-slate-500 dark:text-slate-400">Si olvidás la contraseña, podés cambiarla validando el PIN maestro de los desarrolladores.</p>
+            {showRecoveryForm && <PasswordRecoveryInfo onCancel={() => setShowRecoveryForm(false)} onSuccess={() => {
+              setHasPassword(true)
+              useSettingsStore.getState().setContrasenaConfigurada(true)
+              setShowRecoveryForm(false)
+            }} />}
+            <p className="mt-3 text-xs leading-relaxed text-slate-500 dark:text-slate-400">Si olvidás la contraseña, soporte puede emitir una clave vinculada a esta instalación.</p>
           </div>
           <div className="space-y-3">
             {OPCIONES_PROTECCION.map(({ key, title, description }) => <SettingRow key={key} title={title} description={description} checked={protecciones[key]} onCheckedChange={(enabled) => onChange({ ...protecciones, [key]: enabled })} disabled={!hasPassword} />)}
           </div>
         </div>
       </SettingsSection>
-      {confirmPasswordRemoval && <ModalContrasena titulo="Quitar contraseña" subtitulo="Ingresá tu contraseña o el PIN maestro para quitarla." etiquetaCancelar="Cancelar" etiquetaConfirmar="Quitar contraseña" onSubmit={(password) => seguridadService.quitarContrasena(password)} onSuccess={() => { useSettingsStore.getState().setProteccionesSeguridad(PROTECCIONES_INICIALES); onChange(PROTECCIONES_INICIALES); setHasPassword(false); setConfirmPasswordRemoval(false) }} onCancelar={() => setConfirmPasswordRemoval(false)} />}
     </>
   )
 }
@@ -260,6 +216,7 @@ export function SettingsPage() {
   const descuentoPorcentaje = useSettingsStore((state) => state.descuentoPorcentaje)
   const descuentoDesdeUnidades = useSettingsStore((state) => state.descuentoDesdeUnidades)
   const proteccionesSeguridad = useSettingsStore((state) => state.proteccionesSeguridad)
+  const contrasenaConfigurada = useSettingsStore((state) => state.contrasenaConfigurada)
 
   // Borrador local: los cambios no tocan el store hasta "Guardar cambios".
   const [draft, setDraft] = useState<AjustesDraft>(() => ({
@@ -315,8 +272,12 @@ export function SettingsPage() {
     cerrarDeVerdad()
   }
 
-  function aplicarCambios() {
+  async function aplicarCambios(pin?: string) {
     const store = useSettingsStore.getState()
+    if (proteccionesCambiadas) {
+      const proteccionesGuardadas = await seguridadService.setProtecciones(draft.proteccionesSeguridad, pin)
+      store.setProteccionesSeguridad(proteccionesGuardadas)
+    }
     store.setDescuentoAutomatico(draft.descuentoAutomatico)
     store.setDescuentoPorcentaje(draft.descuentoPorcentaje)
     store.setDescuentoDesdeUnidades(draft.descuentoDesdeUnidades)
@@ -324,7 +285,6 @@ export function SettingsPage() {
     store.setTarjetaHabilitada(draft.tarjetaHabilitada)
     store.setRecargoTarjetaCredito(draft.recargoTarjetaCredito)
     store.setCuentaCorrienteHabilitada(draft.cuentaCorrienteHabilitada)
-    store.setProteccionesSeguridad({ ...draft.proteccionesSeguridad })
 
     // Re-sincroniza borrador e inputs con los valores ya normalizados por los
     // setters (clamp de rangos), para que "guardar" vuelva a deshabilitarse.
@@ -347,14 +307,18 @@ export function SettingsPage() {
     closeSettings()
   }
 
-  function guardar() {
+  async function guardar() {
     if (!hayCambios) return
     // Solo los ajustes de seguridad exigen confirmar la contraseña al guardar.
-    if (proteccionesCambiadas) {
+    if (proteccionesCambiadas && contrasenaConfigurada) {
       setMostrarPin(true)
       return
     }
-    aplicarCambios()
+    try {
+      await aplicarCambios()
+    } catch (error) {
+      toast.error(toErrorMessage(error))
+    }
   }
 
   return (
@@ -369,7 +333,7 @@ export function SettingsPage() {
         height="h-[82vh]"
         footer={<>
           <Button type="button" variant="outline" onClick={intentarCerrar}>Listo</Button>
-          <Button type="button" icon={<Save size={16} />} disabled={!hayCambios} onClick={guardar}>Guardar cambios</Button>
+          <Button type="button" icon={<Save size={16} />} disabled={!hayCambios} onClick={() => void guardar()}>Guardar cambios</Button>
         </>}
       >
         <div className="space-y-5">
@@ -404,7 +368,7 @@ export function SettingsPage() {
           etiquetaCancelar="Cancelar"
           etiquetaConfirmar="Guardar cambios"
           onSubmit={(contrasena) => seguridadService.verifyPin(contrasena)}
-          onSuccess={aplicarCambios}
+          onSuccess={(contrasena) => aplicarCambios(contrasena)}
           onCancelar={() => setMostrarPin(false)}
         />
       )}

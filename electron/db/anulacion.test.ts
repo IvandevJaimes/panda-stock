@@ -2,6 +2,7 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { beforeAll, describe, expect, it } from 'vitest'
+import { PROTECCIONES_INICIALES } from './types.ts'
 
 const carpeta = mkdtempSync(path.join(tmpdir(), 'panda-anulacion-test-'))
 process.env.PANDA_STOCK_DB = path.join(carpeta, 'test.db')
@@ -15,6 +16,7 @@ let empleadoId = 0
 beforeAll(() => {
   initDatabase()
   expect(repo.createContrasena('8877')).toBe(true)
+  repo.setProtecciones({ protecciones: { ...PROTECCIONES_INICIALES, anularVentas: true }, pin: '8877' })
   empleadoId = repo.createEmpleado({ nombre: 'Caja Anulación' }).id
   cajaId = repo.openCaja({ responsable: 'Caja Anulación', montoInicial: 100 }).id
 })
@@ -62,16 +64,16 @@ function vender(
 }
 
 describe('anulación de ventas', () => {
-  it('rechaza PIN inválido y repone todo el stock marcando la venta como anulada', () => {
+  it('rechaza PIN vacío o inválido y repone todo el stock con PIN válido', () => {
     const producto = crearProducto('Artículo anulación en efectivo')
     const venta = vender(producto.id, { cantidad: 2, precio: 90, metodo: 'efectivo' })
 
-    expect(repo.anularVenta({ pin: 'incorrecta', ventaId: venta.ventaId, motivo: 'Error' })).toBeNull()
-    expect(repo.anularVenta({ pin: '1234', ventaId: venta.ventaId, motivo: 'Error' })).toBeNull()
+    expect(() => repo.anularVenta({ ventaId: venta.ventaId, motivo: 'Error' })).toThrow(expect.objectContaining({ code: 'AUTHORIZATION_REQUIRED' }))
+    expect(() => repo.anularVenta({ pin: 'incorrecta', ventaId: venta.ventaId, motivo: 'Error' })).toThrow(expect.objectContaining({ code: 'INVALID_PIN' }))
     expect(repo.getVentaDetalle(venta.ventaId)?.venta.estado).toBe('completada')
 
     const resultado = repo.anularVenta({
-      pin: 'Panda2026',
+      pin: '8877',
       ventaId: venta.ventaId,
       motivo: 'Error de cobro',
     })!
