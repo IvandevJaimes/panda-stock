@@ -1,5 +1,5 @@
 import type { Categoria } from '../../electron/db/types'
-import { desenvolverResultadoSeguro, normalizarError } from './errors'
+import { desenvolverResultadoSeguro, normalizarError, toErrorMessage } from './errors'
 
 export const categoriasService = {
   async getAll(): Promise<Categoria[]> {

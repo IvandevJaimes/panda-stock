@@ -1,4 +1,5 @@
 import { createHash, randomBytes, scryptSync, timingSafeEqual, verify } from 'node:crypto'
+import type { KeyObject } from 'node:crypto'
 import type { ErrorSeguridadCode } from './types.ts'
 
 const SCRYPT_N = 32_768
@@ -11,13 +12,18 @@ MCowBQYDK2VwAyEAvuPO+wTupIdueehhTnoWkB1xm6hRDNGUHz86NNfxGYg=
 -----END PUBLIC KEY-----`
 
 export class ErrorAutorizacion extends Error {
+  readonly code: ErrorSeguridadCode
+  readonly retryAt?: number
+
   constructor(
-    readonly code: ErrorSeguridadCode,
+    code: ErrorSeguridadCode,
     message: string,
-    readonly retryAt?: number,
+    retryAt?: number,
   ) {
     super(message)
     this.name = 'ErrorAutorizacion'
+    this.code = code
+    this.retryAt = retryAt
   }
 }
 
@@ -68,7 +74,11 @@ export function verificarHashPin(pin: string, almacenado: string): { valido: boo
   return { valido: timingSafeEqual(calculado, esperado), necesitaMigracion: false }
 }
 
-export function verificarClaveRecuperacion(codigo: string, recoveryId: string, clavePublica = RECOVERY_PUBLIC_KEY): boolean {
+export function verificarClaveRecuperacion(
+  codigo: string,
+  recoveryId: string,
+  clavePublica: string | KeyObject = RECOVERY_PUBLIC_KEY,
+): boolean {
   if (!/^[A-Za-z0-9_-]{86}$/.test(codigo)) return false
 
   try {

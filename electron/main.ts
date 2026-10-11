@@ -129,13 +129,34 @@ import type {
   ResultadoSeguro,
 } from "./db/types.ts";
 import { ErrorAutorizacion } from "./db/security.ts";
+import {
+  existeLicencia,
+  guardarLicencia,
+  leerLicencia,
+  leerVersionLicencia,
+  prepararDirectorioLicencia,
+} from "./licencia/almacen.ts";
+import { obtenerDatosHuella } from "./licencia/huella.ts";
+import { validarLicencia } from "./licencia/verificador.ts";
+import {
+  esLicenciaFirmada,
+  esRegistroDesconocido,
+  type ErrorLicenciaCode,
+  type EstadoLicencia,
+  type ResultadoLicencia,
+} from "./licencia/tipos.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+declare const __PANDA_STOCK_LICENCIA_DEFAULT__: "on" | "off";
 
 const isDev = !app.isPackaged;
+const DURACION_MINIMA_SPLASH_MS = 1_000;
 let ventanaPrincipal: BrowserWindow | null = null;
 let ventanaCarga: BrowserWindow | null = null;
 let ventanaConfiguracion: BrowserWindow | null = null;
+let ventanaLicencia: BrowserWindow | null = null;
+let inicioSplashMs = 0;
+const ventanasPendientesDeRevelar = new WeakSet<BrowserWindow>();
 let configuracionCompletada = false;
 let copiaAutomaticaEnCurso = false;
 let omitirCopiaAutomatica = false;
@@ -148,6 +169,7 @@ if (!tieneInstanciaUnica) {
     const ventana =
       (ventanaPrincipal?.isVisible() ? ventanaPrincipal : null) ??
       (ventanaConfiguracion?.isVisible() ? ventanaConfiguracion : null) ??
+      ventanaLicencia ??
       ventanaCarga ??
       ventanaPrincipal ??
       ventanaConfiguracion;
@@ -176,6 +198,145 @@ function resultadoSeguro<T>(accion: () => T): ResultadoSeguro<T> {
     }
     throw error;
   }
+}
+
+class ErrorLicenciaOperacion extends Error {
+  readonly code: ErrorLicenciaCode
+
+  constructor(code: ErrorLicenciaCode, message: string) {
+    super(message)
+    this.name = "ErrorLicenciaOperacion"
+    this.code = code
+  }
+}
+
+function resultadoLicencia<T>(accion: () => T): ResultadoLicencia<T> {
+  try {
+    return { ok: true, value: accion() };
+  } catch (error) {
+    if (error instanceof ErrorLicenciaOperacion) {
+      return { ok: false, error: { code: error.code, message: error.message } };
+    }
+    return {
+      ok: false,
+      error: {
+        code: "ALMACENAMIENTO",
+        message: "No se pudo leer o guardar la licencia en este equipo.",
+      },
+    };
+  }
+}
+
+const MENSAJES_LICENCIA: Record<ErrorLicenciaCode, string> = {
+  FIRMA_INVALIDA: "La firma de la licencia no es válida.",
+  EQUIPO_NO_COINCIDE: "La licencia fue emitida para otro equipo.",
+  VERSION_NO_SOPORTADA: "Esta licencia usa una versión que Panda Stock no reconoce.",
+  ESTRUCTURA_INVALIDA: "El contenido de la licencia no tiene un formato válido.",
+  ALMACENAMIENTO: "No se pudo leer o guardar la licencia en este equipo.",
+};
+
+function licenciaActivada(): boolean {
+  const override = process.env.PANDA_STOCK_LICENCIA;
+  if (override === "on") return true;
+  const ejecucionDevSinLicencia = isDev &&
+    process.env.npm_lifecycle_event === "dev" &&
+    typeof __PANDA_STOCK_LICENCIA_DEFAULT__ !== "undefined" &&
+    __PANDA_STOCK_LICENCIA_DEFAULT__ === "off";
+  return !ejecucionDevSinLicencia;
+}
+
+function directorioLicencia(): string {
+  const directorio = path.join(app.getPath("userData"), "licencia");
+  prepararDirectorioLicencia(directorio);
+  return directorio;
+}
+
+function urlInterfazDesarrollo(vista?: string): string {
+  const url = new URL(process.env.VITE_DEV_SERVER_URL || "http://localhost:5173");
+  if (vista) url.searchParams.set("vista", vista);
+  return url.toString();
+}
+
+function crearEstadoInvalido(
+  huella: string,
+  motivo: ErrorLicenciaCode,
+  advertencia?: string,
+): EstadoLicencia {
+  return {
+    estado: "invalida",
+    motivo,
+    huella,
+    ...(advertencia ? { advertencia } : {}),
+  };
+}
+
+function obtenerEstadoLicencia(): EstadoLicencia {
+  const carpeta = directorioLicencia();
+  const identidad = obtenerDatosHuella(carpeta);
+  if (!existeLicencia(carpeta)) {
+    return {
+      estado: "ausente",
+      huella: identidad.huella,
+      ...(identidad.advertencia ? { advertencia: identidad.advertencia } : {}),
+    };
+  }
+
+  const licencia = leerLicencia(carpeta);
+  if (!licencia) {
+    const version = leerVersionLicencia(carpeta);
+    const motivo: ErrorLicenciaCode = version !== null && version !== 1
+      ? "VERSION_NO_SOPORTADA"
+      : "ESTRUCTURA_INVALIDA";
+    return crearEstadoInvalido(identidad.huella, motivo, identidad.advertencia);
+  }
+
+  const resultado = validarLicencia(licencia, identidad.huella);
+  if (!resultado.valida) {
+    return crearEstadoInvalido(identidad.huella, resultado.motivo, identidad.advertencia);
+  }
+
+  return {
+    estado: "valida",
+    huella: identidad.huella,
+    licenciado: licencia.licenciado,
+    licenciaId: licencia.licenseId,
+    emitidaEn: licencia.emitidaEn,
+    venceEn: null,
+    ...(identidad.advertencia ? { advertencia: identidad.advertencia } : {}),
+  };
+}
+
+function activarLicencia(texto: string): EstadoLicencia {
+  if (typeof texto !== "string" || texto.length > 20_000) {
+    throw new ErrorLicenciaOperacion("ESTRUCTURA_INVALIDA", MENSAJES_LICENCIA.ESTRUCTURA_INVALIDA);
+  }
+
+  let documento: unknown;
+  try {
+    documento = JSON.parse(texto);
+  } catch {
+    throw new ErrorLicenciaOperacion("ESTRUCTURA_INVALIDA", MENSAJES_LICENCIA.ESTRUCTURA_INVALIDA);
+  }
+  if (esRegistroDesconocido(documento) && typeof documento.v === "number" && documento.v !== 1) {
+    throw new ErrorLicenciaOperacion("VERSION_NO_SOPORTADA", MENSAJES_LICENCIA.VERSION_NO_SOPORTADA);
+  }
+  if (!esLicenciaFirmada(documento)) {
+    throw new ErrorLicenciaOperacion("ESTRUCTURA_INVALIDA", MENSAJES_LICENCIA.ESTRUCTURA_INVALIDA);
+  }
+
+  const carpeta = directorioLicencia();
+  const identidad = obtenerDatosHuella(carpeta);
+  const validacion = validarLicencia(documento, identidad.huella);
+  if (!validacion.valida) {
+    throw new ErrorLicenciaOperacion(validacion.motivo, MENSAJES_LICENCIA[validacion.motivo]);
+  }
+
+  try {
+    guardarLicencia(validacion.licencia, carpeta);
+  } catch {
+    throw new ErrorLicenciaOperacion("ALMACENAMIENTO", MENSAJES_LICENCIA.ALMACENAMIENTO);
+  }
+  return obtenerEstadoLicencia();
 }
 
 function requerirAccesoVerificado(idWebContents: number, proteccion: ClaveProteccion): void {
@@ -272,7 +433,7 @@ if (tieneInstanciaUnica) {
 function createWindow() {
   let reintentoCarga = false;
   let intentosCarga = 0;
-  const urlDesarrollo = "http://localhost:5173";
+  const urlDesarrollo = urlInterfazDesarrollo();
   const archivoInterfaz = path.join(__dirname, "../dist/index.html");
   const win = new BrowserWindow({
     width: 1440,
@@ -296,7 +457,6 @@ function createWindow() {
   ventanaPrincipal = win;
   const idWebContents = win.webContents.id;
 
-  win.once("ready-to-show", () => revelarVentana(win));
   win.on("closed", () => {
     if (ventanaPrincipal === win) ventanaPrincipal = null;
   });
@@ -398,12 +558,18 @@ function createSplashWindow() {
   });
 
   ventanaCarga = win;
+  inicioSplashMs = Date.now();
   win.on("closed", () => {
-    if (ventanaCarga === win) ventanaCarga = null;
+    if (ventanaCarga === win) {
+      ventanaCarga = null;
+      inicioSplashMs = 0;
+    }
   });
 
   if (isDev) {
-    win.loadURL("http://localhost:5173/?vista=carga");
+    void win.loadURL(urlInterfazDesarrollo("carga")).catch((error: unknown) => {
+      escribirLog("load-splash", error instanceof Error ? error.message : String(error));
+    });
   } else {
     win.loadFile(path.join(__dirname, "../dist/index.html"), {
       query: { vista: "carga" },
@@ -413,6 +579,20 @@ function createSplashWindow() {
 
 function revelarVentana(win: BrowserWindow) {
   if (win.isDestroyed()) return;
+
+  if (ventanaCarga && !ventanaCarga.isDestroyed() && inicioSplashMs > 0) {
+    const esperaRestante = DURACION_MINIMA_SPLASH_MS - (Date.now() - inicioSplashMs);
+    if (esperaRestante > 0) {
+      if (ventanasPendientesDeRevelar.has(win)) return;
+      ventanasPendientesDeRevelar.add(win);
+      setTimeout(() => {
+        ventanasPendientesDeRevelar.delete(win);
+        revelarVentana(win);
+      }, esperaRestante);
+      return;
+    }
+  }
+
   win.show();
   win.focus();
 
@@ -457,6 +637,7 @@ function createSetupWindow() {
 
   win.setMenu(null);
   win.once("ready-to-show", () => revelarVentana(win));
+  win.webContents.once("did-finish-load", () => revelarVentana(win));
 
   win.on("closed", () => {
     ventanaConfiguracion = null;
@@ -472,7 +653,9 @@ function createSetupWindow() {
   // El renderer detecta `?vista=configuracion` y monta la ventana de inicio
   // en lugar de la app completa (src/main.tsx).
   if (isDev) {
-    win.loadURL("http://localhost:5173/?vista=configuracion");
+    void win.loadURL(urlInterfazDesarrollo("configuracion")).catch((error: unknown) => {
+      escribirLog("load-setup", error instanceof Error ? error.message : String(error));
+    });
   } else {
     win.loadFile(path.join(__dirname, "../dist/index.html"), {
       query: { vista: "configuracion" },
@@ -480,6 +663,77 @@ function createSetupWindow() {
   }
 
   ventanaConfiguracion = win;
+}
+
+function createLicenseWindow() {
+  if (ventanaLicencia && !ventanaLicencia.isDestroyed()) {
+    ventanaLicencia.focus();
+    return;
+  }
+
+  const win = new BrowserWindow({
+    width: 760,
+    height: 720,
+    minWidth: 560,
+    minHeight: 620,
+    resizable: true,
+    show: false,
+    autoHideMenuBar: true,
+    title: "Panda Stock — Activación",
+    webPreferences: {
+      preload: path.join(__dirname, "../dist-electron/preload.cjs"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      devTools: isDev,
+    },
+  });
+
+  win.setMenu(null);
+  ventanaLicencia = win;
+  win.once("ready-to-show", () => revelarVentana(win));
+  win.webContents.once("did-finish-load", () => revelarVentana(win));
+  let intentosCarga = 0;
+  win.on("closed", () => {
+    if (ventanaLicencia === win) ventanaLicencia = null;
+  });
+  win.webContents.on("console-message", (_evento, nivel, mensaje, linea, origen) => {
+    escribirLog("renderer-licencia", `[${nivel}] ${mensaje} (${origen}:${linea})`);
+  });
+  win.webContents.on("did-fail-load", (_evento, codigo, descripcion, url, esMarcoPrincipal) => {
+    escribirLog("load-licencia", `${codigo} ${descripcion} ${url}`);
+    if (!esMarcoPrincipal || codigo === -3) return;
+    if (intentosCarga >= 3) {
+      revelarVentana(win);
+      dialog.showErrorBox(
+        "No se pudo cargar la activación",
+        "No se pudo abrir la pantalla de licencia. Cerrá la aplicación y volvé a iniciar el modo de desarrollo.",
+      );
+      app.exit(1);
+      return;
+    }
+
+    intentosCarga += 1;
+    setTimeout(() => {
+      if (win.isDestroyed()) return;
+      void (isDev
+        ? win.loadURL(urlInterfazDesarrollo("licencia"))
+        : win.loadFile(path.join(__dirname, "../dist/index.html"), { query: { vista: "licencia" } })
+      ).catch((error: unknown) => {
+        escribirLog("load-licencia", error instanceof Error ? error.message : String(error));
+      });
+    }, intentosCarga * 500);
+  });
+
+  if (isDev) {
+    void win.loadURL(urlInterfazDesarrollo("licencia")).catch((error: unknown) => {
+      escribirLog("load-licencia", error instanceof Error ? error.message : String(error));
+    });
+  } else {
+    win.loadFile(path.join(__dirname, "../dist/index.html"), {
+      query: { vista: "licencia" },
+    });
+  }
 }
 
 function negocioConfigurado(): boolean {
@@ -491,7 +745,35 @@ function debeMostrarConfiguracionInicial(): boolean {
   return !negocioConfigurado() || (!tieneContrasena() && !configuracionInicialMostrada());
 }
 
+function abrirVentanaDeInicio(): void {
+  if (debeMostrarConfiguracionInicial()) createSetupWindow();
+  else createWindow();
+}
+
+function abrirVentanaPermitida(): void {
+  try {
+    if (licenciaActivada() && obtenerEstadoLicencia().estado !== "valida") {
+      createLicenseWindow();
+      return;
+    }
+    abrirVentanaDeInicio();
+  } catch {
+    escribirLog("licencia", "No se pudo comprobar el estado de la licencia durante el inicio.");
+    dialog.showErrorBox(
+      "No se pudo iniciar Panda Stock",
+      "No se pudo comprobar la licencia de este equipo. Revisá los permisos de la carpeta de datos y volvé a abrir la aplicación.",
+    );
+    app.exit(1);
+  }
+}
+
 function registerIpcHandlers() {
+  ipcMain.on("app:interfaz-lista", (event) => {
+    if (!ventanaPrincipal || ventanaPrincipal.isDestroyed()) return;
+    if (event.sender.id !== ventanaPrincipal.webContents.id) return;
+    revelarVentana(ventanaPrincipal);
+  });
+
   ipcMain.handle("seguridad:verify-pin", (event, pin: string, scope?: ClaveProteccion) =>
     resultadoSeguro(() => {
       if (scope !== undefined && !esClaveProteccion(scope)) {
@@ -572,6 +854,24 @@ function registerIpcHandlers() {
     }
 
     return updateNegocio({ nombre, logoPath });
+  });
+
+  ipcMain.handle("licencia:huella", () => obtenerDatosHuella(directorioLicencia()).huella);
+  ipcMain.handle("licencia:estado", () => resultadoLicencia(() => obtenerEstadoLicencia()));
+  ipcMain.handle("licencia:activar", (_event, texto: string) =>
+    resultadoLicencia(() => activarLicencia(texto)),
+  );
+  ipcMain.handle("licencia:completada", (event) => {
+    if (!ventanaLicencia || ventanaLicencia.isDestroyed() || event.sender.id !== ventanaLicencia.webContents.id) {
+      throw new Error("La ventana de activación ya no está disponible.");
+    }
+    if (licenciaActivada() && obtenerEstadoLicencia().estado !== "valida") {
+      throw new Error("Activá una licencia válida antes de continuar.");
+    }
+    abrirVentanaDeInicio();
+    const ventanaAnterior = ventanaLicencia;
+    ventanaLicencia = null;
+    ventanaAnterior.close();
   });
 
   // El wizard de primer inicio terminó: se abre la ventana principal y se
@@ -919,19 +1219,11 @@ if (tieneInstanciaUnica) {
     // Remueve el menú de aplicación global (también en desarrollo).
     Menu.setApplicationMenu(null);
 
-    if (debeMostrarConfiguracionInicial()) {
-      createSetupWindow();
-    } else {
-      createWindow();
-    }
+    abrirVentanaPermitida();
 
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) {
-        if (debeMostrarConfiguracionInicial()) {
-          createSetupWindow();
-        } else {
-          createWindow();
-        }
+        abrirVentanaPermitida();
       }
     });
   });

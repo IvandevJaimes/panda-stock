@@ -53,6 +53,7 @@ import type {
 import type { ExportarExcelInput } from '../../electron/exportaciones.types'
 import type { ResultadoDatosPrueba } from '../../electron/db/testdata.repository'
 import type { ConfiguracionCopias, EstadoDestinoCopias, TipoDestinoCopias } from '../../electron/db/types'
+import type { EstadoLicencia, ResultadoLicencia } from '../../electron/licencia/tipos'
 
 export {}
 
@@ -60,6 +61,12 @@ declare global {
   interface Window {
     electronAPI: {
       platform: string
+      licencia: {
+        huella: () => Promise<string>
+        estado: () => Promise<ResultadoLicencia<EstadoLicencia>>
+        activar: (texto: string) => Promise<ResultadoLicencia<EstadoLicencia>>
+        completada: () => Promise<void>
+      }
       seguridad: {
         verifyPin: (pin: string, scope?: ClaveProteccion) => Promise<ResultadoSeguro<boolean>>
         changePin: (pinActual: string, pinNuevo: string) => Promise<ResultadoSeguro<boolean>>
@@ -168,6 +175,7 @@ declare global {
       app: {
         /** Llega cuando se intentó cerrar la app con una caja abierta. */
         onPedirCierre: (callback: () => void) => void
+        interfazLista: () => void
         /** Confirma que la caja ya se cerró y deja salir. */
         salir: () => Promise<void>
       }

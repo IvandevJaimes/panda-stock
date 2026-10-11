@@ -1,5 +1,5 @@
 import type { Marca } from '../../electron/db/types'
-import { desenvolverResultadoSeguro, normalizarError } from './errors'
+import { desenvolverResultadoSeguro, normalizarError, toErrorMessage } from './errors'
 
 export const marcasService = {
   async getAll(): Promise<Marca[]> {

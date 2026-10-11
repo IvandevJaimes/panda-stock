@@ -4,10 +4,15 @@ import './globals.css'
 import { ErrorBoundary } from './components/ui/ErrorBoundary.tsx'
 import { SplashScreen } from './features/splash/SplashScreen.tsx'
 
-const App = lazy(() => import('./App.tsx'))
-const ConfiguracionInicialVentana = lazy(() =>
+export const App = lazy(() => import('./App.tsx'))
+export const ConfiguracionInicialVentana = lazy(() =>
   import('./features/onboarding/ConfiguracionInicialVentana.tsx').then(
     ({ ConfiguracionInicialVentana: Ventana }) => ({ default: Ventana }),
+  ),
+)
+export const LicenciaVentana = lazy(() =>
+  import('./features/licencia/LicenciaVentana.tsx').then(
+    ({ LicenciaVentana: Ventana }) => ({ default: Ventana }),
   ),
 )
 
@@ -15,6 +20,8 @@ const ConfiguracionInicialVentana = lazy(() =>
 // (electron/main.ts). Monta el wizard a pantalla completa en lugar de la app.
 const esConfiguracionInicial =
   new URLSearchParams(window.location.search).get('vista') === 'configuracion'
+const esVentanaLicencia =
+  new URLSearchParams(window.location.search).get('vista') === 'licencia'
 const esPantallaCarga =
   new URLSearchParams(window.location.search).get('vista') === 'carga'
 
@@ -26,9 +33,11 @@ if (esPantallaCarga) {
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>
-      <Suspense fallback={<SplashScreen />}>
+      <Suspense fallback={null}>
         {esPantallaCarga ? (
           <SplashScreen />
+        ) : esVentanaLicencia ? (
+          <LicenciaVentana />
         ) : esConfiguracionInicial ? (
           <ConfiguracionInicialVentana />
         ) : (

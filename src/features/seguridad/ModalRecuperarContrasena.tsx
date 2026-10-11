@@ -78,7 +78,6 @@ export function ModalRecuperarContrasena({
       title="Recuperar contraseña"
       subtitle="Solicitá a soporte un código válido para esta instalación."
       headerIcon={<KeyRound size={18} />}
-      headerIcon={<KeyRound size={18} />}
       maxWidth="md"
       closeable={false}
       footer={(

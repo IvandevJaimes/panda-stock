@@ -38,6 +38,7 @@ import type {
   DevolucionCompleta,
 } from "./db/types.ts";
 import type { ExportarExcelInput } from "./exportaciones.types.ts";
+import type { EstadoLicencia, ResultadoLicencia } from "./licencia/tipos.ts";
 
 import { webFrame } from "electron";
 
@@ -49,6 +50,13 @@ webFrame.setVisualZoomLevelLimits(1, 1);
 
 contextBridge.exposeInMainWorld("electronAPI", {
   platform: process.platform,
+  licencia: {
+    huella: (): Promise<string> => ipcRenderer.invoke("licencia:huella"),
+    estado: (): Promise<ResultadoLicencia<EstadoLicencia>> => ipcRenderer.invoke("licencia:estado"),
+    activar: (texto: string): Promise<ResultadoLicencia<EstadoLicencia>> =>
+      ipcRenderer.invoke("licencia:activar", texto),
+    completada: (): Promise<void> => ipcRenderer.invoke("licencia:completada"),
+  },
   seguridad: {
     verifyPin: (pin: string, scope?: ClaveProteccion): Promise<ResultadoSeguro<boolean>> =>
       ipcRenderer.invoke("seguridad:verify-pin", pin, scope),
@@ -197,6 +205,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
     onPedirCierre: (callback: () => void) => {
       ipcRenderer.on("app:pedir-cierre-caja", () => callback());
     },
+    interfazLista: () => ipcRenderer.send("app:interfaz-lista"),
     salir: () => ipcRenderer.invoke("app:salir"),
   },
   copias: {

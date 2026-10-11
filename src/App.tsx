@@ -26,6 +26,10 @@ function App() {
   }, [theme])
 
   useEffect(() => {
+    window.electronAPI.app.interfazLista()
+  }, [])
+
+  useEffect(() => {
     let activo = true
     negocioService
       .get()
