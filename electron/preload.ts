@@ -23,6 +23,7 @@ import type {
   ClaveProteccion,
   ProteccionesSeguridad,
   ResultadoSeguro,
+  ConfiguracionCopias,
   ResultadoAnulacion,
   ResultadoDevolucion,
   ReportesSummary,
@@ -195,6 +196,19 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.on("app:pedir-cierre-caja", () => callback());
     },
     salir: () => ipcRenderer.invoke("app:salir"),
+  },
+  copias: {
+    obtenerConfiguracion: (): Promise<ConfiguracionCopias> =>
+      ipcRenderer.invoke("copias:get-configuracion"),
+    seleccionarCarpeta: (): Promise<string | null> =>
+      ipcRenderer.invoke("copias:seleccionar-carpeta"),
+    guardarConfiguracion: (configuracion: ConfiguracionCopias): Promise<ConfiguracionCopias> =>
+      ipcRenderer.invoke("copias:guardar-configuracion", configuracion),
+    crear: (): Promise<string> => ipcRenderer.invoke("copias:crear"),
+    seleccionarRestauracion: (): Promise<string | null> =>
+      ipcRenderer.invoke("copias:seleccionar-restauracion"),
+    restaurar: (archivo: string): Promise<void> =>
+      ipcRenderer.invoke("copias:restaurar", archivo),
   },
   configuracion: {
     /** El wizard de primer inicio terminó; el main cierra la ventana y abre la app. */

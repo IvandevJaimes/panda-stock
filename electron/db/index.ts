@@ -27,6 +27,17 @@ export function getDbPath(): string {
   return path.join(app.getPath('userData'), 'panda_stock.db')
 }
 
+export function getSqlite(): Database.Database {
+  if (!sqlite) throw new Error('Base de datos no inicializada.')
+  return sqlite
+}
+
+export function cerrarDatabase(): void {
+  if (sqlite && sqlite.open) sqlite.close()
+  sqlite = null
+  database = null
+}
+
 export function initDatabase(): void {
   if (sqlite) return
 
@@ -53,6 +64,14 @@ export function initDatabase(): void {
 
     const db = drizzle(connection, { schema })
     migrate(db, { migrationsFolder })
+
+    connection.exec(`
+      CREATE TABLE IF NOT EXISTS app_settings (
+        key TEXT PRIMARY KEY NOT NULL,
+        value TEXT NOT NULL,
+        actualizado_en TEXT NOT NULL
+      )
+    `)
 
     const ahora = new Date().toISOString()
     const seguridadExistente = db

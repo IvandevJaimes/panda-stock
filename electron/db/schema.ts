@@ -11,6 +11,12 @@ import type {
   UnidadMedida,
 } from './types.ts'
 
+export const appSettings = sqliteTable('app_settings', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
+  actualizadoEn: text('actualizado_en').notNull(),
+})
+
 export const seguridad = sqliteTable('seguridad', {
   id: integer('id').primaryKey(),
   recoveryId: text('recovery_id').notNull().default(''),

@@ -52,6 +52,7 @@ import type {
 } from '../../electron/db/types'
 import type { ExportarExcelInput } from '../../electron/exportaciones.types'
 import type { ResultadoDatosPrueba } from '../../electron/db/testdata.repository'
+import type { ConfiguracionCopias } from '../../electron/db/types'
 
 export {}
 
@@ -169,6 +170,14 @@ declare global {
         onPedirCierre: (callback: () => void) => void
         /** Confirma que la caja ya se cerró y deja salir. */
         salir: () => Promise<void>
+      }
+      copias: {
+        obtenerConfiguracion: () => Promise<ConfiguracionCopias>
+        seleccionarCarpeta: () => Promise<string | null>
+        guardarConfiguracion: (configuracion: ConfiguracionCopias) => Promise<ConfiguracionCopias>
+        crear: () => Promise<string>
+        seleccionarRestauracion: () => Promise<string | null>
+        restaurar: (archivo: string) => Promise<void>
       }
       configuracion: {
         /** El wizard de primer inicio terminó; cierra la ventana y abre la app. */

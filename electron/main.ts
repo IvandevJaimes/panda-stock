@@ -6,10 +6,20 @@ import {
   Menu,
   protocol,
 } from "electron";
+import type { OpenDialogOptions } from "electron";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { appendFileSync } from "node:fs";
 import { getDbPath, initDatabase } from "./db/index.ts";
+import {
+  crearCopiaSeguridad,
+  guardarConfiguracionCopias,
+  obtenerConfiguracionCopias,
+  restaurarCopiaSeguridad,
+  validarCarpetaPendrive,
+  validarCopiaParaRestaurar,
+} from "./db/copias-seguridad.ts";
+import type { ConfiguracionCopias } from "./db/types.ts";
 import {
   ensureAssetsFolders,
   registerPandaAssetProtocol,
@@ -126,6 +136,8 @@ let ventanaPrincipal: BrowserWindow | null = null;
 let ventanaCarga: BrowserWindow | null = null;
 let ventanaConfiguracion: BrowserWindow | null = null;
 let configuracionCompletada = false;
+let copiaAutomaticaEnCurso = false;
+let omitirCopiaAutomatica = false;
 
 const tieneInstanciaUnica = app.requestSingleInstanceLock();
 if (!tieneInstanciaUnica) {
@@ -209,15 +221,16 @@ let salidaPermitida = false;
 function interceptarCierreSiHayCaja(
   evento: Electron.Event,
   ventana: BrowserWindow | null,
-) {
-  if (salidaPermitida) return;
+) : boolean {
+  if (salidaPermitida) return false;
 
-  if (!ventana || ventana.isDestroyed()) return;
-  if (BrowserWindow.getAllWindows().length === 0) return;
-  if (!getActiveCaja()) return;
+  if (!ventana || ventana.isDestroyed()) return false;
+  if (BrowserWindow.getAllWindows().length === 0) return false;
+  if (!getActiveCaja()) return false;
 
   evento.preventDefault();
   ventana.webContents.send("app:pedir-cierre-caja");
+  return true;
 }
 
 // Log de diagnóstico tipo "mejor esfuerzo" en userData. Nunca rompe el main.
@@ -755,6 +768,57 @@ function registerIpcHandlers() {
 
   ipcMain.handle("datosPrueba:borrar", () => borrarDatosPrueba());
 
+  ipcMain.handle("copias:get-configuracion", () => obtenerConfiguracionCopias());
+  ipcMain.handle("copias:seleccionar-carpeta", async () => {
+    const ventana = ventanaPrincipal ?? ventanaConfiguracion ?? undefined;
+    const opciones: OpenDialogOptions = {
+      title: "Elegir carpeta del pendrive",
+      properties: ["openDirectory"],
+    };
+    const { canceled, filePaths } = ventana
+      ? await dialog.showOpenDialog(ventana, opciones)
+      : await dialog.showOpenDialog(opciones);
+    if (canceled || !filePaths[0]) return null;
+    return validarCarpetaPendrive(filePaths[0]);
+  });
+  ipcMain.handle("copias:guardar-configuracion", (_event, configuracion: ConfiguracionCopias) => {
+    if (
+      typeof configuracion?.automatica !== "boolean" ||
+      (configuracion.carpeta !== null && typeof configuracion.carpeta !== "string")
+    ) {
+      throw new Error("La configuración de copias no es válida.");
+    }
+    return guardarConfiguracionCopias(configuracion);
+  });
+  ipcMain.handle("copias:crear", () => crearCopiaSeguridad());
+  ipcMain.handle("copias:seleccionar-restauracion", async () => {
+    const ventana = ventanaPrincipal ?? ventanaConfiguracion ?? undefined;
+    const opciones: OpenDialogOptions = {
+      title: "Seleccionar copia de seguridad",
+      properties: ["openFile"],
+      filters: [{ name: "Base de datos de Panda Stock", extensions: ["db"] }],
+    };
+    const { canceled, filePaths } = ventana
+      ? await dialog.showOpenDialog(ventana, opciones)
+      : await dialog.showOpenDialog(opciones);
+    if (canceled || !filePaths[0]) return null;
+    validarCopiaParaRestaurar(filePaths[0]);
+    return filePaths[0];
+  });
+  ipcMain.handle("copias:restaurar", async (_event, archivo: string) => {
+    if (typeof archivo !== "string" || !path.isAbsolute(archivo)) {
+      throw new Error("La ruta de la copia seleccionada no es válida.");
+    }
+    if (getActiveCaja()) {
+      throw new Error("Cerrá la caja antes de restaurar una copia de seguridad.");
+    }
+    await restaurarCopiaSeguridad(archivo);
+    omitirCopiaAutomatica = true;
+    salidaPermitida = true;
+    app.relaunch();
+    app.quit();
+  });
+
   // El renderer confirma que ya no hay caja abierta y pide salir. `app.quit()`
   // vuelve a pasar por `before-quit`, así que el flag tiene que estar puesto antes.
   ipcMain.handle("app:salir", () => {
@@ -811,7 +875,35 @@ if (tieneInstanciaUnica) {
       ventanaPrincipal ??
       ventanaConfiguracion ??
       null;
-    interceptarCierreSiHayCaja(evento, ventana);
+    const cierreInterceptado = interceptarCierreSiHayCaja(evento, ventana);
+    if (copiaAutomaticaEnCurso) {
+      evento.preventDefault();
+      return;
+    }
+    if (cierreInterceptado || omitirCopiaAutomatica) return;
+
+    let configuracion: ConfiguracionCopias;
+    try {
+      configuracion = obtenerConfiguracionCopias();
+    } catch {
+      return;
+    }
+    if (!configuracion.automatica || !configuracion.carpeta) return;
+
+    evento.preventDefault();
+    copiaAutomaticaEnCurso = true;
+    void crearCopiaSeguridad(configuracion.carpeta)
+      .catch((error: unknown) => {
+        escribirLog(
+          "copia-automatica",
+          error instanceof Error ? error.message : String(error),
+        );
+      })
+      .finally(() => {
+        copiaAutomaticaEnCurso = false;
+        omitirCopiaAutomatica = true;
+        app.quit();
+      });
   });
 
   app.on("window-all-closed", () => {
