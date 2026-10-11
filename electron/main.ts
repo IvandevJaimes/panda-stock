@@ -122,6 +122,29 @@ import { ErrorAutorizacion } from "./db/security.ts";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const isDev = !app.isPackaged;
+let ventanaPrincipal: BrowserWindow | null = null;
+let ventanaCarga: BrowserWindow | null = null;
+let ventanaConfiguracion: BrowserWindow | null = null;
+let configuracionCompletada = false;
+
+const tieneInstanciaUnica = app.requestSingleInstanceLock();
+if (!tieneInstanciaUnica) {
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    const ventana =
+      (ventanaPrincipal?.isVisible() ? ventanaPrincipal : null) ??
+      (ventanaConfiguracion?.isVisible() ? ventanaConfiguracion : null) ??
+      ventanaCarga ??
+      ventanaPrincipal ??
+      ventanaConfiguracion;
+    if (!ventana || ventana.isDestroyed()) return;
+    if (ventana.isMinimized()) ventana.restore();
+    ventana.show();
+    ventana.focus();
+  });
+}
+
 const accesosVerificados = new Map<number, Set<ClaveProteccion>>();
 
 function resultadoSeguro<T>(accion: () => T): ResultadoSeguro<T> {
@@ -178,11 +201,6 @@ function esClaveProteccion(valor: unknown): valor is ClaveProteccion {
  */
 let salidaPermitida = false;
 
-// `configuracionCompletada` evita abrir la ventana principal dos veces cuando
-// el wizard termina (maneja + `closed`).
-let ventanaConfiguracion: BrowserWindow | null = null;
-let configuracionCompletada = false;
-
 /**
  * Interrumpe el cierre y le pide al renderer que muestre el aviso. Si no queda
  * ninguna ventana no hay a quién avisar y, mucho peor, nadie para resolverlo: en
@@ -216,16 +234,18 @@ function escribirLog(tag: string, mensaje: string): void {
 
 // Registro el esquema custom panda-asset:// antes del arranque de la app para poder
 // servir los assets locales (logo del negocio, imágenes de productos) al renderer.
-protocol.registerSchemesAsPrivileged([
-  {
-    scheme: "panda-asset",
-    privileges: {
-      standard: true,
-      secure: true,
-      supportFetchAPI: true,
+if (tieneInstanciaUnica) {
+  protocol.registerSchemesAsPrivileged([
+    {
+      scheme: "panda-asset",
+      privileges: {
+        standard: true,
+        secure: true,
+        supportFetchAPI: true,
+      },
     },
-  },
-]);
+  ]);
+}
 
 function createWindow() {
   let reintentoCarga = false;
@@ -235,6 +255,7 @@ function createWindow() {
     minWidth: 480,
     minHeight: 700,
     resizable: true,
+    show: false,
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, "../dist-electron/preload.cjs"),
@@ -247,6 +268,12 @@ function createWindow() {
 
   // Sin barra de menú nativa (solo menú de aplicación en macOS si aplica).
   win.setMenu(null);
+  ventanaPrincipal = win;
+
+  win.once("ready-to-show", () => revelarVentana(win));
+  win.on("closed", () => {
+    if (ventanaPrincipal === win) ventanaPrincipal = null;
+  });
 
   // Cerrar la ventana dispara `close`; el `before-quit` de más abajo cubre el
   // `app.quit()` que dispara `window-all-closed` en Linux y Windows. Hacen falta
@@ -295,6 +322,60 @@ function createWindow() {
   }
 }
 
+function createSplashWindow() {
+  if (ventanaCarga && !ventanaCarga.isDestroyed()) {
+    ventanaCarga.focus();
+    return;
+  }
+
+  const win = new BrowserWindow({
+    width: 360,
+    height: 300,
+    frame: false,
+    resizable: false,
+    maximizable: false,
+    minimizable: false,
+    fullscreenable: false,
+    center: true,
+    show: true,
+    transparent: true,
+    hasShadow: false,
+    backgroundColor: "#0b0f17",
+    autoHideMenuBar: true,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      devTools: false,
+    },
+  });
+
+  ventanaCarga = win;
+  win.on("closed", () => {
+    if (ventanaCarga === win) ventanaCarga = null;
+  });
+
+  if (isDev) {
+    win.loadURL("http://localhost:5173/?vista=carga");
+  } else {
+    win.loadFile(path.join(__dirname, "../dist/index.html"), {
+      query: { vista: "carga" },
+    });
+  }
+}
+
+function revelarVentana(win: BrowserWindow) {
+  if (win.isDestroyed()) return;
+  win.show();
+  win.focus();
+
+  if (ventanaCarga && !ventanaCarga.isDestroyed()) {
+    const splash = ventanaCarga;
+    ventanaCarga = null;
+    splash.close();
+  }
+}
+
 /**
  * Ventana aparte del primer inicio: bienvenida + pasos de configuración.
  * No es un modal: es una ventana propia, más chica, que se reemplaza por la
@@ -315,6 +396,7 @@ function createSetupWindow() {
     minWidth: 560,
     minHeight: 560,
     resizable: true,
+    show: false,
     autoHideMenuBar: true,
     title: "Panda Stock — Configuración inicial",
     webPreferences: {
@@ -327,6 +409,7 @@ function createSetupWindow() {
   });
 
   win.setMenu(null);
+  win.once("ready-to-show", () => revelarVentana(win));
 
   win.on("closed", () => {
     ventanaConfiguracion = null;
@@ -680,50 +763,60 @@ function registerIpcHandlers() {
   });
 }
 
-app.whenReady().then(() => {
-  try {
-    initDatabase();
-  } catch (error) {
-    const detalle = error instanceof Error ? error.stack ?? error.message : String(error);
-    escribirLog("inicio", `Base: ${getDbPath()}\n${detalle}`);
-    dialog.showErrorBox(
-      "No se pudo iniciar Panda Stock",
-      `No se pudieron cargar los datos.\n\nArchivo de datos: ${getDbPath()}\n\nDetalle: ${error instanceof Error ? error.message : String(error)}\n\nRegistro de diagnóstico: panda-stock.log en la carpeta de datos de la app.`,
-    );
-    app.quit();
-    return;
-  }
+if (tieneInstanciaUnica) {
+  app.whenReady().then(() => {
+    createSplashWindow();
 
-  ensureAssetsFolders();
-  registerPandaAssetProtocol();
-  registerIpcHandlers();
+    try {
+      initDatabase();
+    } catch (error) {
+      const detalle = error instanceof Error ? error.stack ?? error.message : String(error);
+      escribirLog("inicio", `Base: ${getDbPath()}\n${detalle}`);
+      dialog.showErrorBox(
+        "No se pudo iniciar Panda Stock",
+        `No se pudieron cargar los datos.\n\nArchivo de datos: ${getDbPath()}\n\nDetalle: ${error instanceof Error ? error.message : String(error)}\n\nRegistro de diagnóstico: panda-stock.log en la carpeta de datos de la app.`,
+      );
+      app.quit();
+      return;
+    }
 
-  // Remueve el menú de aplicación global (también en desarrollo).
-  Menu.setApplicationMenu(null);
+    ensureAssetsFolders();
+    registerPandaAssetProtocol();
+    registerIpcHandlers();
 
-  if (debeMostrarConfiguracionInicial()) {
-    createSetupWindow();
-  } else {
-    createWindow();
-  }
+    // Remueve el menú de aplicación global (también en desarrollo).
+    Menu.setApplicationMenu(null);
 
-  app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      if (debeMostrarConfiguracionInicial()) {
-        createSetupWindow();
-      } else {
-        createWindow();
+    if (debeMostrarConfiguracionInicial()) {
+      createSetupWindow();
+    } else {
+      createWindow();
+    }
+
+    app.on("activate", () => {
+      if (BrowserWindow.getAllWindows().length === 0) {
+        if (debeMostrarConfiguracionInicial()) {
+          createSetupWindow();
+        } else {
+          createWindow();
+        }
       }
+    });
+  });
+
+  app.on("before-quit", (evento) => {
+    const enfocada = BrowserWindow.getFocusedWindow();
+    const ventana =
+      (enfocada !== ventanaCarga ? enfocada : null) ??
+      ventanaPrincipal ??
+      ventanaConfiguracion ??
+      null;
+    interceptarCierreSiHayCaja(evento, ventana);
+  });
+
+  app.on("window-all-closed", () => {
+    if (process.platform !== "darwin") {
+      app.quit();
     }
   });
-});
-
-app.on("before-quit", (evento) => {
-  interceptarCierreSiHayCaja(evento, BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null);
-});
-
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
-    app.quit();
-  }
-});
+}
