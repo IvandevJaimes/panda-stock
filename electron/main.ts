@@ -16,10 +16,11 @@ import {
   guardarConfiguracionCopias,
   obtenerConfiguracionCopias,
   restaurarCopiaSeguridad,
-  validarCarpetaPendrive,
+  validarCarpetaDestino,
   validarCopiaParaRestaurar,
+  verificarDestinoCopias,
 } from "./db/copias-seguridad.ts";
-import type { ConfiguracionCopias } from "./db/types.ts";
+import type { ConfiguracionCopias, TipoDestinoCopias } from "./db/types.ts";
 import {
   ensureAssetsFolders,
   registerPandaAssetProtocol,
@@ -226,7 +227,15 @@ function interceptarCierreSiHayCaja(
 
   if (!ventana || ventana.isDestroyed()) return false;
   if (BrowserWindow.getAllWindows().length === 0) return false;
-  if (!getActiveCaja()) return false;
+  try {
+    if (!getActiveCaja()) return false;
+  } catch (error) {
+    escribirLog(
+      "cierre",
+      `No se pudo consultar la caja activa durante el cierre: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    return false;
+  }
 
   evento.preventDefault();
   ventana.webContents.send("app:pedir-cierre-caja");
@@ -262,6 +271,9 @@ if (tieneInstanciaUnica) {
 
 function createWindow() {
   let reintentoCarga = false;
+  let intentosCarga = 0;
+  const urlDesarrollo = "http://localhost:5173";
+  const archivoInterfaz = path.join(__dirname, "../dist/index.html");
   const win = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -282,6 +294,7 @@ function createWindow() {
   // Sin barra de menú nativa (solo menú de aplicación en macOS si aplica).
   win.setMenu(null);
   ventanaPrincipal = win;
+  const idWebContents = win.webContents.id;
 
   win.once("ready-to-show", () => revelarVentana(win));
   win.on("closed", () => {
@@ -294,17 +307,39 @@ function createWindow() {
   // el SO le pide salir a la app entera.
   win.on("close", (evento) => interceptarCierreSiHayCaja(evento, win));
   win.webContents.on("did-start-navigation", (_event, _url, _inPlace, isMainFrame) => {
-    if (isMainFrame) accesosVerificados.delete(win.webContents.id);
+    if (isMainFrame) accesosVerificados.delete(idWebContents);
   });
-  win.webContents.on("destroyed", () => accesosVerificados.delete(win.webContents.id));
+  win.webContents.on("destroyed", () => accesosVerificados.delete(idWebContents));
 
   // Volcado de errores del renderer a userData/panda-stock.log para diagnosticar
   // desde la VM sin DevTools.
   win.webContents.on("console-message", (_evento, nivel, mensaje, linea, origen) => {
     escribirLog("renderer", `[${nivel}] ${mensaje} (${origen}:${linea})`);
   });
-  win.webContents.on("did-fail-load", (_evento, codigo, descripcion, url) => {
+  win.webContents.on("did-fail-load", (_evento, codigo, descripcion, url, esMarcoPrincipal) => {
     escribirLog("load", `${codigo} ${descripcion} ${url}`);
+    if (!esMarcoPrincipal || codigo === -3) return;
+    if (intentosCarga >= 15) {
+      escribirLog("load", `Se agotaron los reintentos para cargar ${url}`);
+      dialog.showErrorBox(
+        "No se pudo cargar Panda Stock",
+        "La interfaz no pudo iniciarse. Cerrá la aplicación y volvé a abrirla.",
+      );
+      app.exit(1);
+      return;
+    }
+
+    intentosCarga += 1;
+    const espera = Math.min(intentosCarga * 500, 3000);
+    setTimeout(() => {
+      if (win.isDestroyed()) return;
+      const carga = isDev
+        ? win.loadURL(urlDesarrollo)
+        : win.loadFile(archivoInterfaz);
+      void carga.catch((error: unknown) => {
+        escribirLog("load", error instanceof Error ? error.message : String(error));
+      });
+    }, espera);
   });
   win.webContents.on("render-process-gone", (_evento, detalles) => {
     escribirLog("gone", JSON.stringify(detalles));
@@ -328,11 +363,10 @@ function createWindow() {
     });
   }
 
-  if (isDev) {
-    win.loadURL("http://localhost:5173");
-  } else {
-    win.loadFile(path.join(__dirname, "../dist/index.html"));
-  }
+  const carga = isDev ? win.loadURL(urlDesarrollo) : win.loadFile(archivoInterfaz);
+  void carga.catch((error: unknown) => {
+    escribirLog("load", error instanceof Error ? error.message : String(error));
+  });
 }
 
 function createSplashWindow() {
@@ -769,34 +803,58 @@ function registerIpcHandlers() {
   ipcMain.handle("datosPrueba:borrar", () => borrarDatosPrueba());
 
   ipcMain.handle("copias:get-configuracion", () => obtenerConfiguracionCopias());
-  ipcMain.handle("copias:seleccionar-carpeta", async () => {
+  ipcMain.handle("copias:verificar-destino", (_event, tipoDestino: TipoDestinoCopias) => {
+    if (tipoDestino !== "pc" && tipoDestino !== "extraible") {
+      throw new Error("El destino de las copias no es válido.");
+    }
+    return verificarDestinoCopias(tipoDestino);
+  });
+  ipcMain.handle("copias:seleccionar-carpeta", async (_event, tipoDestino: TipoDestinoCopias) => {
+    if (tipoDestino !== "pc" && tipoDestino !== "extraible") {
+      throw new Error("El destino de las copias no es válido.");
+    }
     const ventana = ventanaPrincipal ?? ventanaConfiguracion ?? undefined;
     const opciones: OpenDialogOptions = {
-      title: "Elegir carpeta del pendrive",
+      title: tipoDestino === "extraible" ? "Elegir carpeta de unidad extraíble" : "Elegir carpeta de esta PC",
       properties: ["openDirectory"],
     };
     const { canceled, filePaths } = ventana
       ? await dialog.showOpenDialog(ventana, opciones)
       : await dialog.showOpenDialog(opciones);
     if (canceled || !filePaths[0]) return null;
-    return validarCarpetaPendrive(filePaths[0]);
+    return validarCarpetaDestino(filePaths[0], tipoDestino);
   });
   ipcMain.handle("copias:guardar-configuracion", (_event, configuracion: ConfiguracionCopias) => {
     if (
       typeof configuracion?.automatica !== "boolean" ||
-      (configuracion.carpeta !== null && typeof configuracion.carpeta !== "string")
+      (configuracion.carpeta !== null && typeof configuracion.carpeta !== "string") ||
+      typeof configuracion.carpetas !== "object" || configuracion.carpetas === null ||
+      (configuracion.carpetas.pc !== null && typeof configuracion.carpetas.pc !== "string") ||
+      (configuracion.carpetas.extraible !== null && typeof configuracion.carpetas.extraible !== "string") ||
+      (configuracion.tipoDestino !== "pc" && configuracion.tipoDestino !== "extraible")
     ) {
       throw new Error("La configuración de copias no es válida.");
     }
     return guardarConfiguracionCopias(configuracion);
   });
   ipcMain.handle("copias:crear", () => crearCopiaSeguridad());
-  ipcMain.handle("copias:seleccionar-restauracion", async () => {
+  ipcMain.handle("copias:seleccionar-restauracion", async (_event, tipoDestino: TipoDestinoCopias) => {
+    if (tipoDestino !== "pc" && tipoDestino !== "extraible") {
+      throw new Error("El destino de las copias no es válido.");
+    }
+    const configuracion = obtenerConfiguracionCopias();
+    if (tipoDestino === "extraible") {
+      if (!configuracion.carpeta) throw new Error("Elegí una carpeta de la unidad extraíble antes de restaurar.");
+      validarCarpetaDestino(configuracion.carpeta, "extraible", false);
+    }
     const ventana = ventanaPrincipal ?? ventanaConfiguracion ?? undefined;
     const opciones: OpenDialogOptions = {
       title: "Seleccionar copia de seguridad",
       properties: ["openFile"],
       filters: [{ name: "Base de datos de Panda Stock", extensions: ["db"] }],
+      ...(configuracion.carpeta && configuracion.tipoDestino === tipoDestino
+        ? { defaultPath: configuracion.carpeta }
+        : {}),
     };
     const { canceled, filePaths } = ventana
       ? await dialog.showOpenDialog(ventana, opciones)
@@ -805,9 +863,17 @@ function registerIpcHandlers() {
     validarCopiaParaRestaurar(filePaths[0]);
     return filePaths[0];
   });
-  ipcMain.handle("copias:restaurar", async (_event, archivo: string) => {
+  ipcMain.handle("copias:restaurar", async (_event, archivo: string, tipoDestino: TipoDestinoCopias) => {
     if (typeof archivo !== "string" || !path.isAbsolute(archivo)) {
       throw new Error("La ruta de la copia seleccionada no es válida.");
+    }
+    if (tipoDestino !== "pc" && tipoDestino !== "extraible") {
+      throw new Error("El destino de las copias no es válido.");
+    }
+    if (tipoDestino === "extraible") {
+      const configuracion = obtenerConfiguracionCopias();
+      if (!configuracion.carpeta) throw new Error("Elegí una carpeta de la unidad extraíble antes de restaurar.");
+      validarCarpetaDestino(configuracion.carpeta, "extraible", false);
     }
     if (getActiveCaja()) {
       throw new Error("Cerrá la caja antes de restaurar una copia de seguridad.");
@@ -816,7 +882,9 @@ function registerIpcHandlers() {
     omitirCopiaAutomatica = true;
     salidaPermitida = true;
     app.relaunch();
-    app.quit();
+    // El renderer puede cancelar `app.quit()` durante `beforeunload` y dejar
+    // bloqueado el proceso que mantiene el lock de instancia única.
+    app.exit(0);
   });
 
   // El renderer confirma que ya no hay caja abierta y pide salir. `app.quit()`
@@ -840,7 +908,7 @@ if (tieneInstanciaUnica) {
         "No se pudo iniciar Panda Stock",
         `No se pudieron cargar los datos.\n\nArchivo de datos: ${getDbPath()}\n\nDetalle: ${error instanceof Error ? error.message : String(error)}\n\nRegistro de diagnóstico: panda-stock.log en la carpeta de datos de la app.`,
       );
-      app.quit();
+      app.exit(1);
       return;
     }
 
@@ -892,7 +960,7 @@ if (tieneInstanciaUnica) {
 
     evento.preventDefault();
     copiaAutomaticaEnCurso = true;
-    void crearCopiaSeguridad(configuracion.carpeta)
+    void crearCopiaSeguridad(configuracion)
       .catch((error: unknown) => {
         escribirLog(
           "copia-automatica",

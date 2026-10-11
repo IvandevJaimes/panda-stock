@@ -27,36 +27,57 @@ export function AvisoCajaAbierta() {
   }
 
   return (
-    <Modal
+    <CajaAbiertaModal
       isOpen={avisoAbierto}
       onClose={cerrar}
+      contexto="salida"
+      onConfirmarCierre={() => {
+        setAvisoAbierto(false)
+        solicitarCierre()
+      }}
+    />
+  )
+}
+
+export function CajaAbiertaModal({
+  isOpen,
+  onClose,
+  contexto,
+  onConfirmarCierre,
+}: {
+  isOpen: boolean
+  onClose: () => void
+  contexto: 'salida' | 'restauracion'
+  onConfirmarCierre?: () => void
+}) {
+  const esSalida = contexto === 'salida'
+
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
       title="La caja está abierta"
-      subtitle="No podés salir del programa sin cerrarla"
+      subtitle={esSalida ? 'No podés salir del programa sin cerrarla' : 'No podés restaurar una copia con la caja abierta'}
       headerIcon={<ShieldCheck size={18} />}
       maxWidth="md"
-      footer={
+      footer={esSalida ? (
         <>
-          <Button variant="outline" onClick={cerrar}>
-            Seguir en el programa
-          </Button>
-          <Button
-            onClick={() => {
-              setAvisoAbierto(false)
-              solicitarCierre()
-            }}
-          >
-            Cerrar caja y salir
-          </Button>
+          <Button variant="outline" onClick={onClose}>Seguir en el programa</Button>
+          <Button onClick={onConfirmarCierre}>Cerrar caja y salir</Button>
         </>
-      }
+      ) : (
+        <Button onClick={onClose}>Entendido</Button>
+      )}
     >
       <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-300">
-        Hay una caja abierta con ventas imputadas. Si salís sin cerrarla, el turno queda sin arqueo:
-        no se sabe cuánto efectivo había, cuánto se cobró ni qué diferencia hubo.
+        {esSalida
+          ? 'Hay una caja abierta con ventas imputadas. Si salís sin cerrarla, el turno queda sin arqueo: no se sabe cuánto efectivo había, cuánto se cobró ni qué diferencia hubo.'
+          : 'Hay una caja abierta con ventas imputadas. Si restaurás ahora, se reemplazarán los datos del negocio mientras el turno sigue sin cerrar.'}
       </p>
       <p className="mt-3 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
-        Contá la gaveta, revisá la diferencia y cerrá la caja. Al confirmar, el programa se cierra
-        solo.
+        {esSalida
+          ? 'Contá la gaveta, revisá la diferencia y cerrá la caja. Al confirmar, el programa se cierra solo.'
+          : 'Cerrá la caja desde el control de caja y volvé a iniciar la restauración.'}
       </p>
     </Modal>
   )

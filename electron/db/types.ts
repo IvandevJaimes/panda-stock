@@ -33,9 +33,18 @@ export type ErrorSeguridadCode = 'AUTHORIZATION_REQUIRED' | 'INVALID_PIN' | 'PIN
 export type ResultadoSeguro<T> =
   | { ok: true; value: T }
   | { ok: false; error: { code: ErrorSeguridadCode; message: string; retryAt?: number } }
+export type TipoDestinoCopias = 'extraible' | 'pc'
+
 export interface ConfiguracionCopias {
   carpeta: string | null
+  carpetas: Record<TipoDestinoCopias, string | null>
   automatica: boolean
+  tipoDestino: TipoDestinoCopias
+}
+
+export interface EstadoDestinoCopias {
+  disponible: boolean
+  mensaje: string | null
 }
 export type MetodoPago =
   | 'efectivo'

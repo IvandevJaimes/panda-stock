@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { Briefcase, Building2, ImagePlus, LogOut, Pencil, Settings, Volume2, Wallet, X } from 'lucide-react'
+import { Briefcase, Building2, DatabaseBackup, ImagePlus, LogOut, Pencil, Settings, Volume2, Wallet, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '../ui/Button'
 import { Card } from '../ui/Card'
@@ -12,6 +12,7 @@ import { Tooltip } from '../ui/Tooltip'
 import { ImageLightbox } from '../ui/ImageLightbox'
 import { BusinessSetupModal } from '../../features/onboarding/BusinessSetupModal'
 import { BusinessLogoPicker } from '../../features/onboarding/BusinessLogoPicker'
+import { CopiasSeguridadModal } from '../../features/settings/CopiasSeguridadModal'
 import { useNegocioStore } from '../../stores/negocio.store'
 import packageInfo from '../../../package.json'
 
@@ -61,6 +62,7 @@ export function SettingsDrawer() {
   const setNegocio = useNegocioStore((state) => state.setNegocio)
   const [editarNegocioAbierto, setEditarNegocioAbierto] = useState(false)
   const [verLogoAbierto, setVerLogoAbierto] = useState(false)
+  const [copiasAbiertas, setCopiasAbiertas] = useState(false)
 
   useEffect(() => {
     if (!isOpen) return
@@ -70,6 +72,11 @@ export function SettingsDrawer() {
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [isOpen, closeRightSidebar])
+
+  function openBackupModal() {
+    closeRightSidebar()
+    setCopiasAbiertas(true)
+  }
 
   function openAdvancedSettings() {
     closeRightSidebar()
@@ -110,6 +117,10 @@ export function SettingsDrawer() {
           setEditarNegocioAbierto(false)
         }}
       />
+      <CopiasSeguridadModal
+        isOpen={copiasAbiertas}
+        onClose={() => setCopiasAbiertas(false)}
+      />
       <div onClick={closeRightSidebar} aria-hidden className={cn('fixed inset-0 z-40 bg-black/40 backdrop-blur-xs transition-opacity duration-300', isOpen ? 'opacity-100' : 'pointer-events-none opacity-0')} />
       <aside aria-hidden={!isOpen} className={cn('fixed right-0 top-0 z-50 flex h-full w-[400px] max-w-[90vw] flex-col border-l border-slate-200 bg-slate-50 text-slate-900 shadow-2xl shadow-black/20 transition-transform duration-300 ease-out dark:border-slate-800 dark:bg-[#0B1120] dark:text-slate-200 dark:shadow-black/40', isOpen ? 'translate-x-0' : 'translate-x-full')}>
         <header className="flex items-center justify-between gap-4 border-b border-slate-200 bg-white px-5 py-4 dark:border-slate-800 dark:bg-[#111827]">
@@ -121,6 +132,7 @@ export function SettingsDrawer() {
         </header>
 
         <div className="flex-1 space-y-3 overflow-y-auto p-4">
+          <Button type="button" variant="outline" className="w-full" icon={<DatabaseBackup size={17} />} onClick={openBackupModal}>Copias de seguridad</Button>
           <Button type="button" className="w-full" icon={<Settings size={17} />} onClick={openAdvancedSettings}>Configuración avanzada</Button>
 
           <Card title="Información del negocio" description="Datos y logo del punto de venta." className="space-y-3">

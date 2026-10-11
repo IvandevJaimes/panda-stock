@@ -30,7 +30,6 @@ import {
   type ProteccionesSeguridad,
 } from '../../types/security'
 import { cn } from '../../lib/cn'
-import { CopiasSeguridadSection } from './CopiasSeguridadSection'
 
 const OPCIONES_PROTECCION: {
   key: ClaveProteccion
@@ -357,8 +356,6 @@ export function SettingsPage() {
           <SettingsSection title="Ventas con saldo pendiente" description="Administrá las ventas registradas en cuenta corriente.">
             <SettingRow icon={<BookUser size={17} />} title="Cuenta corriente" description="Permite registrar ventas con saldo pendiente y administrar los saldos por cliente." checked={draft.cuentaCorrienteHabilitada} onCheckedChange={(activo) => actualizar('cuentaCorrienteHabilitada', activo)} />
           </SettingsSection>
-
-          <CopiasSeguridadSection />
 
           <SecuritySettingsPanel protecciones={draft.proteccionesSeguridad} onChange={(protecciones) => actualizar('proteccionesSeguridad', protecciones)} />
         </div>

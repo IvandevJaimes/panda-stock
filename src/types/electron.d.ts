@@ -52,7 +52,7 @@ import type {
 } from '../../electron/db/types'
 import type { ExportarExcelInput } from '../../electron/exportaciones.types'
 import type { ResultadoDatosPrueba } from '../../electron/db/testdata.repository'
-import type { ConfiguracionCopias } from '../../electron/db/types'
+import type { ConfiguracionCopias, EstadoDestinoCopias, TipoDestinoCopias } from '../../electron/db/types'
 
 export {}
 
@@ -173,11 +173,12 @@ declare global {
       }
       copias: {
         obtenerConfiguracion: () => Promise<ConfiguracionCopias>
-        seleccionarCarpeta: () => Promise<string | null>
+        verificarDestino: (tipoDestino: TipoDestinoCopias) => Promise<EstadoDestinoCopias>
+        seleccionarCarpeta: (tipoDestino: TipoDestinoCopias) => Promise<string | null>
         guardarConfiguracion: (configuracion: ConfiguracionCopias) => Promise<ConfiguracionCopias>
         crear: () => Promise<string>
-        seleccionarRestauracion: () => Promise<string | null>
-        restaurar: (archivo: string) => Promise<void>
+        seleccionarRestauracion: (tipoDestino: TipoDestinoCopias) => Promise<string | null>
+        restaurar: (archivo: string, tipoDestino: TipoDestinoCopias) => Promise<void>
       }
       configuracion: {
         /** El wizard de primer inicio terminó; cierra la ventana y abre la app. */

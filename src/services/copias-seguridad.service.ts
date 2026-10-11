@@ -1,5 +1,5 @@
 import { normalizarError } from './errors'
-import type { ConfiguracionCopias } from '../../electron/db/types'
+import type { ConfiguracionCopias, TipoDestinoCopias } from '../../electron/db/types'
 
 async function ejecutar<T>(accion: () => Promise<T>): Promise<T> {
   try {
@@ -11,10 +11,15 @@ async function ejecutar<T>(accion: () => Promise<T>): Promise<T> {
 
 export const copiasSeguridadService = {
   obtenerConfiguracion: () => ejecutar(() => window.electronAPI.copias.obtenerConfiguracion()),
-  seleccionarCarpeta: () => ejecutar(() => window.electronAPI.copias.seleccionarCarpeta()),
+  verificarDestino: (tipoDestino: TipoDestinoCopias) =>
+    ejecutar(() => window.electronAPI.copias.verificarDestino(tipoDestino)),
+  seleccionarCarpeta: (tipoDestino: TipoDestinoCopias) =>
+    ejecutar(() => window.electronAPI.copias.seleccionarCarpeta(tipoDestino)),
   guardarConfiguracion: (configuracion: ConfiguracionCopias) =>
     ejecutar(() => window.electronAPI.copias.guardarConfiguracion(configuracion)),
   crear: () => ejecutar(() => window.electronAPI.copias.crear()),
-  seleccionarRestauracion: () => ejecutar(() => window.electronAPI.copias.seleccionarRestauracion()),
-  restaurar: (archivo: string) => ejecutar(() => window.electronAPI.copias.restaurar(archivo)),
+  seleccionarRestauracion: (tipoDestino: TipoDestinoCopias) =>
+    ejecutar(() => window.electronAPI.copias.seleccionarRestauracion(tipoDestino)),
+  restaurar: (archivo: string, tipoDestino: TipoDestinoCopias) =>
+    ejecutar(() => window.electronAPI.copias.restaurar(archivo, tipoDestino)),
 }

@@ -15,14 +15,29 @@ import { randomUUID } from 'node:crypto'
 import Database from 'better-sqlite3'
 import { cerrarDatabase, getDb, getDbPath, getSqlite, initDatabase } from './index.ts'
 import { appSettings } from './schema.ts'
-import type { ConfiguracionCopias } from './types.ts'
+import type { ConfiguracionCopias, EstadoDestinoCopias, TipoDestinoCopias } from './types.ts'
 
 function leerConfiguracion(): ConfiguracionCopias {
   const rows = getDb().select().from(appSettings).all()
   const valores = new Map(rows.map(({ key, value }) => [key, value]))
+  const carpetaAnterior = valores.get('backup_folder') || null
+  const destinoGuardado = valores.get('backup_destination')
+  const tipoDestino: TipoDestinoCopias = destinoGuardado === 'pc' || destinoGuardado === 'extraible'
+    ? destinoGuardado
+    : carpetaAnterior ? 'extraible' : 'pc'
+  const carpetas: ConfiguracionCopias['carpetas'] = {
+    pc: valores.has('backup_folder_pc')
+      ? valores.get('backup_folder_pc') || null
+      : tipoDestino === 'pc' ? carpetaAnterior : null,
+    extraible: valores.has('backup_folder_extraible')
+      ? valores.get('backup_folder_extraible') || null
+      : tipoDestino === 'extraible' ? carpetaAnterior : null,
+  }
   return {
-    carpeta: valores.get('backup_folder') || null,
+    carpeta: carpetas[tipoDestino],
+    carpetas,
     automatica: valores.get('auto_backup_enabled') === 'true',
+    tipoDestino,
   }
 }
 
@@ -30,18 +45,48 @@ export function obtenerConfiguracionCopias(): ConfiguracionCopias {
   return leerConfiguracion()
 }
 
+export function verificarDestinoCopias(tipoDestino: TipoDestinoCopias): EstadoDestinoCopias {
+  const configuracion = leerConfiguracion()
+  const carpeta = configuracion.carpetas[tipoDestino]
+  if (!carpeta) {
+    return { disponible: false, mensaje: 'No hay una carpeta configurada para este destino.' }
+  }
+  try {
+    validarCarpetaDestino(carpeta, tipoDestino, false)
+    return { disponible: true, mensaje: null }
+  } catch (error) {
+    return {
+      disponible: false,
+      mensaje: error instanceof Error ? error.message : 'No se pudo verificar la carpeta de copias.',
+    }
+  }
+}
+
 export function guardarConfiguracionCopias(configuracion: ConfiguracionCopias): ConfiguracionCopias {
   const carpeta = configuracion.carpeta?.trim() || null
-  if (configuracion.automatica && !carpeta) {
-    throw new Error('Elegí una carpeta de un pendrive conectado para activar la copia automática.')
+  const actual = leerConfiguracion()
+  const carpetas = {
+    pc: configuracion.carpetas.pc?.trim() || null,
+    extraible: configuracion.carpetas.extraible?.trim() || null,
   }
-  if (configuracion.automatica && carpeta) validarCarpetaPendrive(carpeta)
+  carpetas[configuracion.tipoDestino] = carpeta
+  const activarAutomatica = configuracion.automatica && !actual.automatica
+  if (activarAutomatica && !carpeta) {
+    throw new Error('Elegí una carpeta para activar la copia automática.')
+  }
+  const carpetaDestinoAnterior = actual.carpetas[configuracion.tipoDestino]
+  if (carpeta && (activarAutomatica || carpeta !== carpetaDestinoAnterior)) {
+    validarCarpetaDestino(carpeta, configuracion.tipoDestino)
+  }
 
   const ahora = new Date().toISOString()
   getSqlite().transaction(() => {
     for (const [key, value] of [
       ['backup_folder', carpeta ?? ''],
+      ['backup_folder_pc', carpetas.pc ?? ''],
+      ['backup_folder_extraible', carpetas.extraible ?? ''],
       ['auto_backup_enabled', String(configuracion.automatica)],
+      ['backup_destination', configuracion.tipoDestino],
     ] as const) {
       getDb().insert(appSettings).values({ key, value, actualizadoEn: ahora })
         .onConflictDoUpdate({ target: appSettings.key, set: { value, actualizadoEn: ahora } })
@@ -51,17 +96,31 @@ export function guardarConfiguracionCopias(configuracion: ConfiguracionCopias): 
   return leerConfiguracion()
 }
 
-export function validarCarpetaPendrive(carpeta: string): string {
-  if (!carpeta.trim()) throw new Error('Elegí una carpeta de un pendrive conectado.')
+export function validarCarpetaDestino(
+  carpeta: string,
+  tipoDestino: TipoDestinoCopias,
+  comprobarEscritura = true,
+): string {
+  if (!carpeta.trim()) throw new Error('Elegí una carpeta para guardar las copias.')
   let ruta: string
   try {
     ruta = realpathSync(path.resolve(carpeta))
   } catch {
-    throw new Error('La carpeta de copias no está disponible. Conectá el pendrive y volvé a elegirla.')
+    throw new Error(tipoDestino === 'extraible'
+      ? 'La unidad extraíble no está conectada. Conectala y volvé a intentar.'
+      : 'La carpeta de copias no está disponible. Revisá la ubicación seleccionada.')
   }
-  if (!statSync(ruta).isDirectory() || !esVolumenExtraible(ruta)) {
-    throw new Error('Elegí una carpeta ubicada en un pendrive o unidad extraíble conectada.')
+  if (!statSync(ruta).isDirectory()) {
+    throw new Error('La ubicación seleccionada no es una carpeta.')
   }
+  const esExtraible = esVolumenExtraible(ruta)
+  if (tipoDestino === 'extraible' && !esExtraible) {
+    throw new Error('Conectá una unidad extraíble y elegí una carpeta dentro de ella.')
+  }
+  if (tipoDestino === 'pc' && esExtraible) {
+    throw new Error('La carpeta seleccionada pertenece a una unidad extraíble. Elegí "Unidad extraíble" o seleccioná una carpeta de esta PC.')
+  }
+  if (!comprobarEscritura) return ruta
 
   const prueba = path.join(ruta, `.panda-stock-${randomUUID()}.tmp`)
   let descriptor: number | null = null
@@ -69,7 +128,9 @@ export function validarCarpetaPendrive(carpeta: string): string {
     descriptor = openSync(prueba, 'wx', 0o600)
     fsyncSync(descriptor)
   } catch {
-    throw new Error('No se puede escribir en la carpeta de copias. Revisá que el pendrive esté conectado y tenga espacio.')
+    throw new Error(tipoDestino === 'extraible'
+      ? 'No se puede escribir en la unidad extraíble. Revisá que esté conectada y tenga espacio.'
+      : 'No se puede escribir en la carpeta seleccionada. Revisá los permisos y el espacio disponible.')
   } finally {
     if (descriptor !== null) closeSync(descriptor)
     try {
@@ -133,8 +194,9 @@ function fechaArchivo(fecha = new Date()): string {
   return `${fecha.getFullYear()}-${dos(fecha.getMonth() + 1)}-${dos(fecha.getDate())}_${dos(fecha.getHours())}-${dos(fecha.getMinutes())}-${dos(fecha.getSeconds())}`
 }
 
-export async function crearCopiaSeguridad(carpetaConfigurada?: string | null): Promise<string> {
-  const carpeta = validarCarpetaPendrive(carpetaConfigurada ?? leerConfiguracion().carpeta ?? '')
+export async function crearCopiaSeguridad(configuracion?: ConfiguracionCopias): Promise<string> {
+  const actual = configuracion ?? leerConfiguracion()
+  const carpeta = validarCarpetaDestino(actual.carpeta ?? '', actual.tipoDestino)
   const destino = path.join(carpeta, `panda-stock-${fechaArchivo()}.db`)
   if (existsSync(destino)) throw new Error('Ya existe una copia con este nombre. Esperá un segundo e intentá de nuevo.')
   try {
@@ -153,7 +215,10 @@ export async function crearCopiaSeguridad(carpetaConfigurada?: string | null): P
 }
 
 function validarArchivoSQLite(archivo: string): void {
-  if (!existsSync(archivo) || statSync(archivo).size < 100) {
+  if (!existsSync(archivo)) {
+    throw new Error('La copia seleccionada ya no está disponible. Verificá que la carpeta o unidad extraíble siga conectada.')
+  }
+  if (statSync(archivo).size < 100) {
     throw new Error('La copia seleccionada está vacía o incompleta.')
   }
   let conexion: Database.Database | null = null

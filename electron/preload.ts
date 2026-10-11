@@ -24,6 +24,8 @@ import type {
   ProteccionesSeguridad,
   ResultadoSeguro,
   ConfiguracionCopias,
+  EstadoDestinoCopias,
+  TipoDestinoCopias,
   ResultadoAnulacion,
   ResultadoDevolucion,
   ReportesSummary,
@@ -200,15 +202,17 @@ contextBridge.exposeInMainWorld("electronAPI", {
   copias: {
     obtenerConfiguracion: (): Promise<ConfiguracionCopias> =>
       ipcRenderer.invoke("copias:get-configuracion"),
-    seleccionarCarpeta: (): Promise<string | null> =>
-      ipcRenderer.invoke("copias:seleccionar-carpeta"),
+    verificarDestino: (tipoDestino: TipoDestinoCopias): Promise<EstadoDestinoCopias> =>
+      ipcRenderer.invoke("copias:verificar-destino", tipoDestino),
+    seleccionarCarpeta: (tipoDestino: TipoDestinoCopias): Promise<string | null> =>
+      ipcRenderer.invoke("copias:seleccionar-carpeta", tipoDestino),
     guardarConfiguracion: (configuracion: ConfiguracionCopias): Promise<ConfiguracionCopias> =>
       ipcRenderer.invoke("copias:guardar-configuracion", configuracion),
     crear: (): Promise<string> => ipcRenderer.invoke("copias:crear"),
-    seleccionarRestauracion: (): Promise<string | null> =>
-      ipcRenderer.invoke("copias:seleccionar-restauracion"),
-    restaurar: (archivo: string): Promise<void> =>
-      ipcRenderer.invoke("copias:restaurar", archivo),
+    seleccionarRestauracion: (tipoDestino: TipoDestinoCopias): Promise<string | null> =>
+      ipcRenderer.invoke("copias:seleccionar-restauracion", tipoDestino),
+    restaurar: (archivo: string, tipoDestino: TipoDestinoCopias): Promise<void> =>
+      ipcRenderer.invoke("copias:restaurar", archivo, tipoDestino),
   },
   configuracion: {
     /** El wizard de primer inicio terminó; el main cierra la ventana y abre la app. */
