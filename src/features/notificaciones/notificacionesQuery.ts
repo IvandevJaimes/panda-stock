@@ -1,4 +1,5 @@
 import type { ProductoConLoteActivo } from '../../../electron/db/types'
+import type { StockAlertHistoryEntry } from '../../stores/stockAlertHistoryStore'
 import { evaluateExpiry } from '../../lib/dateUtils'
 import { DIAS_POR_VENCER } from '../pos/posQuery'
 
@@ -23,6 +24,7 @@ export interface Notificacion {
   termino: string
   titulo: string
   detalle: string | null
+  origen?: 'venta'
   /**
    * Stock al momento de generar la alerta. El store lo guarda cuando el usuario
    * cierra la notificación: mientras el stock no baje de ese valor, no vuelve.
@@ -133,6 +135,38 @@ export function deriveNotificaciones(
         a.notificacion.producto.localeCompare(b.notificacion.producto),
     )
     .map((entrada) => entrada.notificacion)
+}
+
+export function deriveNotificacionesDeAlertaVenta(
+  alerta: StockAlertHistoryEntry,
+): Notificacion[] {
+  if (alerta.type !== 'low-stock' && alerta.type !== 'out-of-stock') return []
+
+  const tipo: TipoNotificacion = alerta.type === 'out-of-stock' ? 'stock_agotado' : 'stock_bajo'
+  return alerta.ingredients.map((ingrediente) => ({
+    id: `${tipo}:${ingrediente.id}:${alerta.id}`,
+    tipo,
+    severidad: SEVERIDAD[tipo],
+    productoId: ingrediente.id,
+    producto: ingrediente.name,
+    imgPath: null,
+    termino: ingrediente.name,
+    titulo: tipo === 'stock_agotado' ? 'Stock agotado' : 'Stock bajo',
+    detalle:
+      tipo === 'stock_bajo'
+        ? `${ingrediente.remainingStock} de mínimo ${ingrediente.minimumStock}`
+        : null,
+    stockActual: ingrediente.remainingStock,
+    origen: 'venta',
+  }))
+}
+
+export function deriveNotificacionesVencimiento(
+  productos: ProductoConLoteActivo[],
+): Notificacion[] {
+  return deriveNotificaciones(productos).filter(
+    (notificacion) => notificacion.tipo === 'vencido' || notificacion.tipo === 'por_vencer',
+  )
 }
 
 export function idsDe(notificaciones: Notificacion[]): string[] {

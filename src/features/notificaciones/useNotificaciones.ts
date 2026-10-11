@@ -5,7 +5,8 @@ import { useSettingsStore } from '../../stores/settings.store'
 import { onAlertCreated } from '../../stores/stockAlertHistoryStore'
 import { hayAlertaStockActiva } from '../../lib/prioridadSonidos'
 import {
-  deriveNotificaciones,
+  deriveNotificacionesDeAlertaVenta,
+  deriveNotificacionesVencimiento,
   notificacionesNuevas,
 } from './notificacionesQuery'
 import { reproducirSonidoNotificacion } from './sonidoNotificacion'
@@ -39,7 +40,7 @@ export function useNotificaciones() {
         // suena por notificaciones que llegan ahora, no por las heredadas.
         const anteriores = useNotificacionesStore.getState().visibles
         const productos = await productosService.getAll()
-        sincronizar(deriveNotificaciones(productos))
+        sincronizar(deriveNotificacionesVencimiento(productos))
         const actuales = useNotificacionesStore.getState().visibles
         const hayNuevas = notificacionesNuevas(anteriores, actuales).length > 0
         if (hayNuevas) {
@@ -69,7 +70,19 @@ export function useNotificaciones() {
       void revisar()
     }
 
-    const desuscribirAlertas = onAlertCreated(() => {
+    const desuscribirAlertas = onAlertCreated((alerta) => {
+      const alertasStock = deriveNotificacionesDeAlertaVenta(alerta)
+      if (alertasStock.length > 0) {
+        const anteriores = useNotificacionesStore.getState().visibles
+        useNotificacionesStore.getState().agregarAlertasDeVenta(alertasStock)
+        const actuales = useNotificacionesStore.getState().visibles
+        if (notificacionesNuevas(anteriores, actuales).length > 0) {
+          window.dispatchEvent(new Event('nuevas-notificaciones'))
+          if (useSettingsStore.getState().sonidoAlertas && !hayAlertaStockActiva()) {
+            reproducirSonidoNotificacion()
+          }
+        }
+      }
       void revisar()
     })
 

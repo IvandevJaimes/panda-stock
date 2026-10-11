@@ -1,3 +1,9 @@
+CREATE TABLE IF NOT EXISTS `seguridad_reportes` (
+	`id` integer PRIMARY KEY NOT NULL,
+	`pin_hash` text NOT NULL,
+	`actualizado_en` text NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE `seguridad` (
 	`id` integer PRIMARY KEY NOT NULL,
 	`pin_hash` text,

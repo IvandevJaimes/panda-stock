@@ -2,21 +2,14 @@ import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import type { Notificacion } from '../features/notificaciones/notificacionesQuery'
 
-/**
- * Ciclo de vida de una notificación:
- *
- * - `sincronizar` calcula las notificaciones derivadas del estado actual.
- * - Al cerrar (descartar) una notificación de `stock_bajo`, se guarda el stock
- *   actual en `descartes`. Se oculta solo si el stock actual == ese stock
- *   descartado (al bajar -> reaparece; al subir por reposición -> vuelve; al
- *   llegar a 0 cambia a `stock_agotado` y usa -1).
- */
+/** Las alertas de stock nacen por eventos de venta; las de vencimiento se sincronizan. */
 type NotificacionesState = {
   /** Último snapshot persistido: la campana se ve llena apenas abre la app. */
   visibles: Notificacion[]
   /** Mapa de id → stock al momento de descartarlo (-1 para sin condición). */
   descartes: Record<string, number>
   sincronizar: (actuales: Notificacion[]) => void
+  agregarAlertasDeVenta: (alertas: Notificacion[]) => void
   eliminar: (id: string) => void
   limpiar: () => void
   /**
@@ -34,12 +27,20 @@ export const useNotificacionesStore = create<NotificacionesState>()(
       sincronizar: (actuales) => {
         set((estado) => {
           const estadoActual = (estado ?? {}) as Partial<NotificacionesState>
-          const mapaActuales = new Map(actuales.map((n) => [n.id, n]))
+          const alertasDeVenta = (estadoActual.visibles ?? []).filter(
+            (notificacion) => notificacion.origen === 'venta',
+          )
+          const idsActuales = new Set(actuales.map((notificacion) => notificacion.id))
+          const combinadas = [
+            ...actuales,
+            ...alertasDeVenta.filter((notificacion) => !idsActuales.has(notificacion.id)),
+          ]
+          const mapaActuales = new Map(combinadas.map((n) => [n.id, n]))
           const descartados: Record<string, number> = { ...(estadoActual.descartes ?? {}) }
           Object.keys(descartados).forEach((id) => {
             if (!mapaActuales.has(id)) delete descartados[id]
           })
-          const visibles = actuales.filter((n) => {
+          const visibles = combinadas.filter((n) => {
             const d = descartados[n.id]
             if (n.tipo === 'stock_bajo') {
               if (d !== undefined && d === n.stockActual) {
@@ -51,6 +52,25 @@ export const useNotificacionesStore = create<NotificacionesState>()(
             return true
           })
           return { visibles, descartes: descartados }
+        })
+      },
+      agregarAlertasDeVenta: (alertas) => {
+        const nuevas = alertas.filter((alerta) => alerta.origen === 'venta')
+        if (nuevas.length === 0) return
+
+        set((estado) => {
+          const idsProductos = new Set(nuevas.map((alerta) => alerta.productoId))
+          const anteriores = estado.visibles.filter(
+            (notificacion) =>
+              notificacion.origen !== 'venta' || !idsProductos.has(notificacion.productoId),
+          )
+          const idsExistentes = new Set(anteriores.map((notificacion) => notificacion.id))
+          return {
+            visibles: [
+              ...nuevas.filter((alerta) => !idsExistentes.has(alerta.id)),
+              ...anteriores,
+            ],
+          }
         })
       },
       eliminar: (id) =>
@@ -105,7 +125,23 @@ export const useNotificacionesStore = create<NotificacionesState>()(
     }),
     {
       name: 'panda-notificaciones-storage',
+      version: 2,
       storage: createJSONStorage(() => localStorage),
+      migrate: (estadoPersistido) => {
+        if (!estadoPersistido || typeof estadoPersistido !== 'object') {
+          return { visibles: [], descartes: {} }
+        }
+
+        const estado = estadoPersistido as Partial<NotificacionesState>
+        const visibles = Array.isArray(estado.visibles) ? estado.visibles : []
+        return {
+          visibles: visibles.filter(
+            (notificacion) =>
+              notificacion.tipo !== 'stock_bajo' && notificacion.tipo !== 'stock_agotado',
+          ),
+          descartes: estado.descartes ?? {},
+        }
+      },
       partialize: (estado) => ({
         visibles: estado.visibles,
         descartes: estado.descartes,

@@ -31,51 +31,75 @@ export function initDatabase(): void {
   if (sqlite) return
 
   const dbPath = getDbPath()
-  sqlite = new Database(dbPath)
-  sqlite.pragma('journal_mode = WAL')
-  sqlite.pragma('foreign_keys = ON')
+  const migrationsCandidates = [
+    path.join(import.meta.dirname, '../electron/db/migrations'),
+    path.join(import.meta.dirname, 'migrations'),
+  ]
+  const migrationsFolder = migrationsCandidates.find((candidate) =>
+    existsSync(path.join(candidate, 'meta/_journal.json')),
+  )
 
-  database = drizzle(sqlite, { schema })
-
-  const migrationsBundled = path.join(import.meta.dirname, '../electron/db/migrations')
-  const migrationsFuente = path.join(import.meta.dirname, 'migrations')
-  const migrationsFolder = existsSync(migrationsBundled) ? migrationsBundled : migrationsFuente
-
-  migrate(database, { migrationsFolder })
-
-  const ahora = new Date().toISOString()
-  const seguridadExistente = database
-    .select({ id: schema.seguridad.id })
-    .from(schema.seguridad)
-    .where(eq(schema.seguridad.id, 1))
-    .get()
-
-  if (!seguridadExistente) {
-    database.insert(schema.seguridad).values({ id: 1, actualizadoEn: ahora }).run()
+  if (!migrationsFolder) {
+    throw new Error(
+      `No se encontró el historial de migraciones. Se buscaron: ${migrationsCandidates.join(', ')}`,
+    )
   }
 
-  const seguridadActual = database
-    .select({ recoveryId: schema.seguridad.recoveryId })
-    .from(schema.seguridad)
-    .where(eq(schema.seguridad.id, 1))
-    .get()
-  if (seguridadActual && !seguridadActual.recoveryId) {
-    database.update(schema.seguridad)
-      .set({ recoveryId: randomUUID() })
+  const connection = new Database(dbPath)
+
+  try {
+    connection.pragma('journal_mode = WAL')
+    connection.pragma('foreign_keys = ON')
+
+    const db = drizzle(connection, { schema })
+    migrate(db, { migrationsFolder })
+
+    const ahora = new Date().toISOString()
+    const seguridadExistente = db
+      .select({ id: schema.seguridad.id })
+      .from(schema.seguridad)
       .where(eq(schema.seguridad.id, 1))
-      .run()
-  }
+      .get()
 
-  const negocioExistente = database
-    .select({ id: schema.negocio.id })
-    .from(schema.negocio)
-    .where(eq(schema.negocio.id, 1))
-    .get()
+    if (!seguridadExistente) {
+      db.insert(schema.seguridad).values({ id: 1, actualizadoEn: ahora }).run()
+    }
 
-  if (!negocioExistente) {
-    database
-      .insert(schema.negocio)
-      .values({ id: 1, nombre: null, logoPath: null, creadoEn: null, actualizadoEn: ahora })
-      .run()
+    const seguridadActual = db
+      .select({ recoveryId: schema.seguridad.recoveryId })
+      .from(schema.seguridad)
+      .where(eq(schema.seguridad.id, 1))
+      .get()
+    if (seguridadActual && !seguridadActual.recoveryId) {
+      db.update(schema.seguridad)
+        .set({ recoveryId: randomUUID() })
+        .where(eq(schema.seguridad.id, 1))
+        .run()
+    }
+
+    const negocioExistente = db
+      .select({ id: schema.negocio.id })
+      .from(schema.negocio)
+      .where(eq(schema.negocio.id, 1))
+      .get()
+
+    if (!negocioExistente) {
+      db.insert(schema.negocio)
+        .values({ id: 1, nombre: null, logoPath: null, creadoEn: null, actualizadoEn: ahora })
+        .run()
+    }
+
+    sqlite = connection
+    database = db
+  } catch (error) {
+    try {
+      connection.close()
+    } catch {
+      // Preservar el error de migración o inicialización.
+    }
+    const detalle = error instanceof Error ? error.message : String(error)
+    throw new Error(`No se pudo inicializar la base de datos "${dbPath}": ${detalle}`, {
+      cause: error,
+    })
   }
 }

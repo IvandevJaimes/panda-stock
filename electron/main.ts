@@ -1,6 +1,7 @@
 import {
   app,
   BrowserWindow,
+  dialog,
   ipcMain,
   Menu,
   protocol,
@@ -8,7 +9,7 @@ import {
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { appendFileSync } from "node:fs";
-import { initDatabase } from "./db/index.ts";
+import { getDbPath, initDatabase } from "./db/index.ts";
 import {
   ensureAssetsFolders,
   registerPandaAssetProtocol,
@@ -680,7 +681,19 @@ function registerIpcHandlers() {
 }
 
 app.whenReady().then(() => {
-  initDatabase();
+  try {
+    initDatabase();
+  } catch (error) {
+    const detalle = error instanceof Error ? error.stack ?? error.message : String(error);
+    escribirLog("inicio", `Base: ${getDbPath()}\n${detalle}`);
+    dialog.showErrorBox(
+      "No se pudo iniciar Panda Stock",
+      `No se pudieron cargar los datos.\n\nArchivo de datos: ${getDbPath()}\n\nDetalle: ${error instanceof Error ? error.message : String(error)}\n\nRegistro de diagnóstico: panda-stock.log en la carpeta de datos de la app.`,
+    );
+    app.quit();
+    return;
+  }
+
   ensureAssetsFolders();
   registerPandaAssetProtocol();
   registerIpcHandlers();
