@@ -79,7 +79,7 @@ export function Pill({
       </button>
 
       {showActions && (
-        <div className="flex items-center gap-2 pr-2.5 max-w-0 overflow-hidden opacity-0 transition-all duration-200 ease-out group-hover:max-w-16 group-hover:opacity-100">
+        <div className="flex max-w-0 items-center gap-2 overflow-hidden pr-0 opacity-0 transition-all duration-200 ease-out group-hover:max-w-16 group-hover:pr-2.5 group-hover:opacity-100">
           <Tooltip content="Editar" placement="top">
             <button
               type="button"
