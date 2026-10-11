@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { ReactNode } from "react";
 import { AlertTriangle, Loader2 } from "lucide-react";
 import { Modal } from "./Modal";
 
@@ -8,6 +9,7 @@ export interface ConfirmModalProps {
   onConfirm: () => Promise<void> | void;
   title: string;
   description: string;
+  headerIcon?: ReactNode;
   confirmText?: string;
   cancelText?: string;
 }
@@ -18,6 +20,7 @@ export function ConfirmModal({
   onConfirm,
   title,
   description,
+  headerIcon,
   confirmText = "Eliminar",
   cancelText = "Cancelar",
 }: ConfirmModalProps) {
@@ -45,7 +48,7 @@ export function ConfirmModal({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} maxWidth="sm" title={title}>
+    <Modal isOpen={isOpen} onClose={onClose} maxWidth="sm" title={title} headerIcon={headerIcon}>
       <div className="flex flex-col items-center pt-2 pb-2 text-center">
         <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-500/10">
           <AlertTriangle className="h-6 w-6 text-red-500" />

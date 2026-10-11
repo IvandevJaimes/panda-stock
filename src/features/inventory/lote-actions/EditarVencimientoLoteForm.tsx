@@ -18,6 +18,7 @@ interface EditarVencimientoLoteFormProps {
   onSuccess: () => void;
   onSubmittingChange: (submitting: boolean) => void;
   onCanSaveChange?: (canSave: boolean) => void;
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 export function EditarVencimientoLoteForm({
@@ -26,6 +27,7 @@ export function EditarVencimientoLoteForm({
   onSuccess,
   onSubmittingChange,
   onCanSaveChange,
+  onDirtyChange,
 }: EditarVencimientoLoteFormProps) {
   const {
     handleSubmit,
@@ -38,10 +40,10 @@ export function EditarVencimientoLoteForm({
   const fechaVencimiento = useWatch({ control, name: "fechaVencimiento" }) ?? "";
 
   useEffect(() => {
-    onCanSaveChange?.(
-      (fechaVencimiento.trim() || null) !== (lote.fechaVence ?? null),
-    );
-  }, [fechaVencimiento, lote.fechaVence, onCanSaveChange]);
+    const huboCambios = (fechaVencimiento.trim() || null) !== (lote.fechaVence ?? null);
+    onCanSaveChange?.(huboCambios);
+    onDirtyChange?.(huboCambios);
+  }, [fechaVencimiento, lote.fechaVence, onCanSaveChange, onDirtyChange]);
 
   const onSubmit = async (data: EditarVencimientoLoteValues) => {
     onSubmittingChange(true);

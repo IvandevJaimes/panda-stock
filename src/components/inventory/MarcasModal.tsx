@@ -14,6 +14,7 @@ import { EditBrandModal } from "./EditBrandModal";
 import { marcasService } from "../../services/marcas.service";
 import { seguridadService } from "../../services/seguridad.service";
 import { useSettingsStore } from "../../stores/settings.store";
+import { useUnsavedChangesGuard } from "../../hooks/useUnsavedChangesGuard";
 import type { Marca, ProductoConLoteActivo } from "../../../electron/db/types";
 
 // ---------------------------------------------------------------------------
@@ -75,6 +76,17 @@ export function MarcasModal({ isOpen, onClose, marcas, productos, onChanged, onS
   const [eliminando, setEliminando] = useState<Marca | null>(null);
   const [marcaAEliminarProtegida, setMarcaAEliminarProtegida] = useState<Marca | null>(null);
   const [pagina, setPagina] = useState(1);
+  const [hayCambiosEnFormulario, setHayCambiosEnFormulario] = useState(false);
+  const { requestClose, confirmation } = useUnsavedChangesGuard();
+  const cerrarModal = () => {
+    setCreandoMarca(false);
+    setEditandoMarca(null);
+    setEliminando(null);
+    setMarcaAEliminarProtegida(null);
+    setHayCambiosEnFormulario(false);
+    onClose();
+  };
+  const intentarCerrar = () => requestClose(hayCambiosEnFormulario, cerrarModal);
 
   // Reset de la página al reabrir el modal: ajuste durante el render (patrón
   // oficial de React), evitando el setState en effect.
@@ -174,7 +186,8 @@ export function MarcasModal({ isOpen, onClose, marcas, productos, onChanged, onS
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} maxWidth="2xl" title="Marcas" height="h-[80vh]">
+    <>
+    <Modal isOpen={isOpen} onClose={intentarCerrar} maxWidth="2xl" title="Marcas" headerIcon={<Store className="h-4 w-4" />} height="h-[80vh]">
       <div className="flex h-full flex-col">
         <div className="mb-4 flex items-end justify-between gap-3">
           <div>
@@ -373,6 +386,7 @@ export function MarcasModal({ isOpen, onClose, marcas, productos, onChanged, onS
             <CreateBrandModal
               isOpen={creandoMarca}
               onClose={() => setCreandoMarca(false)}
+              onDirtyChange={setHayCambiosEnFormulario}
               brands={marcasActivas}
               onSuccess={() => {
                 setCreandoMarca(false);
@@ -384,6 +398,7 @@ export function MarcasModal({ isOpen, onClose, marcas, productos, onChanged, onS
             <EditBrandModal
               isOpen={editandoMarca !== null}
               onClose={() => setEditandoMarca(null)}
+              onDirtyChange={setHayCambiosEnFormulario}
               brand={editandoMarca}
               brands={marcasActivas}
               onSuccess={() => {
@@ -398,6 +413,7 @@ export function MarcasModal({ isOpen, onClose, marcas, productos, onChanged, onS
               onClose={() => setEliminando(null)}
               onConfirm={confirmarEliminar}
               title="Eliminar marca"
+              headerIcon={<Trash2 className="h-4 w-4" />}
               description={
                 eliminando
                   ? `¿Seguro que querés eliminar la marca "${eliminando.nombre}"? Los productos la dejarán de mostrar.`
@@ -427,5 +443,7 @@ export function MarcasModal({ isOpen, onClose, marcas, productos, onChanged, onS
         )}
       </div>
     </Modal>
+    {confirmation}
+    </>
   );
 }

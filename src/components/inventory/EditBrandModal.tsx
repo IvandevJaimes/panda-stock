@@ -1,11 +1,12 @@
 import { useEffect } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, Pencil } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { Modal } from "../ui/Modal";
 import { FieldError } from "../ui/FieldError";
 import { CapitalizedInput } from "../ui/CapitalizedInput";
 import { cn } from "../../lib/cn";
 import { marcasService } from "../../services/marcas.service";
+import { useUnsavedChangesGuard } from "../../hooks/useUnsavedChangesGuard";
 
 export interface EditBrandModalProps {
   isOpen: boolean;
@@ -13,6 +14,7 @@ export interface EditBrandModalProps {
   brand: { id: number; nombre: string } | null;
   brands: { id: number; nombre: string }[];
   onSuccess?: () => void;
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 interface FormValues {
@@ -25,6 +27,7 @@ export function EditBrandModal({
   brand,
   brands,
   onSuccess,
+  onDirtyChange,
 }: EditBrandModalProps) {
   const {
     register,
@@ -35,6 +38,10 @@ export function EditBrandModal({
   } = useForm<FormValues>({
     defaultValues: { name: "" },
   });
+  const { requestClose, confirmation } = useUnsavedChangesGuard();
+  const intentarCerrar = () => requestClose(isDirty, onClose);
+
+  useEffect(() => onDirtyChange?.(isOpen && isDirty), [isOpen, isDirty, onDirtyChange]);
 
   // Pre-cargar datos cuando se abre con una marca
   useEffect(() => {
@@ -63,7 +70,8 @@ export function EditBrandModal({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} maxWidth="sm" title="Editar Marca">
+    <>
+    <Modal isOpen={isOpen} onClose={intentarCerrar} maxWidth="sm" title="Editar Marca" headerIcon={<Pencil className="h-4 w-4" />}>
       <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5">
         <div className="flex flex-col gap-1.5">
           <label
@@ -114,7 +122,7 @@ export function EditBrandModal({
         <div className="mt-2 flex items-center justify-end gap-3 border-t border-slate-100 pt-2 dark:border-slate-800/60">
           <button
             type="button"
-            onClick={onClose}
+            onClick={intentarCerrar}
             disabled={isSubmitting}
             className="cursor-pointer rounded-xl px-4 py-2 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-100 disabled:opacity-50 dark:text-slate-300 dark:hover:bg-slate-800"
           >
@@ -134,5 +142,7 @@ export function EditBrandModal({
         </div>
       </form>
     </Modal>
+      {confirmation}
+    </>
   );
 }

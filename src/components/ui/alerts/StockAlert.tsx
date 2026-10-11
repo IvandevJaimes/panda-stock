@@ -7,10 +7,10 @@
 
 import { toast } from "sonner";
 import type { JSX } from "react";
-import { differenceInCalendarDays } from "date-fns";
 import { AlertCircle, AlertTriangle, CalendarX2, Clock, X } from "lucide-react";
 import { Tooltip } from "../Tooltip";
-import { formatISODate, parseISO } from "../../../utils/dates";
+import { evaluateExpiry } from "../../../lib/dateUtils";
+import { formatISODate } from "../../../utils/dates";
 
 
 // ─── Tipos ───────────────────────────────────────────────────
@@ -90,11 +90,8 @@ function getBadgeTooltip(
       );
     case "nearExpiry": {
       if (!item.expiryDate) return null;
-      const expiry = parseISO(item.expiryDate);
-      if (!expiry) return null;
-      const days = differenceInCalendarDays(expiry, new Date());
-      const text =
-        days <= 0 ? "Vence hoy" : days === 1 ? "Vence mañana" : `Vence en ${days} días`;
+      const text = evaluateExpiry(item.expiryDate)?.relativeText;
+      if (!text) return null;
       return (
         <span className="text-xs font-semibold whitespace-nowrap">{text}</span>
       );

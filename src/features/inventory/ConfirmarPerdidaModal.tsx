@@ -59,6 +59,7 @@ export function ConfirmarPerdidaModal({
       onClose={onClose}
       maxWidth="sm"
       title="Confirmar pérdida de lote"
+      headerIcon={<PackageX className="h-4 w-4" />}
       footer={
         <>
           <Button

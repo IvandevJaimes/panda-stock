@@ -1,5 +1,15 @@
 import { useMemo, useRef, useState } from "react";
-import { FilterX, ScanLine, Search, SearchX, X } from "lucide-react";
+import {
+  Boxes,
+  FilterX,
+  Minus,
+  PackagePlus,
+  ScanLine,
+  Search,
+  SearchX,
+  SlidersHorizontal,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Modal } from "../../../components/ui/Modal";
 import { Button } from "../../../components/ui/Button";
@@ -26,6 +36,7 @@ import type {
   ProductoConLoteActivo,
 } from "../../../../electron/db/types";
 import { Tooltip } from "../../../components/ui/Tooltip";
+import { useUnsavedChangesGuard } from "../../../hooks/useUnsavedChangesGuard";
 
 export type AccionGlobal =
   | "agregar-inventario"
@@ -92,8 +103,10 @@ export function AccionGlobalModal({
   const [cargandoLote, setCargandoLote] = useState(false);
   const [seleccionando, setSeleccionando] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [hayCambiosPendientes, setHayCambiosPendientes] = useState(false);
   const [paginaActual, setPaginaActual] = useState(1);
   const buscadorRef = useRef<HTMLInputElement>(null);
+  const { requestClose, confirmation } = useUnsavedChangesGuard();
 
   const handleClose = () => {
     setBusqueda("");
@@ -103,6 +116,7 @@ export function AccionGlobalModal({
     setCargandoLote(false);
     setSeleccionando(true);
     setSubmitting(false);
+    setHayCambiosPendientes(false);
     setPaginaActual(1);
     onClose();
   };
@@ -150,19 +164,14 @@ export function AccionGlobalModal({
       : null;
     const coincideEscaneo = filasConEscaneo !== null && filasConEscaneo.length > 0;
 
-    let filtradas: ProductoConLoteActivo[];
-    if (codigoEscaneado === null) {
-      filtradas = activos;
-    } else if (coincideEscaneo) {
-      filtradas = filasConEscaneo!;
-    } else {
-      const textoBusqueda = normalizar(busqueda.trim());
-      filtradas = textoBusqueda
+    const textoBusqueda = normalizar(busqueda.trim());
+    const filtradas = coincideEscaneo
+      ? filasConEscaneo ?? []
+      : textoBusqueda
         ? activos.filter((p) =>
             coincideConProducto(p, textoBusqueda, marcas, categorias),
           )
         : activos;
-    }
 
     // El cajero busca con el lector los productos que están en estantería. El
     // orden por prioridad depende de la acción: para "agregar inventario" se
@@ -225,11 +234,16 @@ export function AccionGlobalModal({
     }
   };
 
-  const handleVolver = () => {
+  const volverAlSelector = () => {
     setProductoSeleccionado(null);
     setLoteActivo(null);
     setSeleccionando(true);
+    setSubmitting(false);
+    setHayCambiosPendientes(false);
   };
+
+  const intentarCerrar = () => requestClose(hayCambiosPendientes, handleClose);
+  const handleVolver = () => requestClose(hayCambiosPendientes, volverAlSelector);
 
   const hayFiltroActivo =
     busqueda.trim() !== "" ||
@@ -243,16 +257,29 @@ export function AccionGlobalModal({
   };
 
   const handleComplete = () => {
+    setHayCambiosPendientes(false);
     onSuccess();
     handleClose();
   };
 
   return (
+    <>
     <Modal
       isOpen={isOpen}
-      onClose={handleClose}
+      onClose={intentarCerrar}
       maxWidth="xl"
       title={tituloModal}
+      headerIcon={
+        accion === "agregar-inventario" ? (
+          <PackagePlus className="h-4 w-4" />
+        ) : accion === "ajustar-stock" ? (
+          <SlidersHorizontal className="h-4 w-4" />
+        ) : accion === "registrar-perdida" ? (
+          <Minus className="h-4 w-4" />
+        ) : (
+          <Boxes className="h-4 w-4" />
+        )
+      }
       height="h-[80vh]"
       footer={
         accion && !seleccionando && accion in SUBMIT_LABEL && formId ? (
@@ -291,8 +318,8 @@ export function AccionGlobalModal({
             <Input
               ref={buscadorRef}
               value={busqueda}
-              onChange={(e) => {
-                setBusqueda(e.target.value);
+              onInput={(event) => {
+                setBusqueda(event.currentTarget.value);
                 setCodigoEscaneado(null);
                 setPaginaActual(1);
               }}
@@ -450,6 +477,7 @@ export function AccionGlobalModal({
           onCancel={handleVolver}
           onSuccess={handleComplete}
           onSubmittingChange={setSubmitting}
+          onDirtyChange={setHayCambiosPendientes}
         />
       ) : productoSeleccionado && loteActivo && accion === "ajustar-stock" ? (
         <AjustarStockLoteForm
@@ -459,6 +487,7 @@ export function AccionGlobalModal({
           onCancel={handleVolver}
           onSuccess={handleComplete}
           onSubmittingChange={setSubmitting}
+          onDirtyChange={setHayCambiosPendientes}
         />
       ) : productoSeleccionado &&
         loteActivo &&
@@ -471,8 +500,11 @@ export function AccionGlobalModal({
           onCancel={handleVolver}
           onSuccess={handleComplete}
           onSubmittingChange={setSubmitting}
+          onDirtyChange={setHayCambiosPendientes}
         />
       ) : null}
     </Modal>
+    {confirmation}
+    </>
   );
 }

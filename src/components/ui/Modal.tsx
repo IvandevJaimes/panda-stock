@@ -2,6 +2,7 @@ import { useEffect, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { cn } from "../../lib/cn";
+import { useModalEscape } from "../../hooks/useModalEscape";
 
 export interface ModalProps {
   isOpen: boolean;
@@ -44,12 +45,10 @@ export function Modal({
   headerExtra,
   closeable = true,
 }: ModalProps) {
+  useModalEscape(isOpen && closeable, onClose);
+
   useEffect(() => {
     if (!isOpen) return;
-
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
 
     // 1. Fallback estándar para el body
     document.body.classList.add("overflow-hidden");
@@ -60,20 +59,13 @@ export function Modal({
       scrollContainer.classList.add("!overflow-hidden");
     }
 
-    if (closeable) {
-      document.addEventListener("keydown", onKey);
-    }
-
     return () => {
       document.body.classList.remove("overflow-hidden");
       if (scrollContainer) {
         scrollContainer.classList.remove("!overflow-hidden");
       }
-      if (closeable) {
-        document.removeEventListener("keydown", onKey);
-      }
     };
-  }, [isOpen, onClose, closeable]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 

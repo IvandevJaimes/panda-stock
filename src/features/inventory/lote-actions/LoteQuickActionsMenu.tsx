@@ -8,7 +8,7 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import { cn } from "../../../lib/cn";
-import { esLoteVencido } from "../loteHelpers";
+import { esLoteVencido, relativeTextVencimiento } from "../loteHelpers";
 import { formatearFecha, formatearPrecio } from "../quick-actions/formatters";
 import type { Lote } from "../../../../electron/db/types";
 import type { LoteQuickView } from "./types";
@@ -26,6 +26,7 @@ export function LoteQuickActionsMenu({
 }: LoteQuickActionsMenuProps) {
   const loteIdentidad = lote.numeroLote ?? `Lote #${lote.id}`;
   const loteVencido = esLoteVencido(lote.fechaVence);
+  const vencimientoRelativo = relativeTextVencimiento(lote.fechaVence);
 
   return (
     <>
@@ -53,11 +54,16 @@ export function LoteQuickActionsMenu({
               {formatearPrecio(lote.costoUnitario)}
             </span>
           </span>
-          <span className="text-xs font-medium text-slate-400 dark:text-slate-500">
-            Vence{" "}
+          <span className="flex flex-wrap items-center gap-x-1 text-xs font-medium text-slate-400 dark:text-slate-500">
+            Vencimiento{" "}
             <span className="font-semibold text-slate-700 dark:text-slate-200">
               {lote.fechaVence ? formatearFecha(lote.fechaVence) : "Sin vencimiento"}
             </span>
+            {vencimientoRelativo && (
+              <span className={cn("font-semibold", vencimientoRelativo.clases)}>
+                ({vencimientoRelativo.texto})
+              </span>
+            )}
           </span>
         </div>
       </div>

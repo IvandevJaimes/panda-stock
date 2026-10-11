@@ -2,6 +2,7 @@ import { isValidElement, useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { X, type LucideIcon } from "lucide-react";
 import { cn } from "../../lib/cn";
+import { useModalEscape } from "../../hooks/useModalEscape";
 
 export interface TabsModalTab {
   id: string;
@@ -14,6 +15,7 @@ export interface TabsModalProps {
   isOpen: boolean;
   onClose: () => void;
   title?: string;
+  headerIcon?: ReactNode;
   subheader?: ReactNode;
   subheaderClassName?: string;
   tabs: TabsModalTab[];
@@ -35,6 +37,7 @@ export function TabsModal({
   isOpen,
   onClose,
   title,
+  headerIcon,
   subheader,
   subheaderClassName,
   tabs,
@@ -44,6 +47,8 @@ export function TabsModal({
   className,
   headerExtra,
 }: TabsModalProps) {
+  useModalEscape(isOpen, onClose);
+
   const [tabActiva, setTabActiva] = useState(
     () =>
       tabs.find((tab) => tab.id === defaultTabId)?.id ??
@@ -54,10 +59,6 @@ export function TabsModal({
   useEffect(() => {
     if (!isOpen) return;
 
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-
     // 1. Fallback estándar para el body
     document.body.classList.add("overflow-hidden");
 
@@ -67,16 +68,13 @@ export function TabsModal({
       scrollContainer.classList.add("!overflow-hidden");
     }
 
-    document.addEventListener("keydown", onKey);
-
     return () => {
       document.body.classList.remove("overflow-hidden");
       if (scrollContainer) {
         scrollContainer.classList.remove("!overflow-hidden");
       }
-      document.removeEventListener("keydown", onKey);
     };
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -124,9 +122,16 @@ export function TabsModal({
           {/* Header */}
           <div className="flex shrink-0 items-center border-b border-slate-100 px-5 py-3.5 dark:border-slate-800/80">
             {title && (
-              <h2 className="font-display text-lg font-semibold text-slate-900 dark:text-white">
-                {title}
-              </h2>
+              <div className="flex min-w-0 items-center gap-2.5">
+                {headerIcon && (
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                    {headerIcon}
+                  </span>
+                )}
+                <h2 className="truncate font-display text-lg font-semibold text-slate-900 dark:text-white">
+                  {title}
+                </h2>
+              </div>
             )}
             <div className="ml-auto flex items-center gap-3">
               {headerExtra}

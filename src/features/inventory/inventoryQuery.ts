@@ -113,7 +113,10 @@ export function mapearProducto(
     expiresAt: producto.loteActivoVencimiento,
     codigoInterno,
     codigosBarras,
-    status: derivarEstadoVencimiento(producto.loteActivoVencimiento),
+    status:
+      producto.stockActual > 0
+        ? derivarEstadoVencimiento(producto.loteActivoVencimiento)
+        : "ok",
     _nameN: normalizar(producto.nombre),
     _brandN: normalizar(brand),
     _variantN: normalizar(variant),
@@ -211,11 +214,11 @@ export function filtrarProductos(
       case "low_stock":
         return p.stock < p.minStock && p.stock > 0;
       case "expiring_soon":
-        return p.status === "por-vencer";
+        return p.stock > 0 && p.status === "por-vencer";
       case "out_of_stock":
-        return p.stock === 0;
+        return p.stock <= 0;
       case "expired":
-        return p.status === "vencido";
+        return p.stock > 0 && p.status === "vencido";
       default:
         return true;
     }

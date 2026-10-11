@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Loader2, Sparkles } from "lucide-react";
+import { Loader2, PackagePlus, Sparkles } from "lucide-react";
 import {
   Controller,
   useForm,
@@ -31,6 +31,7 @@ import type {
 import { Tooltip } from "../../components/ui/Tooltip";
 import { useBarcodeScanner } from "../../hooks/useBarcodeScanner";
 import { useCodigosBarrasUnicos } from "../../hooks/useCodigosBarrasUnicos";
+import { useUnsavedChangesGuard } from "../../hooks/useUnsavedChangesGuard";
 import {
   dismissCodigoEnUso,
   toastCodigoEnUso,
@@ -93,12 +94,17 @@ export function CreateProductModal({
     setValue,
     getValues,
     control,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isDirty },
   } = useForm<FormValues>({
     defaultValues: VALORES_INICIALES,
   });
-
   const [creandoCategoria, setCreandoCategoria] = React.useState(false);
+  const { requestClose, confirmation } = useUnsavedChangesGuard();
+  const cerrarProducto = () => {
+    setCreandoCategoria(false);
+    onClose();
+  };
+  const intentarCerrar = () => requestClose(isDirty, cerrarProducto);
 
   // Verificación en caliente: avisa con un toast apenas un código de barra ya
   // está asociado a otro producto (se oculta al corregir el campo). Si el código
@@ -124,7 +130,7 @@ export function CreateProductModal({
       if (!codigos.includes(barcode)) {
         codigos.push(barcode);
       }
-      setValue("codigosBarras", codigos.join(", "), { shouldValidate: true });
+      setValue("codigosBarras", codigos.join(", "), { shouldValidate: true, shouldDirty: true });
     },
     isOpen,
   );
@@ -191,7 +197,7 @@ export function CreateProductModal({
 
   const generarCodigoSugerido = () => {
     const codigoSugerido = String(Math.floor(1000 + Math.random() * 9000));
-    setValue("codigoInterno", codigoSugerido, { shouldValidate: true });
+    setValue("codigoInterno", codigoSugerido, { shouldValidate: true, shouldDirty: true });
     toast.info(`Código sugerido: ${codigoSugerido}`);
   };
 
@@ -277,7 +283,7 @@ export function CreateProductModal({
 
       toast.success("Producto creado exitosamente");
       onSuccess?.(nuevoProducto);
-      onClose();
+      cerrarProducto();
     } catch (error: unknown) {
       manejarErrorCreacion(error);
     }
@@ -304,11 +310,13 @@ export function CreateProductModal({
   };
 
   return (
+    <>
     <Modal
       isOpen={isOpen}
       maxWidth="2xl"
-      onClose={onClose}
+      onClose={intentarCerrar}
       title="Nuevo Producto"
+      headerIcon={<PackagePlus className="h-4 w-4" />}
     >
       <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
         {/* Filas 1 y 2 con el campo de foto a la izquierda */}
@@ -385,7 +393,7 @@ export function CreateProductModal({
                   }
                 }}
                 onClear={() => {
-                  setValue("marca", "", { shouldValidate: true });
+                  setValue("marca", "", { shouldValidate: true, shouldDirty: true });
                   setMarcasDropdown(false);
                 }}
                 {...register("marca", {
@@ -448,7 +456,7 @@ export function CreateProductModal({
               placeholder="Ej. 500ml / Rojo"
               value={valorVariante}
               onClear={() =>
-                setValue("variante", "", { shouldValidate: true })
+                setValue("variante", "", { shouldValidate: true, shouldDirty: true })
               }
               {...register("variante", {
                 maxLength: {
@@ -740,7 +748,7 @@ export function CreateProductModal({
         <div className="mt-2 flex items-center justify-end gap-3 border-t border-slate-100 pt-4 dark:border-slate-800/60">
           <button
             type="button"
-            onClick={onClose}
+            onClick={intentarCerrar}
             disabled={isSubmitting}
             className="cursor-pointer rounded-xl px-4 py-2 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-100 disabled:opacity-50 dark:text-slate-300 dark:hover:bg-slate-800"
           >
@@ -778,9 +786,11 @@ export function CreateProductModal({
         categories={categorias}
         onSuccess={(nueva) => {
           onCategoriaCreada?.(nueva);
-          setValue("categoriaId", nueva.id, { shouldValidate: true });
+          setValue("categoriaId", nueva.id, { shouldValidate: true, shouldDirty: true });
         }}
       />
     </Modal>
+      {confirmation}
+    </>
   );
 }

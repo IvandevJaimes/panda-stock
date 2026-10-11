@@ -18,9 +18,10 @@ interface EditarVarianteFormProps {
   onSuccess: () => void;
   onSubmittingChange: (submitting: boolean) => void;
   onCanSaveChange?: (canSave: boolean) => void;
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
-export function EditarVarianteForm({ producto, varianteInicial, onCancel, onSuccess, onSubmittingChange, onCanSaveChange }: EditarVarianteFormProps) {
+export function EditarVarianteForm({ producto, varianteInicial, onCancel, onSuccess, onSubmittingChange, onCanSaveChange, onDirtyChange }: EditarVarianteFormProps) {
   const {
     register,
     handleSubmit,
@@ -34,10 +35,10 @@ export function EditarVarianteForm({ producto, varianteInicial, onCancel, onSucc
   const nuevaVariante = useWatch({ control, name: "nuevaVariante" }) ?? "";
 
   useEffect(() => {
-    onCanSaveChange?.(
-      (nuevaVariante.trim() || "") !== (varianteInicial.trim() || ""),
-    );
-  }, [nuevaVariante, varianteInicial, onCanSaveChange]);
+    const huboCambios = (nuevaVariante.trim() || "") !== (varianteInicial.trim() || "");
+    onCanSaveChange?.(huboCambios);
+    onDirtyChange?.(huboCambios);
+  }, [nuevaVariante, varianteInicial, onCanSaveChange, onDirtyChange]);
 
   const onSubmit = async (data: EditarVarianteValues) => {
     onSubmittingChange(true);

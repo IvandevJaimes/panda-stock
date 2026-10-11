@@ -41,6 +41,7 @@ interface EditarProductoFormProps {
   onSuccess: () => void;
   onSubmittingChange: (submitting: boolean) => void;
   onCanSaveChange?: (canSave: boolean) => void;
+  onDirtyChange?: (dirty: boolean) => void;
   onCategoriaCreada?: (categoria: Categoria) => void;
 }
 
@@ -64,6 +65,7 @@ export function EditarProductoForm({
   onSuccess,
   onSubmittingChange,
   onCanSaveChange,
+  onDirtyChange,
   onCategoriaCreada,
 }: EditarProductoFormProps) {
   const [marcas, setMarcas] = React.useState<Marca[]>([]);
@@ -119,7 +121,7 @@ export function EditarProductoForm({
     if (!codigos.includes(barcode)) {
       codigos.push(barcode);
     }
-    setValue("codigosBarras", codigos.join(", "), { shouldValidate: true });
+    setValue("codigosBarras", codigos.join(", "), { shouldValidate: true, shouldDirty: true });
   });
 
   // Carga las marcas al montar y resuelve el nombre de la marca actual del
@@ -207,7 +209,8 @@ export function EditarProductoForm({
 
   useEffect(() => {
     onCanSaveChange?.(hayCambios);
-  }, [hayCambios, onCanSaveChange]);
+    onDirtyChange?.(hayCambios);
+  }, [hayCambios, onCanSaveChange, onDirtyChange]);
 
   const opcionesCategorias: SelectOption[] = categorias.map((cat) => ({
     value: cat.id,

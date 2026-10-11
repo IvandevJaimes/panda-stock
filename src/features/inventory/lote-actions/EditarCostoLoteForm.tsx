@@ -19,6 +19,7 @@ interface EditarCostoLoteFormProps {
   onSuccess: () => void;
   onSubmittingChange: (submitting: boolean) => void;
   onCanSaveChange?: (canSave: boolean) => void;
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 export function EditarCostoLoteForm({
@@ -27,6 +28,7 @@ export function EditarCostoLoteForm({
   onSuccess,
   onSubmittingChange,
   onCanSaveChange,
+  onDirtyChange,
 }: EditarCostoLoteFormProps) {
   const {
     register,
@@ -42,8 +44,10 @@ export function EditarCostoLoteForm({
 
   useEffect(() => {
     const esValido = !Number.isNaN(nuevoCostoNum) && nuevoCostoNum > 0;
-    onCanSaveChange?.(esValido && nuevoCostoNum !== lote.costoUnitario);
-  }, [nuevoCostoNum, lote.costoUnitario, onCanSaveChange]);
+    const huboCambios = nuevoCostoNum !== lote.costoUnitario;
+    onCanSaveChange?.(esValido && huboCambios);
+    onDirtyChange?.(huboCambios);
+  }, [nuevoCostoNum, lote.costoUnitario, onCanSaveChange, onDirtyChange]);
 
   const onSubmit = async (data: EditarCostoLoteValues) => {
     onSubmittingChange(true);

@@ -87,54 +87,55 @@ export function tintPanelLote(fechaVence: string | null): string {
   return "border-emerald-500/25 bg-emerald-500/5 dark:border-emerald-900/50 dark:bg-emerald-950/25";
 }
 
-/**
- * Badge único de estado del lote activo. Prioridad: vencido (rojo) →
- * por vencer (ámbar) → stock bajo (ámbar) → vigente (esmeralda).
- */
-export function estadoLoteActivoBadge(
+/** Estado de stock y vencimiento del lote activo, que pueden coexistir. */
+export function estadosLoteActivoBadges(
   fechaVence: string | null,
   stockBajo: boolean,
-): { label: string; clases: string } {
-  if (!fechaVence) {
-    return stockBajo
-      ? {
-          label: "Stock bajo",
-          clases:
-            "bg-amber-500/10 text-amber-500 border-amber-500/20 dark:border-amber-500/30 dark:text-amber-400",
-        }
-      : {
-          label: "Sin vencimiento",
-          clases:
-            "bg-slate-500/10 text-slate-400 border-slate-500/20 dark:border-slate-500/30 dark:text-slate-400",
-        };
-  }
-  const evaluacion = evaluateExpiry(fechaVence, DETALLE_DIAS_VENCER);
-  if (evaluacion?.status === "expired") {
-    return {
-      label: "Vencido",
-      clases:
-        "bg-red-500/10 text-red-500 border-red-500/20 dark:border-red-500/30 dark:text-red-400",
-    };
-  }
-  if (evaluacion?.status === "expiring_soon") {
-    return {
-      label: "Por vencer",
-      clases:
-        "bg-amber-500/10 text-amber-500 border-amber-500/20 dark:border-amber-500/30 dark:text-amber-400",
-    };
-  }
-  if (stockBajo) {
-    return {
+): { label: string; clases: string }[] {
+  const badges: { label: string; clases: string }[] = [];
+  const evaluacion = fechaVence
+    ? evaluateExpiry(fechaVence, DETALLE_DIAS_VENCER)
+    : null;
+
+  if (stockBajo && evaluacion?.status !== "expired") {
+    badges.push({
       label: "Stock bajo",
       clases:
         "bg-amber-500/10 text-amber-500 border-amber-500/20 dark:border-amber-500/30 dark:text-amber-400",
-    };
+    });
   }
-  return {
-    label: "Vigente",
-    clases:
-      "bg-emerald-500/10 text-emerald-500 border-emerald-500/20 dark:border-emerald-500/30 dark:text-emerald-400",
-  };
+
+  if (!fechaVence) {
+    if (!stockBajo) {
+      badges.push({
+        label: "Sin vencimiento",
+        clases:
+          "bg-slate-500/10 text-slate-400 border-slate-500/20 dark:border-slate-500/30 dark:text-slate-400",
+      });
+    }
+    return badges;
+  }
+
+  if (evaluacion?.status === "expired") {
+    badges.push({
+      label: "Vencido",
+      clases:
+        "bg-red-500/10 text-red-500 border-red-500/20 dark:border-red-500/30 dark:text-red-400",
+    });
+  } else if (evaluacion?.status === "expiring_soon") {
+    badges.push({
+      label: "Por vencer",
+      clases:
+        "bg-amber-500/10 text-amber-500 border-amber-500/20 dark:border-amber-500/30 dark:text-amber-400",
+    });
+  } else if (!stockBajo) {
+    badges.push({
+      label: "Vigente",
+      clases:
+        "bg-emerald-500/10 text-emerald-500 border-emerald-500/20 dark:border-emerald-500/30 dark:text-emerald-400",
+    });
+  }
+  return badges;
 }
 
 /**
@@ -160,7 +161,7 @@ export function tintPanelLoteActivo(
   return "border-emerald-500/25 bg-emerald-500/5 dark:border-emerald-900/50 dark:bg-emerald-950/25";
 }
 
-/** Texto relativo de vencimiento ("Vence en X días" / "Vencido hace X días") con color según estado. */
+/** Texto relativo de vencimiento ("Vence en X días" / "Vencido hoy") con color según estado. */
 export function relativeTextVencimiento(
   fechaVence: string | null,
 ): { texto: string; clases: string } | null {

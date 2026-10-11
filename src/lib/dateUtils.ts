@@ -78,7 +78,7 @@ export function evaluateExpiry(
       daysDiff === -1 ? 'Vencido hace 1 día' : `Vencido hace ${Math.abs(daysDiff)} días`;
   } else if (daysDiff === 0) {
     status = 'expired';
-    relativeText = 'Vence hoy';
+    relativeText = 'Vencido hoy';
   } else if (daysDiff <= warningDaysThreshold) {
     status = 'expiring_soon';
     relativeText = daysDiff === 1 ? 'Vence mañana' : `Vence en ${daysDiff} días`;

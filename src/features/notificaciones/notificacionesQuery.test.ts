@@ -57,6 +57,7 @@ describe('deriveNotificaciones', () => {
     ])
 
     expect(notifs.map((n) => n.tipo)).toEqual(['vencido'])
+    expect(notifs[0].titulo).toBe('Vencido hoy')
   })
 
   it('marca por vencer dentro de la ventana de 14 días', () => {

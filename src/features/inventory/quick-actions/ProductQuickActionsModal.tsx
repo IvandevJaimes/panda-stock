@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "../../../components/ui/Button";
 import { Modal } from "../../../components/ui/Modal";
@@ -17,6 +18,7 @@ import { ToggleActivoProducto } from "../ToggleActivoProducto";
 import { AjustarStockLoteForm } from "../lote-actions/AjustarStockLoteForm";
 import { RegistrarPerdidaLoteForm } from "../lote-actions/RegistrarPerdidaLoteForm";
 import { FORM_ID, SUBMIT_LABEL, type QuickActionView } from "./types";
+import { useUnsavedChangesGuard } from "../../../hooks/useUnsavedChangesGuard";
 
 export interface ProductQuickActionsModalProps {
   isOpen: boolean;
@@ -49,6 +51,8 @@ export function ProductQuickActionsModal({
   const [vistaActual, setVistaActual] = useState<QuickActionView>(vistaInicial);
   const [submitting, setSubmitting] = useState(false);
   const [puedeGuardar, setPuedeGuardar] = useState(false);
+  const [hayCambiosPendientes, setHayCambiosPendientes] = useState(false);
+  const { requestClose, confirmation } = useUnsavedChangesGuard();
 
   useEffect(() => {
     if (!isOpen || !product) return;
@@ -115,6 +119,7 @@ export function ProductQuickActionsModal({
     setVistaActual("menu");
     setSubmitting(false);
     setPuedeGuardar(false);
+    setHayCambiosPendientes(false);
     if (onSuccess) onSuccess();
     else onClose();
   };
@@ -123,17 +128,30 @@ export function ProductQuickActionsModal({
     setVistaActual("menu");
     setSubmitting(false);
     setPuedeGuardar(false);
+    setHayCambiosPendientes(false);
     onClose();
   };
+
+  const handleBack = () => {
+    setVistaActual("menu");
+    setSubmitting(false);
+    setPuedeGuardar(false);
+    setHayCambiosPendientes(false);
+  };
+
+  const intentarCerrar = () => requestClose(hayCambiosPendientes, handleClose);
+  const intentarVolver = () => requestClose(hayCambiosPendientes, handleBack);
 
   if (!product) return null;
 
   return (
+    <>
     <Modal
       isOpen={isOpen}
-      onClose={handleClose}
+      onClose={intentarCerrar}
       maxWidth="xl"
       title="Acciones Rápidas"
+      headerIcon={<Sparkles className="h-4 w-4" />}
       headerExtra={
         <ToggleActivoProducto
           producto={product}
@@ -168,9 +186,10 @@ export function ProductQuickActionsModal({
         {vistaActual === "agregar-inventario" && (
           <AgregarInventarioForm
             producto={product}
-            onCancel={() => setVistaActual("menu")}
+            onCancel={intentarVolver}
             onSuccess={handleActionComplete}
             onSubmittingChange={setSubmitting}
+            onDirtyChange={setHayCambiosPendientes}
           />
         )}
 
@@ -180,9 +199,10 @@ export function ProductQuickActionsModal({
             formId={FORM_ID["ajustar-stock"]}
             esLoteActivo
             onOpenLotes={onOpenLotes}
-            onCancel={() => setVistaActual("menu")}
+            onCancel={intentarVolver}
             onSuccess={handleActionComplete}
             onSubmittingChange={setSubmitting}
+            onDirtyChange={setHayCambiosPendientes}
           />
         )}
 
@@ -193,9 +213,10 @@ export function ProductQuickActionsModal({
             formId={FORM_ID["registrar-perdida"]}
             esLoteActivo
             onOpenLotes={onOpenLotes}
-            onCancel={() => setVistaActual("menu")}
+            onCancel={intentarVolver}
             onSuccess={handleActionComplete}
             onSubmittingChange={setSubmitting}
+            onDirtyChange={setHayCambiosPendientes}
           />
         )}
 
@@ -203,20 +224,22 @@ export function ProductQuickActionsModal({
           <ModificarPrecioForm
             producto={product}
             precioInicial={product.precioVenta}
-            onCancel={() => setVistaActual("menu")}
+            onCancel={intentarVolver}
             onSuccess={handleActionComplete}
             onSubmittingChange={setSubmitting}
             onCanSaveChange={setPuedeGuardar}
+            onDirtyChange={setHayCambiosPendientes}
           />
         )}
 
         {vistaActual === "editar-codigo" && (
           <EditarCodigoForm
             producto={product}
-            onCancel={() => setVistaActual("menu")}
+            onCancel={intentarVolver}
             onSuccess={handleActionComplete}
             onSubmittingChange={setSubmitting}
             onCanSaveChange={setPuedeGuardar}
+            onDirtyChange={setHayCambiosPendientes}
           />
         )}
 
@@ -224,10 +247,11 @@ export function ProductQuickActionsModal({
           <EditarVarianteForm
             producto={product}
             varianteInicial={product.variante || ""}
-            onCancel={() => setVistaActual("menu")}
+            onCancel={intentarVolver}
             onSuccess={handleActionComplete}
             onSubmittingChange={setSubmitting}
             onCanSaveChange={setPuedeGuardar}
+            onDirtyChange={setHayCambiosPendientes}
           />
         )}
 
@@ -235,10 +259,11 @@ export function ProductQuickActionsModal({
           <EditarProductoForm
             producto={product}
             categorias={categorias}
-            onCancel={() => setVistaActual("menu")}
+            onCancel={intentarVolver}
             onSuccess={handleActionComplete}
             onSubmittingChange={setSubmitting}
             onCanSaveChange={setPuedeGuardar}
+            onDirtyChange={setHayCambiosPendientes}
             onCategoriaCreada={onCategoriaCreada}
           />
         )}
@@ -247,10 +272,11 @@ export function ProductQuickActionsModal({
           <StockMinimoForm
             producto={product}
             stockMinimoInicial={product.stockMinimo}
-            onCancel={() => setVistaActual("menu")}
+            onCancel={intentarVolver}
             onSuccess={handleActionComplete}
             onSubmittingChange={setSubmitting}
             onCanSaveChange={setPuedeGuardar}
+            onDirtyChange={setHayCambiosPendientes}
           />
         )}
       </div>
@@ -267,10 +293,12 @@ export function ProductQuickActionsModal({
             {SUBMIT_LABEL[vistaActual]}
           </Button>
         )}
-        <Button type="button" variant="ghost" onClick={handleClose}>
+        <Button type="button" variant="ghost" onClick={intentarCerrar}>
           Cerrar
         </Button>
       </div>
     </Modal>
+    {confirmation}
+    </>
   );
 }

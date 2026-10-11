@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Controller, useForm, useWatch, type DefaultValues } from "react-hook-form";
 import { toast } from "sonner";
 import { CapitalizedInput } from "../../../components/ui/CapitalizedInput";
@@ -29,20 +30,23 @@ interface AgregarInventarioFormProps {
   onCancel: () => void;
   onSuccess: () => void;
   onSubmittingChange: (submitting: boolean) => void;
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
-export function AgregarInventarioForm({ producto, onCancel, onSuccess, onSubmittingChange }: AgregarInventarioFormProps) {
+export function AgregarInventarioForm({ producto, onCancel, onSuccess, onSubmittingChange, onDirtyChange }: AgregarInventarioFormProps) {
   const {
     register,
     handleSubmit,
     setValue,
     control,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isDirty },
   } = useForm<AgregarInventarioValues>({
     defaultValues: VALORES_INICIALES_AGREGAR,
   });
 
   const motivo = useWatch({ control, name: "motivo" }) ?? "";
+
+  useEffect(() => onDirtyChange?.(isDirty), [isDirty, onDirtyChange]);
 
   const onSubmit = async (data: AgregarInventarioValues) => {
     onSubmittingChange(true);
@@ -158,7 +162,7 @@ export function AgregarInventarioForm({ producto, onCancel, onSuccess, onSubmitt
               errors.motivo &&
                 "border-red-500 focus:border-red-500 focus:ring-4 focus:ring-red-500/10",
             )}
-            onClear={() => setValue("motivo", "")}
+            onClear={() => setValue("motivo", "", { shouldDirty: true })}
             {...register("motivo")}
           />
           <FieldError error={errors.motivo?.message} />

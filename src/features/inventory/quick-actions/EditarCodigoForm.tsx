@@ -26,6 +26,7 @@ interface EditarCodigoFormProps {
   onSuccess: () => void;
   onSubmittingChange: (submitting: boolean) => void;
   onCanSaveChange?: (canSave: boolean) => void;
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 export function EditarCodigoForm({
@@ -34,6 +35,7 @@ export function EditarCodigoForm({
   onSuccess,
   onSubmittingChange,
   onCanSaveChange,
+  onDirtyChange,
 }: EditarCodigoFormProps) {
   const {
     register,
@@ -74,7 +76,7 @@ export function EditarCodigoForm({
     if (!codigos.includes(barcode)) {
       codigos.push(barcode);
     }
-    setValue("codigosBarras", codigos.join(", "), { shouldValidate: true });
+    setValue("codigosBarras", codigos.join(", "), { shouldValidate: true, shouldDirty: true });
   });
 
   const codigoInterno =
@@ -90,7 +92,8 @@ export function EditarCodigoForm({
 
   useEffect(() => {
     onCanSaveChange?.(huboCambios);
-  }, [huboCambios, onCanSaveChange]);
+    onDirtyChange?.(huboCambios);
+  }, [huboCambios, onCanSaveChange, onDirtyChange]);
 
   const generarCodigoSugerido = () => {
     const codigoSugerido = String(Math.floor(1000 + Math.random() * 9000));

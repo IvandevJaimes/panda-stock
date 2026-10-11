@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, Tag } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { Modal } from "../ui/Modal";
 import { FieldError } from "../ui/FieldError";
@@ -7,6 +7,7 @@ import { CapitalizedInput } from "../ui/CapitalizedInput";
 import { cn } from "../../lib/cn";
 import type { Categoria } from "../../../electron/db/types";
 import { categoriasService } from "../../services/categorias.service";
+import { useUnsavedChangesGuard } from "../../hooks/useUnsavedChangesGuard";
 
 export interface CreateCategoryModalProps {
   isOpen: boolean;
@@ -30,10 +31,12 @@ export function CreateCategoryModal({
     handleSubmit,
     reset,
     setError,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isDirty },
   } = useForm<FormValues>({
     defaultValues: { name: "" },
   });
+  const { requestClose, confirmation } = useUnsavedChangesGuard();
+  const intentarCerrar = () => requestClose(isDirty, onClose);
 
   // Limpiar el formulario cuando se abre
   useEffect(() => {
@@ -58,7 +61,8 @@ export function CreateCategoryModal({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} maxWidth="sm" title="Nueva Categoría">
+    <>
+    <Modal isOpen={isOpen} onClose={intentarCerrar} maxWidth="sm" title="Nueva Categoría" headerIcon={<Tag className="h-4 w-4" />}>
       <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5">
         <div className="flex flex-col gap-1.5">
           <label
@@ -103,7 +107,7 @@ export function CreateCategoryModal({
         <div className="mt-2 flex items-center justify-end gap-3 border-t border-slate-100 pt-2 dark:border-slate-800/60">
           <button
             type="button"
-            onClick={onClose}
+            onClick={intentarCerrar}
             disabled={isSubmitting}
             className="rounded-xl px-4 py-2 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-100 disabled:opacity-50 cursor-pointer dark:text-slate-300 dark:hover:bg-slate-800"
           >
@@ -123,5 +127,7 @@ export function CreateCategoryModal({
         </div>
       </form>
     </Modal>
+      {confirmation}
+    </>
   );
 }

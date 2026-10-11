@@ -19,6 +19,7 @@ interface StockMinimoFormProps {
   onSuccess: () => void;
   onSubmittingChange: (submitting: boolean) => void;
   onCanSaveChange?: (canSave: boolean) => void;
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 export function StockMinimoForm({
@@ -28,6 +29,7 @@ export function StockMinimoForm({
   onSuccess,
   onSubmittingChange,
   onCanSaveChange,
+  onDirtyChange,
 }: StockMinimoFormProps) {
   const {
     register,
@@ -47,8 +49,10 @@ export function StockMinimoForm({
       0,
       Math.round(Number(stockMinimo) || 0),
     );
-    onCanSaveChange?.(valorNormalizado !== stockMinimoInicial);
-  }, [stockMinimo, stockMinimoInicial, onCanSaveChange]);
+    const huboCambios = valorNormalizado !== stockMinimoInicial;
+    onCanSaveChange?.(huboCambios);
+    onDirtyChange?.(huboCambios);
+  }, [stockMinimo, stockMinimoInicial, onCanSaveChange, onDirtyChange]);
 
   const onSubmit = async (data: StockMinimoValues) => {
     onSubmittingChange(true);

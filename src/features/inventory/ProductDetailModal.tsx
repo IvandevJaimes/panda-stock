@@ -39,7 +39,7 @@ import {
   DETALLE_DIAS_VENCER,
   esLoteVencido,
   esStockBajo,
-  estadoLoteActivoBadge,
+  estadosLoteActivoBadges,
   getLoteActivo,
   relativeTextVencimiento,
   tintPanelLoteActivo,
@@ -251,6 +251,33 @@ function EstadoStock({
     <span className="inline-flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
       <CheckCircle2 className="h-4 w-4" aria-hidden /> Óptimo
     </span>
+  );
+}
+
+function BadgesEstadoLoteActivo({
+  fechaVence,
+  stockBajo,
+  compacto = false,
+}: {
+  fechaVence: string | null;
+  stockBajo: boolean;
+  compacto?: boolean;
+}) {
+  const badges = estadosLoteActivoBadges(fechaVence, stockBajo);
+  return (
+    <div className={cn("flex shrink-0 flex-wrap items-center", compacto ? "gap-1" : "gap-1.5")}>
+      {badges.map((badge) => (
+        <span
+          key={badge.label}
+          className={cn(
+            "inline-flex min-h-3.5 items-center whitespace-nowrap rounded-full border px-2 py-0 text-[9px] font-semibold leading-3 sm:text-[10px]",
+            badge.clases,
+          )}
+        >
+          {badge.label}
+        </span>
+      ))}
+    </div>
   );
 }
 
@@ -471,24 +498,10 @@ Lote activo
                       </span>
                     </div>
                   </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    {(() => {
-                      const badge = estadoLoteActivoBadge(
-                        loteActivo.fechaVence,
-                        productoStockBajo,
-                      );
-                      return (
-                        <span
-                          className={cn(
-                            "inline-flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-semibold",
-                            badge.clases,
-                          )}
-                        >
-                          {badge.label}
-                        </span>
-                      );
-                    })()}
-                  </div>
+                  <BadgesEstadoLoteActivo
+                    fechaVence={loteActivo.fechaVence}
+                    stockBajo={productoStockBajo}
+                  />
                 </div>
 
                 <div className="mt-4 grid grid-cols-2 gap-3 border-t border-slate-200/60 pt-3 dark:border-slate-800">
@@ -771,6 +784,7 @@ Lote activo
         isOpen={isOpen}
         onClose={onClose}
         title="Detalle del producto"
+        headerIcon={<Boxes className="h-4 w-4" />}
         tabs={pestanas}
         maxWidth="max-w-2xl"
         headerExtra={
@@ -831,23 +845,13 @@ Lote activo
                   Vence: {formatearFecha(loteActivo.fechaVence)}
                 </span>
               )}
-              {loteActivo &&
-                (() => {
-                  const badge = estadoLoteActivoBadge(
-                    loteActivo.fechaVence,
-                    productoStockBajo,
-                  );
-                  return (
-                    <span
-                      className={cn(
-                        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold",
-                        badge.clases,
-                      )}
-                    >
-                      {badge.label}
-                    </span>
-                  );
-                })()}
+              {loteActivo && (
+                <BadgesEstadoLoteActivo
+                  fechaVence={loteActivo.fechaVence}
+                  stockBajo={productoStockBajo}
+                  compacto
+                />
+              )}
             </div>
           </div>
         }

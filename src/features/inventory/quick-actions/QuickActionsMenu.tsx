@@ -54,18 +54,6 @@ const estadoInfo: Record<
   },
 };
 
-function derivarEstado(
-  producto: Producto,
-  loteVencido: boolean,
-  lotePorVencer: boolean,
-): EstadoProducto {
-  if (loteVencido) return "expired";
-  if (lotePorVencer) return "expiring_soon";
-  if (producto.stockActual <= 0) return "out_of_stock";
-  if (producto.stockActual < producto.stockMinimo) return "low_stock";
-  return "normal";
-}
-
 interface QuickActionsMenuProps {
   producto: Producto;
   marcaNombre: string;
@@ -110,22 +98,25 @@ export function QuickActionsMenu({
       : "—"
   } · ${margenDelta > 0 ? "+" : ""}$${margenDelta.toFixed(2)}`;
 
-  const estado = derivarEstado(producto, loteVencido, loteActivoPorVencer);
-  const infoEstado = estado !== "normal" ? estadoInfo[estado] : null;
-  const expiry = loteFechaVence ? evaluateExpiry(loteFechaVence) : null;
-  const esVencimientoBadge =
-    estado === "expired" || estado === "expiring_soon";
-
-  const badgeElement = infoEstado ? (
-    <span
-      className={cn(
-        "inline-flex shrink-0 items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide",
-        infoEstado.badge,
-      )}
-    >
-      {infoEstado.label}
-    </span>
-  ) : null;
+  const tieneStock = producto.stockActual > 0;
+  const vencidoConStock = tieneStock && tieneLoteActivo && loteVencido;
+  const porVencerConStock = tieneStock && tieneLoteActivo && loteActivoPorVencer;
+  const expiry =
+    tieneStock && tieneLoteActivo && loteFechaVence
+      ? evaluateExpiry(loteFechaVence)
+      : null;
+  const estadosVisibles: Exclude<EstadoProducto, "normal">[] = !tieneStock
+    ? ["out_of_stock"]
+    : [
+        ...(producto.stockActual < producto.stockMinimo && !vencidoConStock
+          ? ["low_stock" as const]
+          : []),
+        ...(vencidoConStock
+          ? ["expired" as const]
+          : porVencerConStock
+            ? ["expiring_soon" as const]
+            : []),
+      ];
 
   return (
     <>
@@ -145,17 +136,44 @@ export function QuickActionsMenu({
                 · {producto.variante}
               </span>
             )}
-            {badgeElement &&
-              (esVencimientoBadge && expiry ? (
-                <Tooltip
-                  content={`${expiry.formattedDate} • ${expiry.relativeText}`}
-                  placement="top"
-                >
-                  {badgeElement}
-                </Tooltip>
-              ) : (
-                badgeElement
-              ))}
+            {estadosVisibles.length > 0 && (
+              <span className="inline-flex shrink-0 flex-wrap items-center gap-1 self-center">
+                {estadosVisibles.map((estado) => {
+                  const badgeInfo = estadoInfo[estado];
+                  const badge = (
+                    <span
+                      className={cn(
+                        "inline-flex min-h-3.5 items-center whitespace-nowrap rounded-full border px-1.5 py-0 text-[9px] font-semibold leading-3 tracking-wide sm:text-[10px]",
+                        badgeInfo.badge,
+                      )}
+                    >
+                      {badgeInfo.label}
+                    </span>
+                  );
+
+                  const tieneTooltip =
+                    estado === "expired" || estado === "expiring_soon";
+
+                  return (
+                    <span
+                      key={estado}
+                      className="inline-flex h-3.5 shrink-0 items-center justify-center"
+                    >
+                      {tieneTooltip ? (
+                        <Tooltip
+                          content={`${expiry?.formattedDate} • ${expiry?.relativeText}`}
+                          placement="top"
+                        >
+                          {badge}
+                        </Tooltip>
+                      ) : (
+                        badge
+                      )}
+                    </span>
+                  );
+                })}
+              </span>
+            )}
           </h3>
           <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
             {[
@@ -296,7 +314,7 @@ export function QuickActionsMenu({
         <button
           type="button"
           onClick={() =>
-            loteVencido
+            vencidoConStock
               ? onConfirmarPerdida?.()
               : onNavigate("registrar-perdida")
           }
@@ -309,12 +327,12 @@ export function QuickActionsMenu({
               : "hover:bg-red-500",
           )}
         >
-          {loteVencido ? (
+          {vencidoConStock ? (
             <PackageX className="h-3.5 w-3.5" aria-hidden />
           ) : (
             <Minus className="h-3.5 w-3.5" aria-hidden />
           )}
-          {loteVencido ? "Confirmar pérdida" : "Registrar merma"}
+          {vencidoConStock ? "Confirmar pérdida" : "Registrar merma"}
         </button>
       </div>
 

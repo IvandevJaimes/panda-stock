@@ -181,85 +181,99 @@ export function InactivosModal({
       onClose={onClose}
       maxWidth="2xl"
       title="Productos desactivados"
+      headerIcon={<Archive className="h-4 w-4" />}
       height="h-[60vh]"
     >
-      <div className="flex flex-col gap-3">
-        <div className="flex items-center gap-2">
-        <Input
-          ref={buscadorRef}
-          value={busqueda}
-          onChange={(e) => {
-            setBusqueda(e.target.value);
-            setCodigoEscaneado(null);
-            setPagina(1);
-          }}
-          placeholder="Buscar producto desactivado por nombre, marca o código..."
-          leftIcon={<Search size={16} />}
-          onClear={hayFiltroActivo ? limpiarFiltros : undefined}
-          autoFocus
-          className="w-full"
-          wrapperClassName="min-w-0 flex-1"
-        />
-        <Tooltip
-          content={hayFiltroActivo ? "Limpiar todos los filtros" : undefined}
-          placement="top"
-        >
-          <button
-            type="button"
-            onClick={limpiarFiltros}
-            disabled={!hayFiltroActivo}
-            aria-label="Limpiar todos los filtros"
-            className={cn(
-              "shrink-0 select-none rounded-xl p-2 transition-colors duration-150",
-              hayFiltroActivo
-                ? "cursor-pointer text-slate-400 hover:text-red-600 dark:text-slate-500 dark:hover:text-red-400"
-                : "cursor-not-allowed text-slate-400 opacity-25 dark:text-slate-600",
-            )}
-          >
-            <FilterX className="h-5 w-5" />
-          </button>
-        </Tooltip>
-      </div>
-
-        {codigoEscaneado && (
-          <div className="flex shrink-0 items-center justify-between gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 dark:border-emerald-400/20 dark:bg-emerald-400/10">
-            <div className="flex min-w-0 items-center justify-center gap-2">
-              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600 dark:bg-emerald-400/15 dark:text-emerald-300">
-                <ScanLine size={13} />
-              </span>
-              <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
-                Escaneado:
-              </span>
-              <code className="mt-0.5 min-w-0 max-w-[16rem] truncate text-sm font-semibold tracking-wide text-emerald-900 dark:text-emerald-100">
-                {codigoEscaneado}
-              </code>
-            </div>
-            <Tooltip content="Salir del filtro escaneado">
-              <button
-                type="button"
-                onClick={() => {
+      <div className="flex h-full min-h-0 flex-col gap-3">
+        {productos.length > 0 && (
+          <>
+            <div className="flex shrink-0 items-center gap-2">
+              <Input
+                ref={buscadorRef}
+                value={busqueda}
+                onChange={(e) => {
+                  setBusqueda(e.target.value);
                   setCodigoEscaneado(null);
                   setPagina(1);
-                  buscadorRef.current?.focus();
                 }}
-                aria-label="Salir del filtro escaneado"
-                className="flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-full text-emerald-600 transition-colors hover:bg-emerald-500/20 hover:text-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-400/20 dark:hover:text-emerald-200"
+                placeholder="Buscar producto desactivado por nombre, marca o código..."
+                leftIcon={<Search size={16} />}
+                onClear={hayFiltroActivo ? limpiarFiltros : undefined}
+                autoFocus
+                className="w-full"
+                wrapperClassName="min-w-0 flex-1"
+              />
+              <Tooltip
+                content={hayFiltroActivo ? "Limpiar todos los filtros" : undefined}
+                placement="top"
               >
-                <X size={13} />
-              </button>
-            </Tooltip>
-          </div>
+                <button
+                  type="button"
+                  onClick={limpiarFiltros}
+                  disabled={!hayFiltroActivo}
+                  aria-label="Limpiar todos los filtros"
+                  className={cn(
+                    "shrink-0 select-none rounded-xl p-2 transition-colors duration-150",
+                    hayFiltroActivo
+                      ? "cursor-pointer text-slate-400 hover:text-red-600 dark:text-slate-500 dark:hover:text-red-400"
+                      : "cursor-not-allowed text-slate-400 opacity-25 dark:text-slate-600",
+                  )}
+                >
+                  <FilterX className="h-5 w-5" />
+                </button>
+              </Tooltip>
+            </div>
+
+            {codigoEscaneado && (
+              <div className="flex shrink-0 items-center justify-between gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 dark:border-emerald-400/20 dark:bg-emerald-400/10">
+                <div className="flex min-w-0 items-center justify-center gap-2">
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600 dark:bg-emerald-400/15 dark:text-emerald-300">
+                    <ScanLine size={13} />
+                  </span>
+                  <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
+                    Escaneado:
+                  </span>
+                  <code className="mt-0.5 min-w-0 max-w-[16rem] truncate text-sm font-semibold tracking-wide text-emerald-900 dark:text-emerald-100">
+                    {codigoEscaneado}
+                  </code>
+                </div>
+                <Tooltip content="Salir del filtro escaneado">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCodigoEscaneado(null);
+                      setPagina(1);
+                      buscadorRef.current?.focus();
+                    }}
+                    aria-label="Salir del filtro escaneado"
+                    className="flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-full text-emerald-600 transition-colors hover:bg-emerald-500/20 hover:text-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-400/20 dark:hover:text-emerald-200"
+                  >
+                    <X size={13} />
+                  </button>
+                </Tooltip>
+              </div>
+            )}
+          </>
         )}
 
         {productosFiltrados.length === 0 ? (
           <EmptyStateCompact
             icon={<Archive className="h-8 w-8 stroke-[1.5]" />}
-            title="No hay productos desactivados"
-            description="Todos los productos del inventario están activos."
+            title={
+              productos.length === 0
+                ? "No hay productos desactivados"
+                : "No se encontraron productos"
+            }
+            description={
+              productos.length === 0
+                ? "Cuando haya productos desactivados, aparecerán aquí."
+                : "Probá con otro término de búsqueda."
+            }
+            className="min-h-0 flex-1"
           />
         ) : (
           <>
-            <div className="custom-scrollbar flex max-h-[50vh] min-h-0 flex-col gap-1.5 overflow-y-auto pr-1">
+            <div className="custom-scrollbar flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto pr-1">
               {productosPagina.map((producto) => {
                 const marca =
                   marcas.find((m) => m.id === producto.marcaId)?.nombre ?? "";

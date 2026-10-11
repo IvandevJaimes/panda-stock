@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 import { CapitalizedInput } from "../../../components/ui/CapitalizedInput";
@@ -29,6 +30,7 @@ interface AjustarStockLoteFormProps {
   onCancel: () => void;
   onSuccess: () => void;
   onSubmittingChange: (submitting: boolean) => void;
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 export function AjustarStockLoteForm({
@@ -39,13 +41,14 @@ export function AjustarStockLoteForm({
   onCancel,
   onSuccess,
   onSubmittingChange,
+  onDirtyChange,
 }: AjustarStockLoteFormProps) {
   const {
     register,
     handleSubmit,
     setValue,
     control,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isDirty },
   } = useForm<AjustarStockLoteValues>({
     defaultValues: VALORES_INICIALES_AJUSTAR,
   });
@@ -55,6 +58,8 @@ export function AjustarStockLoteForm({
   const nuevoStockNum = nuevoStock !== "" ? Number(nuevoStock) : NaN;
   const diferenciaValida = !Number.isNaN(nuevoStockNum);
   const diferencia = nuevoStockNum - lote.cantidadActual;
+
+  useEffect(() => onDirtyChange?.(isDirty), [isDirty, onDirtyChange]);
 
   const onSubmit = async (data: AjustarStockLoteValues) => {
     onSubmittingChange(true);
@@ -142,7 +147,7 @@ export function AjustarStockLoteForm({
               errors.motivo &&
                 "border-red-500 focus:border-red-500 focus:ring-4 focus:ring-red-500/10",
             )}
-            onClear={() => setValue("motivo", "")}
+            onClear={() => setValue("motivo", "", { shouldDirty: true })}
             {...register("motivo")}
           />
           <FieldError error={errors.motivo?.message} />

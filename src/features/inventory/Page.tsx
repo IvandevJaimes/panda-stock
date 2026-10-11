@@ -116,10 +116,10 @@ const OPCIONES_ORDEN: { value: OrdenInventario; label: string }[] = [
 ];
 
 function derivarStatus(p: ProductoInventario): ProductStatus {
+  if (p.stock <= 0) return "out_of_stock";
   if (p.status === "vencido") return "expired";
-  if (p.status === "por-vencer") return "expiring_soon";
-  if (p.stock === 0) return "out_of_stock";
   if (p.stock < p.minStock) return "low_stock";
+  if (p.status === "por-vencer") return "expiring_soon";
   return "normal";
 }
 
@@ -284,6 +284,25 @@ export function InventoryPage() {
   const [cargandoProductos, setCargandoProductos] = useState(true);
   const [errorProductos, setErrorProductos] = useState<string | null>(null);
 
+  const cerrarTodosLosModales = useCallback(() => {
+    setInactivosAbierta(false);
+    setIsCreateCategoryOpen(false);
+    setIsCreateProductOpen(false);
+    setMarcasAbiertas(false);
+    setSelectedProductForDetail(null);
+    setProductForQuickActions(null);
+    setLotesProducto(null);
+    setAbrirInventarioAuto(false);
+    setPerdidaSeleccion(null);
+    setAccionGlobal(null);
+    setEditingCategory(null);
+    setDeletingCategory(null);
+    setCategoriaAEliminarProtegida(null);
+    setDeletingProduct(null);
+    setProductoAEliminarProtegido(null);
+    setMenuContextual(null);
+  }, []);
+
   // Handoff desde la campanita de notificaciones: `?q=<producto>` acota la
   // grilla a ese único producto. El ajuste va en render (patrón "state desde
   // props"): set-state-in-effect prohíbe el setState síncrono en un effect.
@@ -373,6 +392,16 @@ export function InventoryPage() {
       setCargandoProductos(false);
     }
   }, [obtenerProductos, obtenerMarcas]);
+
+  const refrescarYCerrarModales = useCallback(() => {
+    cerrarTodosLosModales();
+    void refreshProductos();
+  }, [cerrarTodosLosModales, refreshProductos]);
+
+  const recargarMarcasYCerrarModales = useCallback(() => {
+    cerrarTodosLosModales();
+    void recargarMarcas();
+  }, [cerrarTodosLosModales, recargarMarcas]);
 
   const categoriasPorId = useMemo(
     () => new Map(categories.map((c) => [c.id, c])),
@@ -512,6 +541,7 @@ export function InventoryPage() {
       setTogglingActivoId(producto.id);
       try {
         await productosService.toggle(producto.id, activo);
+        cerrarTodosLosModales();
         toast.success(
           activo
             ? `Producto "${producto.nombre}" reactivado`
@@ -526,7 +556,7 @@ export function InventoryPage() {
         setTogglingActivoId(null);
       }
     },
-    [refreshProductos],
+    [cerrarTodosLosModales, refreshProductos],
   );
 
   const handleConfirmarPerdida = useCallback(async (producto: Producto) => {
@@ -1287,7 +1317,7 @@ export function InventoryPage() {
         onClose={() => setMarcasAbiertas(false)}
         marcas={marcas}
         productos={productosCrudos}
-        onChanged={() => void recargarMarcas()}
+        onChanged={recargarMarcasYCerrarModales}
         onSelectMarca={(nombre) => {
           setBusqueda(nombre);
           setMarcasAbiertas(false);
@@ -1301,7 +1331,7 @@ export function InventoryPage() {
         productos={productosCrudos.filter((p) => !p.activo)}
         marcas={marcas}
         categorias={categories}
-        onChanged={() => void refreshProductos()}
+        onChanged={refrescarYCerrarModales}
       />
 
       <EditCategoryModal
@@ -1311,7 +1341,7 @@ export function InventoryPage() {
         categories={categories}
         onSuccess={(updatedCategory) => {
           updateCategory(updatedCategory);
-          setEditingCategory(null);
+          cerrarTodosLosModales();
           toast.success(`Categoría "${updatedCategory.nombre}" actualizada`);
         }}
       />
@@ -1333,6 +1363,7 @@ export function InventoryPage() {
               setPaginaActual(1);
             }
             toast.success(`Categoría "${deletingCategory.nombre}" eliminada`);
+            cerrarTodosLosModales();
           } catch (error) {
             toast.error(
               error instanceof Error
@@ -1343,6 +1374,7 @@ export function InventoryPage() {
           }
         }}
         title="Eliminar categoría"
+        headerIcon={<Trash2 className="h-4 w-4" />}
         description={`¿Estás seguro de que deseas eliminar la categoría "${deletingCategory?.nombre}"? Esta acción no se puede deshacer.`}
       />
 
@@ -1361,7 +1393,7 @@ export function InventoryPage() {
               setSelectedCategory("all");
               setPaginaActual(1);
             }
-            setCategoriaAEliminarProtegida(null);
+            cerrarTodosLosModales();
             toast.success(`Categoría "${categoria.nombre}" eliminada`);
           }}
           onCancelar={() => setCategoriaAEliminarProtegida(null)}
@@ -1380,12 +1412,7 @@ export function InventoryPage() {
           }
           try {
             await productosService.delete(deletingProduct.id);
-            setProductForQuickActions((prev) =>
-              prev?.id === deletingProduct.id ? null : prev,
-            );
-            setLotesProducto((prev) =>
-              prev?.id === deletingProduct.id ? null : prev,
-            );
+            cerrarTodosLosModales();
             toast.success(`Producto "${deletingProduct.nombre}" eliminado`);
             void refreshProductos();
           } catch (error) {
@@ -1398,6 +1425,7 @@ export function InventoryPage() {
           }
         }}
         title="Eliminar producto"
+        headerIcon={<Trash2 className="h-4 w-4" />}
         description={`¿Estás seguro de que deseas eliminar "${deletingProduct?.nombre}"? Se eliminarán sus lotes. Los movimientos y las ventas históricas se conservan para auditoría, pero quedan desvinculados del producto. Esta acción no se puede deshacer.`}
       />
 
@@ -1412,9 +1440,7 @@ export function InventoryPage() {
           onSuccess={async (pin) => {
             const producto = productoAEliminarProtegido;
             await productosService.delete(producto.id, pin);
-            setProductForQuickActions((prev) => prev?.id === producto.id ? null : prev);
-            setLotesProducto((prev) => prev?.id === producto.id ? null : prev);
-            setProductoAEliminarProtegido(null);
+            cerrarTodosLosModales();
             toast.success(`Producto "${producto.nombre}" eliminado`);
             void refreshProductos();
           }}
@@ -1464,15 +1490,7 @@ export function InventoryPage() {
             eliminarProducto(selectedProductForDetail);
             setSelectedProductForDetail(null);
           }}
-          onMutated={() => {
-            void refreshProductos().then((dataActualizada) => {
-              setSelectedProductForDetail((prev) =>
-                prev
-                  ? (dataActualizada.find((p) => p.id === prev.id) ?? prev)
-                  : prev,
-              );
-            });
-          }}
+          onMutated={refrescarYCerrarModales}
         />
       )}
 
@@ -1498,15 +1516,7 @@ export function InventoryPage() {
         }
         categorias={categories}
         onClose={() => setProductForQuickActions(null)}
-        onSuccess={() => {
-          void refreshProductos().then((dataActualizada) => {
-            setProductForQuickActions((prev) =>
-              prev
-                ? (dataActualizada.find((p) => p.id === prev.id) ?? prev)
-                : prev,
-            );
-          });
-        }}
+        onSuccess={refrescarYCerrarModales}
         onCategoriaCreada={addCategory}
         onOpenLotes={() => {
           if (productForQuickActions) {
@@ -1536,15 +1546,7 @@ export function InventoryPage() {
             setAbrirInventarioAuto(false);
             setLotesProducto(null);
           }}
-          onMutated={() => {
-            void refreshProductos().then((dataActualizada) => {
-              setLotesProducto((prev) =>
-                prev
-                  ? (dataActualizada.find((p) => p.id === prev.id) ?? prev)
-                  : prev,
-              );
-            });
-          }}
+          onMutated={refrescarYCerrarModales}
         />
       )}
 
@@ -1553,10 +1555,7 @@ export function InventoryPage() {
         lote={perdidaSeleccion?.lote ?? null}
         producto={perdidaSeleccion?.producto ?? null}
         onClose={() => setPerdidaSeleccion(null)}
-        onSuccess={() => {
-          setPerdidaSeleccion(null);
-          void refreshProductos();
-        }}
+        onSuccess={refrescarYCerrarModales}
       />
 
       <AccionGlobalModal
@@ -1568,7 +1567,7 @@ export function InventoryPage() {
         categorias={categories}
         barcodeEscaneadoInicial={barcodeEscaneado}
         onClose={() => setAccionGlobal(null)}
-        onSuccess={() => void refreshProductos()}
+        onSuccess={refrescarYCerrarModales}
       />
     </div>
   );

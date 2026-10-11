@@ -1,16 +1,18 @@
 import { useEffect } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, Store } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { Modal } from "../ui/Modal";
 import { FieldError } from "../ui/FieldError";
 import { CapitalizedInput } from "../ui/CapitalizedInput";
 import { cn } from "../../lib/cn";
 import { marcasService } from "../../services/marcas.service";
+import { useUnsavedChangesGuard } from "../../hooks/useUnsavedChangesGuard";
 
 export interface CreateBrandModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: () => void;
+  onDirtyChange?: (dirty: boolean) => void;
   brands: { id: number; nombre: string }[];
 }
 
@@ -22,6 +24,7 @@ export function CreateBrandModal({
   isOpen,
   onClose,
   onSuccess,
+  onDirtyChange,
   brands,
 }: CreateBrandModalProps) {
   const {
@@ -29,10 +32,14 @@ export function CreateBrandModal({
     handleSubmit,
     reset,
     setError,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isDirty },
   } = useForm<FormValues>({
     defaultValues: { name: "" },
   });
+  const { requestClose, confirmation } = useUnsavedChangesGuard();
+  const intentarCerrar = () => requestClose(isDirty, onClose);
+
+  useEffect(() => onDirtyChange?.(isOpen && isDirty), [isOpen, isDirty, onDirtyChange]);
 
   // Limpiar el formulario cuando se abre
   useEffect(() => {
@@ -57,7 +64,8 @@ export function CreateBrandModal({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} maxWidth="sm" title="Nueva Marca">
+    <>
+    <Modal isOpen={isOpen} onClose={intentarCerrar} maxWidth="sm" title="Nueva Marca" headerIcon={<Store className="h-4 w-4" />}>
       <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5">
         <div className="flex flex-col gap-1.5">
           <label
@@ -102,7 +110,7 @@ export function CreateBrandModal({
         <div className="mt-2 flex items-center justify-end gap-3 border-t border-slate-100 pt-2 dark:border-slate-800/60">
           <button
             type="button"
-            onClick={onClose}
+            onClick={intentarCerrar}
             disabled={isSubmitting}
             className="cursor-pointer rounded-xl px-4 py-2 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-100 disabled:opacity-50 dark:text-slate-300 dark:hover:bg-slate-800"
           >
@@ -122,5 +130,7 @@ export function CreateBrandModal({
         </div>
       </form>
     </Modal>
+      {confirmation}
+    </>
   );
 }

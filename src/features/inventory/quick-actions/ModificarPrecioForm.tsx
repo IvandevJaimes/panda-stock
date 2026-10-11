@@ -20,9 +20,10 @@ interface ModificarPrecioFormProps {
   onSuccess: () => void;
   onSubmittingChange: (submitting: boolean) => void;
   onCanSaveChange?: (canSave: boolean) => void;
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
-export function ModificarPrecioForm({ producto, precioInicial, onCancel, onSuccess, onSubmittingChange, onCanSaveChange }: ModificarPrecioFormProps) {
+export function ModificarPrecioForm({ producto, precioInicial, onCancel, onSuccess, onSubmittingChange, onCanSaveChange, onDirtyChange }: ModificarPrecioFormProps) {
   const {
     register,
     handleSubmit,
@@ -39,7 +40,8 @@ export function ModificarPrecioForm({ producto, precioInicial, onCancel, onSucce
 
   useEffect(() => {
     onCanSaveChange?.(precioValido && hayCambio);
-  }, [precioValido, hayCambio, onCanSaveChange]);
+    onDirtyChange?.(hayCambio);
+  }, [precioValido, hayCambio, onCanSaveChange, onDirtyChange]);
 
   const onSubmit = async (data: ModificarPrecioValues) => {
     onSubmittingChange(true);

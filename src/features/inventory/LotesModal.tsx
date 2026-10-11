@@ -29,6 +29,7 @@ import { LotQuickActionsModal } from "./lote-actions/LotQuickActionsModal";
 import { AgregarInventarioForm } from "./quick-actions/AgregarInventarioForm";
 import { FORM_ID } from "./quick-actions/types";
 import { EmptyStateCompact } from "../../components/ui/EmptyStateCompact";
+import { useUnsavedChangesGuard } from "../../hooks/useUnsavedChangesGuard";
 import {
   DETALLE_DIAS_VENCER,
   esLoteVencido,
@@ -129,7 +130,9 @@ export function LotesModal({
   const [agregarInventarioAbierto, setAgregarInventarioAbierto] =
     useState(false);
   const [submittingInventario, setSubmittingInventario] = useState(false);
+  const [hayCambiosPendientes, setHayCambiosPendientes] = useState(false);
   const [perdidaSeleccion, setPerdidaSeleccion] = useState<Lote | null>(null);
+  const { requestClose, confirmation } = useUnsavedChangesGuard();
 
   // Los lotes se cargan al abrir el modal. null = cargando; los setState viven
   // en callbacks asíncronos (.then/.catch), respetando react-hooks/set-state-in-effect.
@@ -204,12 +207,26 @@ export function LotesModal({
   const handleCloseInventario = () => {
     setAgregarInventarioAbierto(false);
     setSubmittingInventario(false);
+    setHayCambiosPendientes(false);
   };
 
   const handleInventarioSuccess = () => {
     handleCloseInventario();
     refreshData();
   };
+
+  const cerrarLotes = () => {
+    setQuickActionsLote(null);
+    setDeletingLote(null);
+    setLoteAEliminarProtegido(null);
+    setAgregarInventarioAbierto(false);
+    setSubmittingInventario(false);
+    setPerdidaSeleccion(null);
+    setHayCambiosPendientes(false);
+    onClose();
+  };
+
+  const intentarCerrar = () => requestClose(hayCambiosPendientes, cerrarLotes);
 
   // --- Estados de carga / vacío, compartidos por las pestañas ---
   const cargando = (
@@ -349,8 +366,9 @@ export function LotesModal({
     <>
       <TabsModal
         isOpen={isOpen}
-        onClose={onClose}
+        onClose={intentarCerrar}
         title="Gestión de lotes"
+        headerIcon={<Boxes className="h-4 w-4" />}
         maxWidth="max-w-3xl"
         defaultTabId="lotes"
         subheader={
@@ -408,7 +426,7 @@ export function LotesModal({
         ]}
         footer={
           <div className="ml-auto">
-            <Button variant="ghost" onClick={onClose}>
+            <Button variant="ghost" onClick={intentarCerrar}>
               Cerrar
             </Button>
           </div>
@@ -425,6 +443,7 @@ export function LotesModal({
           productoId={product.id}
           onClose={() => setQuickActionsLote(null)}
           onMutated={refreshData}
+          onDirtyChange={setHayCambiosPendientes}
           onConfirmarPerdida={(lote) => {
             setQuickActionsLote(null);
             setPerdidaSeleccion(lote);
@@ -434,16 +453,18 @@ export function LotesModal({
 
       <Modal
         isOpen={agregarInventarioAbierto}
-        onClose={handleCloseInventario}
+        onClose={() => requestClose(hayCambiosPendientes, handleCloseInventario)}
         maxWidth="lg"
         title="Agregar Inventario"
+        headerIcon={<Plus className="h-4 w-4" />}
       >
         <div className="flex flex-col">
           <AgregarInventarioForm
             producto={product}
-            onCancel={handleCloseInventario}
+            onCancel={() => requestClose(hayCambiosPendientes, handleCloseInventario)}
             onSuccess={handleInventarioSuccess}
             onSubmittingChange={setSubmittingInventario}
+            onDirtyChange={setHayCambiosPendientes}
           />
         </div>
         <div className="mt-6 flex justify-end gap-2 border-t border-slate-100 pt-4 dark:border-slate-800/60">
@@ -455,7 +476,7 @@ export function LotesModal({
           >
             Confirmar
           </Button>
-          <Button type="button" variant="ghost" onClick={handleCloseInventario}>
+          <Button type="button" variant="ghost" onClick={() => requestClose(hayCambiosPendientes, handleCloseInventario)}>
             Cerrar
           </Button>
         </div>
@@ -466,6 +487,7 @@ export function LotesModal({
         onClose={() => setDeletingLote(null)}
         onConfirm={handleDeleteLote}
         title="Eliminar lote"
+        headerIcon={<Trash2 className="h-4 w-4" />}
         description={
           deletingLote && deletingLote.cantidadActual > 0
             ? `Este lote tiene ${deletingLote.cantidadActual} unidades disponibles. Al eliminarlo, el stock del producto se reducirá en esa cantidad.`
@@ -500,6 +522,7 @@ export function LotesModal({
         onClose={() => setPerdidaSeleccion(null)}
         onSuccess={handlePerdidaSuccess}
       />
+      {confirmation}
     </>
   );
 }
@@ -528,7 +551,9 @@ function LoteCard({
 }) {
   const vencimiento = badgeVencimiento(lote.fechaVence);
   const esHistorial = historial;
-  const esDestacadoVencido = destacado && esLoteVencido(lote.fechaVence);
+  const loteVencido = esLoteVencido(lote.fechaVence);
+  const mostrarStockBajo = stockBajo && !loteVencido;
+  const esDestacadoVencido = destacado && loteVencido;
   return (
     <div
       className={cn(
@@ -585,22 +610,26 @@ function LoteCard({
           {lote.numeroLote ?? `Lote #${lote.id}`}
         </span>
 
-        {/* Acciones a la derecha: badge de estado + acciones */}
+        {/* Los estados quedan agrupados junto a las acciones del lote. */}
         <div className="ml-auto flex flex-wrap items-center gap-1.5">
-          {!esHistorial && lote.fechaVence && (
-            <span
-              className={cn(
-                "inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold",
-                vencimiento.clases,
+          {!esHistorial && (lote.fechaVence || mostrarStockBajo) && (
+            <div className="flex shrink-0 flex-wrap items-center gap-1">
+              {mostrarStockBajo && (
+                <span className="inline-flex min-h-3.5 items-center rounded-full border border-amber-500/30 bg-amber-500/10 px-1.5 py-0 text-[9px] font-semibold leading-3 text-amber-700 dark:text-amber-400 sm:text-[10px]">
+                  Stock bajo
+                </span>
               )}
-            >
-              {vencimiento.label}
-            </span>
-          )}
-          {!esHistorial && stockBajo && (
-            <span className="inline-flex shrink-0 items-center rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-400">
-              Stock bajo
-            </span>
+              {lote.fechaVence && (
+                <span
+                  className={cn(
+                    "inline-flex min-h-3.5 shrink-0 items-center rounded-full border px-1.5 py-0 text-[9px] font-semibold leading-3 sm:text-[10px]",
+                    vencimiento.clases,
+                  )}
+                >
+                  {vencimiento.label}
+                </span>
+              )}
+            </div>
           )}
           {onEdit && (
             <Tooltip content="Editar lote" placement="top">

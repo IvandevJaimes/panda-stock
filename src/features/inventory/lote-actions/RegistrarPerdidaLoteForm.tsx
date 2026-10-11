@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 import { CapitalizedInput } from "../../../components/ui/CapitalizedInput";
@@ -31,6 +32,7 @@ interface RegistrarPerdidaLoteFormProps {
   onCancel: () => void;
   onSuccess: () => void;
   onSubmittingChange: (submitting: boolean) => void;
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 export function RegistrarPerdidaLoteForm({
@@ -42,13 +44,14 @@ export function RegistrarPerdidaLoteForm({
   onCancel,
   onSuccess,
   onSubmittingChange,
+  onDirtyChange,
 }: RegistrarPerdidaLoteFormProps) {
   const {
     register,
     handleSubmit,
     setValue,
     control,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isDirty },
   } = useForm<RegistrarPerdidaLoteValues>({
     defaultValues: VALORES_INICIALES_PERDIDA,
   });
@@ -61,6 +64,8 @@ export function RegistrarPerdidaLoteForm({
     ? Math.min(cantidadNum, lote.cantidadActual)
     : 0;
   const perdidaEfectiva = cantidadEfectiva * lote.costoUnitario;
+
+  useEffect(() => onDirtyChange?.(isDirty), [isDirty, onDirtyChange]);
 
   const onSubmit = async (data: RegistrarPerdidaLoteValues) => {
     onSubmittingChange(true);
@@ -135,7 +140,7 @@ export function RegistrarPerdidaLoteForm({
               errors.motivo &&
                 "border-red-500 focus:border-red-500 focus:ring-4 focus:ring-red-500/10",
             )}
-            onClear={() => setValue("motivo", "")}
+            onClear={() => setValue("motivo", "", { shouldDirty: true })}
             {...register("motivo")}
           />
           <FieldError error={errors.motivo?.message} />

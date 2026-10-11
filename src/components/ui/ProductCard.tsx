@@ -116,22 +116,35 @@ export function ProductCard({
   // Única fuente de verdad: el estado de vencimiento y su texto relativo
   // se derivan juntos de evaluateExpiry para que el badge y el tooltip
   // jamás se contradigan (misma regla, misma zona horaria local).
-  const isStockStatus = status === "out_of_stock" || status === "low_stock";
-  const expiry = expiresAt ? evaluateExpiry(expiresAt) : null;
+  const isOutOfStock = stock <= 0 || status === "out_of_stock";
+  const isLowStock =
+    !isOutOfStock &&
+    (status === "low_stock" || (minStock > 0 && stock < minStock));
+  const expiry = !isOutOfStock && expiresAt ? evaluateExpiry(expiresAt) : null;
+  const mostrarStockBajo = isLowStock && expiry?.status !== "expired";
+  const cantidadBadges =
+    Number(isOutOfStock) +
+    Number(mostrarStockBajo) +
+    Number(expiry?.status === "expired") +
+    Number(expiry?.status === "expiring_soon");
+  const clasesDimensionBadge =
+    cantidadBadges > 1
+      ? "min-h-3.5 px-1.5 py-0 text-[9px] leading-3 sm:text-[10px]"
+      : "px-2 py-0.5 text-[10px] sm:text-[11px]";
 
   // Breakpoint Tailwind md: el texto de los botones de acción se muestra en md+,
   // momento en que sus tooltips sobran (el tooltip solo aporta en iconos puros).
   const esEscritorio = useMediaQuery("(min-width: 768px)");
 
-  // Los estados basados en stock prevalecen; el resto se resuelve desde la fecha.
-  const resolvedStatus: ProductStatus = isStockStatus
-    ? status
-    : expiry
-      ? expiry.status
-      : status;
-
-  const isExpiryBadge =
-    resolvedStatus === "expired" || resolvedStatus === "expiring_soon";
+  const resolvedStatus: ProductStatus = isOutOfStock
+    ? "out_of_stock"
+    : expiry?.status === "expired"
+      ? "expired"
+      : isLowStock
+        ? "low_stock"
+        : expiry?.status === "expiring_soon"
+          ? "expiring_soon"
+          : "normal";
 
   const subtitulo = brand ? `${brand} · ${category}` : category;
 
@@ -392,13 +405,13 @@ export function ProductCard({
         {!inactivo && (expiresAt || resolvedStatus !== "normal") && (
           <div className="flex shrink-0 items-center justify-end gap-2">
             {/* Fecha suelta: siempre visible en normal; se oculta en pantallas chicas si hay badge; se omite si está vencido (el badge ya lo comunica) */}
-            {expiresAt && expiry && resolvedStatus !== "expired" && (
+            {expiresAt && expiry && expiry.status !== "expired" && (
               <Tooltip content={expiry.relativeText} placement="top">
                 <div
                   className={cn(
                     "flex shrink-0 cursor-default select-none items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium sm:text-[11px]",
                     resolvedStatus !== "normal" && "hidden md:flex",
-                    resolvedStatus === "expiring_soon"
+                    expiry.status === "expiring_soon"
                       ? "text-amber-600 dark:text-amber-400"
                       : "text-slate-400 dark:text-slate-500",
                   )}
@@ -411,40 +424,62 @@ export function ProductCard({
 
             {!expiresAt && <span className="sr-only">Sin vencimiento</span>}
 
-            {resolvedStatus !== "normal" && (
-              <Tooltip
-                content={
-                  isExpiryBadge
-                    ? `${expiry?.formattedDate} • ${expiry?.relativeText}`
-                    : expiry?.relativeText
-                }
-                placement="top"
-                disabled={
-                  resolvedStatus === "low_stock" ||
-                  resolvedStatus === "out_of_stock"
-                    ? true
-                    : false
-                }
-              >
+            <div className="flex shrink-0 flex-col items-end justify-center gap-0.5 self-center">
+              {isOutOfStock && (
                 <span
                   className={cn(
-                    "inline-flex shrink-0 items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide sm:text-[11px]",
-                    resolvedStatus === "expired" &&
-                      "bg-red-100 text-red-700 dark:bg-red-950/70 dark:text-red-300 border border-red-200/90 dark:border-red-900/50",
-                    resolvedStatus === "out_of_stock" &&
-                      "bg-red-100 text-red-700 dark:bg-red-950/70 dark:text-red-300 border border-red-200/90 dark:border-red-900/50",
-                    (resolvedStatus === "low_stock" ||
-                      resolvedStatus === "expiring_soon") &&
-                      "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-900/50",
+                    "inline-flex shrink-0 items-center whitespace-nowrap rounded-full border font-semibold tracking-wide",
+                    clasesDimensionBadge,
+                    "border-red-200/90 bg-red-100 text-red-700 dark:border-red-900/50 dark:bg-red-950/70 dark:text-red-300",
                   )}
                 >
-                  {resolvedStatus === "expired" && "Vencido"}
-                  {resolvedStatus === "out_of_stock" && "Agotado"}
-                  {resolvedStatus === "low_stock" && "Stock bajo"}
-                  {resolvedStatus === "expiring_soon" && "Por vencer"}
+                  Agotado
                 </span>
-              </Tooltip>
-            )}
+              )}
+              {mostrarStockBajo && (
+                <span
+                  className={cn(
+                    "inline-flex shrink-0 items-center whitespace-nowrap rounded-full border font-semibold tracking-wide",
+                    clasesDimensionBadge,
+                    "border-amber-200 bg-amber-100 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/60 dark:text-amber-300",
+                  )}
+                >
+                  Stock bajo
+                </span>
+              )}
+              {expiry?.status === "expired" && (
+                <Tooltip
+                  content={`${expiry.formattedDate} • ${expiry.relativeText}`}
+                  placement="top"
+                >
+                  <span
+                    className={cn(
+                      "inline-flex shrink-0 items-center whitespace-nowrap rounded-full border font-semibold tracking-wide",
+                      clasesDimensionBadge,
+                      "border-red-200/90 bg-red-100 text-red-700 dark:border-red-900/50 dark:bg-red-950/70 dark:text-red-300",
+                    )}
+                  >
+                    Vencido
+                  </span>
+                </Tooltip>
+              )}
+              {expiry?.status === "expiring_soon" && (
+                <Tooltip
+                  content={`${expiry.formattedDate} • ${expiry.relativeText}`}
+                  placement="top"
+                >
+                  <span
+                    className={cn(
+                      "inline-flex shrink-0 items-center whitespace-nowrap rounded-full border font-semibold tracking-wide",
+                      clasesDimensionBadge,
+                      "border-amber-200 bg-amber-100 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/60 dark:text-amber-300",
+                    )}
+                  >
+                    Por vencer
+                  </span>
+                </Tooltip>
+              )}
+            </div>
             {!inactivo &&
               onConfirmarPerdida &&
               resolvedStatus === "expired" && (
