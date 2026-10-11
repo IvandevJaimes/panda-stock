@@ -201,16 +201,43 @@ export async function crearCopiaSeguridad(configuracion?: ConfiguracionCopias): 
   if (existsSync(destino)) throw new Error('Ya existe una copia con este nombre. Esperá un segundo e intentá de nuevo.')
   try {
     await getSqlite().backup(destino)
+    dejarCopiaEnUnSoloArchivo(destino)
     validarArchivoSQLite(destino)
     return destino
   } catch (error) {
-    try {
-      if (existsSync(destino)) unlinkSync(destino)
-    } catch {
-      // Se conserva el error original; el archivo incompleto se podrá reemplazar manualmente.
-    }
+    eliminarArchivoYCachés(destino)
     if (error instanceof Error && error.message.startsWith('La copia')) throw error
     throw new Error('No se pudo crear la copia de seguridad. Revisá el pendrive y el espacio disponible.', { cause: error })
+  }
+}
+
+function dejarCopiaEnUnSoloArchivo(archivo: string): void {
+  let conexion: Database.Database | null = null
+  try {
+    conexion = new Database(archivo, { fileMustExist: true })
+    const modo = conexion.pragma('journal_mode = DELETE') as Array<{ journal_mode: string }>
+    if (modo[0]?.journal_mode.toLowerCase() !== 'delete') {
+      throw new Error('La copia no pudo consolidarse en un único archivo.')
+    }
+  } finally {
+    conexion?.close()
+  }
+  eliminarArchivosAuxiliares(archivo)
+}
+
+function eliminarArchivosAuxiliares(archivo: string): void {
+  for (const sufijo of ['-wal', '-shm', '-journal']) {
+    const auxiliar = `${archivo}${sufijo}`
+    if (existsSync(auxiliar)) unlinkSync(auxiliar)
+  }
+}
+
+function eliminarArchivoYCachés(archivo: string): void {
+  try {
+    eliminarArchivosAuxiliares(archivo)
+    if (existsSync(archivo)) unlinkSync(archivo)
+  } catch {
+    // Se conserva el error original si el dispositivo deja de estar disponible durante la limpieza.
   }
 }
 
