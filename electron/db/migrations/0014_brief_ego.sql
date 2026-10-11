@@ -1,0 +1,1 @@
+ALTER TABLE `seguridad` ADD `configuracion_inicial_mostrada` integer DEFAULT false NOT NULL;

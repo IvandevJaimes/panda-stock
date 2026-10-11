@@ -212,6 +212,17 @@ export function tieneContrasena(): boolean {
   return leerSeguridad().passwordConfigured
 }
 
+export function configuracionInicialMostrada(): boolean {
+  return leerSeguridad().configuracionInicialMostrada
+}
+
+export function marcarConfiguracionInicialMostrada(): void {
+  getDb().update(seguridad)
+    .set({ configuracionInicialMostrada: true })
+    .where(eq(seguridad.id, 1))
+    .run()
+}
+
 export function getRecoveryId(): string {
   return leerSeguridad().recoveryId
 }

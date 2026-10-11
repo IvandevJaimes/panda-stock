@@ -33,6 +33,7 @@ import { Switch } from '../../components/ui/Switch'
 import { Tooltip } from '../../components/ui/Tooltip'
 import { negocioService } from '../../services/negocio.service'
 import { seguridadService } from '../../services/seguridad.service'
+import { buildAssetUrl } from '../../lib/assets'
 import { useSettingsStore } from '../../stores/settings.store'
 import { useUIStore } from '../../stores/ui.store'
 import { MIME_A_EXTENSION, businessSchema, type BusinessSetupValues } from './business.schema'
@@ -123,10 +124,11 @@ export function ConfiguracionInicialVentana() {
   const [paso, setPaso] = useState(0)
   const [nueva, setNueva] = useState('')
   const [repetir, setRepetir] = useState('')
-  const [mostrarContrasena, setMostrarContrasena] = useState(false)
-  const [logo, setLogo] = useState<File | null>(null)
+  const [mostrarNueva, setMostrarNueva] = useState(false)
+  const [mostrarRepetir, setMostrarRepetir] = useState(false)
+  const [logo, setLogo] = useState<File | string | null>(null)
   const [guardando, setGuardando] = useState(false)
-  const { register, getValues, formState, setError, clearErrors } = useForm<BusinessSetupValues>({
+  const { register, getValues, formState, setError, clearErrors, reset } = useForm<BusinessSetupValues>({
     defaultValues: { nombre: '', logo: null },
   })
 
@@ -172,6 +174,23 @@ export function ConfiguracionInicialVentana() {
     root.classList.add(theme)
   }, [theme])
 
+  useEffect(() => {
+    let activo = true
+    void negocioService.get()
+      .then((negocio) => {
+        if (!activo) return
+        reset({ nombre: negocio?.nombre ?? '', logo: null })
+        setLogo(buildAssetUrl(negocio?.logoPath, negocio?.actualizadoEn))
+      })
+      .catch(() => {
+        if (activo) toast.error('No se pudieron cargar los datos del negocio')
+      })
+
+    return () => {
+      activo = false
+    }
+  }, [reset])
+
   const coincide = repetir.trim().length > 0 && nueva.trim() === repetir.trim()
   const contrasenaOmitida = nueva.trim().length === 0 && repetir.trim().length === 0
   const contrasenaValida = contrasenaOmitida || (nueva.trim().length > 0 && coincide)
@@ -192,8 +211,14 @@ export function ConfiguracionInicialVentana() {
 
   const aceptar = async () => {
     if (guardando) return
-    const parsed = businessSchema.safeParse({ nombre: getValues('nombre'), logo })
-    if (!parsed.success) return
+    const parsed = businessSchema.safeParse({
+      nombre: getValues('nombre'),
+      logo: logo instanceof File ? logo : null,
+    })
+    if (!parsed.success) {
+      toast.error(parsed.error.issues[0]?.message ?? 'Revisá los datos de configuración')
+      return
+    }
 
     setGuardando(true)
     try {
@@ -211,14 +236,18 @@ export function ConfiguracionInicialVentana() {
         recargoTarjetaCredito: ajustarNumeroConfiguracion(recargoTarjetaCredito, 0, 0, 100),
       })
 
+      const logoActualizado = logo instanceof File
+        ? {
+            data: await logo.arrayBuffer(),
+            extension: MIME_A_EXTENSION[logo.type] ?? 'png',
+          }
+        : logo === null
+          ? null
+          : undefined
+
       await negocioService.setup({
         nombre: parsed.data.nombre.trim(),
-        logo: logo
-          ? {
-              data: await logo.arrayBuffer(),
-              extension: MIME_A_EXTENSION[logo.type] ?? 'png',
-            }
-          : null,
+        ...(logoActualizado === undefined ? {} : { logo: logoActualizado }),
       })
       const creada = nueva.trim().length === 0 || (await seguridadService.crearContrasena(nueva))
       if (creada || (await seguridadService.tieneContrasena())) {
@@ -292,13 +321,13 @@ export function ConfiguracionInicialVentana() {
       case 1:
         return renderConTitulo(
           'Seguridad opcional',
-          'Podés crear una contraseña ahora o configurarla más adelante desde Ajustes. Si la olvidás, contactá al soporte para restablecer la seguridad de este equipo.',
+          'Protegé reportes y acciones sensibles con una contraseña. Si preferís, podés omitir este paso y configurarla más adelante desde Ajustes.',
           <div className="flex flex-col gap-4">
             <Input
               autoFocus
               id="configuracion-inicial-contrasena"
               label="Nueva contraseña"
-              type={mostrarContrasena ? 'text' : 'password'}
+              type={mostrarNueva ? 'text' : 'password'}
               placeholder="••••••••"
               value={nueva}
               onChange={(e) => setNueva(e.target.value)}
@@ -306,18 +335,18 @@ export function ConfiguracionInicialVentana() {
               rightAction={
                 <button
                   type="button"
-                  onClick={() => setMostrarContrasena((visible) => !visible)}
-                  aria-label={mostrarContrasena ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                  onClick={() => setMostrarNueva((visible) => !visible)}
+                  aria-label={mostrarNueva ? 'Ocultar contraseña' : 'Mostrar contraseña'}
                   className="grid h-9 w-9 cursor-pointer place-items-center rounded-lg text-slate-400 transition-colors hover:text-slate-600 dark:hover:text-slate-200"
                 >
-                  {mostrarContrasena ? <EyeOff size={16} /> : <Eye size={16} />}
+                  {mostrarNueva ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               }
             />
             <Input
               id="configuracion-inicial-repetir"
               label="Repetir contraseña"
-              type={mostrarContrasena ? 'text' : 'password'}
+              type={mostrarRepetir ? 'text' : 'password'}
               placeholder="••••••••"
               value={repetir}
               onChange={(e) => setRepetir(e.target.value)}
@@ -328,11 +357,11 @@ export function ConfiguracionInicialVentana() {
               rightAction={
                 <button
                   type="button"
-                  onClick={() => setMostrarContrasena((visible) => !visible)}
-                  aria-label={mostrarContrasena ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                  onClick={() => setMostrarRepetir((visible) => !visible)}
+                  aria-label={mostrarRepetir ? 'Ocultar contraseña' : 'Mostrar contraseña'}
                   className="grid h-9 w-9 cursor-pointer place-items-center rounded-lg text-slate-400 transition-colors hover:text-slate-600 dark:hover:text-slate-200"
                 >
-                  {mostrarContrasena ? <EyeOff size={16} /> : <Eye size={16} />}
+                  {mostrarRepetir ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               }
             />

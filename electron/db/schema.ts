@@ -17,6 +17,7 @@ export const seguridad = sqliteTable('seguridad', {
   pinHash: text('pin_hash'),
   passwordConfigured: integer('password_configured', { mode: 'boolean' }).notNull().default(false),
   protectionsInitialized: integer('protections_initialized', { mode: 'boolean' }).notNull().default(false),
+  configuracionInicialMostrada: integer('configuracion_inicial_mostrada', { mode: 'boolean' }).notNull().default(false),
   proteccionesJson: text('protecciones_json').notNull().default('{"reportes":false,"cuentasCorrientes":false,"anularVentas":false,"eliminarProductos":false,"eliminarLotes":false,"eliminarCategorias":false,"eliminarMarcas":false}'),
   failedAttempts: integer('failed_attempts').notNull().default(0),
   lockoutLevel: integer('lockout_level').notNull().default(0),

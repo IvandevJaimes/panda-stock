@@ -68,6 +68,8 @@ import {
   updateNegocio,
   verifyPin,
   tieneContrasena,
+  configuracionInicialMostrada,
+  marcarConfiguracionInicialMostrada,
   getRecoveryId,
   resetearContrasenaConClave,
   getProtecciones,
@@ -303,6 +305,7 @@ function createSetupWindow() {
     return;
   }
 
+  marcarConfiguracionInicialMostrada();
   configuracionCompletada = false;
 
   const win = new BrowserWindow({
@@ -351,6 +354,10 @@ function createSetupWindow() {
 function negocioConfigurado(): boolean {
   const nombre = getNegocio()?.nombre;
   return typeof nombre === "string" && nombre.trim().length >= 2;
+}
+
+function debeMostrarConfiguracionInicial(): boolean {
+  return !negocioConfigurado() || (!tieneContrasena() && !configuracionInicialMostrada());
 }
 
 function registerIpcHandlers() {
@@ -681,18 +688,18 @@ app.whenReady().then(() => {
   // Remueve el menú de aplicación global (también en desarrollo).
   Menu.setApplicationMenu(null);
 
-  if (negocioConfigurado()) {
-    createWindow();
-  } else {
+  if (debeMostrarConfiguracionInicial()) {
     createSetupWindow();
+  } else {
+    createWindow();
   }
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      if (negocioConfigurado()) {
-        createWindow();
-      } else {
+      if (debeMostrarConfiguracionInicial()) {
         createSetupWindow();
+      } else {
+        createWindow();
       }
     }
   });
