@@ -7,10 +7,11 @@ import type {
 } from '../../../electron/exportaciones.types'
 import { PESTANAS_REPORTES, etiquetaMovimiento, type PestanaReportes } from './metricasPestana'
 import {
-  agruparMetodos,
+  agruparMetodosHabilitados,
   construirEjeDias,
   construirRanking,
   formatearRangoLegible,
+  type MetodosPagoHabilitadosReporte,
   type RangoFechas,
 } from './reportsQuery'
 
@@ -70,6 +71,10 @@ function numeroOp(valor: number | null): CeldaExcel {
   return valor === null ? texto('—', { align: 'right' }) : numero(redondear(valor))
 }
 
+function porcentajeMetodo(valor: number | null): CeldaExcel {
+  return valor === null ? texto('No aplica: hay reintegros netos', { align: 'right' }) : numero(redondear(valor))
+}
+
 function sinDatos(): FilaExcel {
   return [texto('Sin datos en el período', NOTA)]
 }
@@ -98,6 +103,21 @@ function formatearCierre(fechaISO: string | null): string {
   return `${dia}/${mes}/${anio} · ${hora}:${minuto}`
 }
 
+function formatearDuracion(aperturaISO: string | null, cierreISO: string | null): string {
+  if (aperturaISO === null || cierreISO === null) return '—'
+  const duracion = new Date(cierreISO).getTime() - new Date(aperturaISO).getTime()
+  if (!Number.isFinite(duracion) || duracion < 0) return '—'
+  const minutosTotales = Math.floor(duracion / 60_000)
+  const dias = Math.floor(minutosTotales / 1_440)
+  const horas = Math.floor((minutosTotales % 1_440) / 60)
+  const minutos = minutosTotales % 60
+  const partes: string[] = []
+  if (dias > 0) partes.push(`${dias} ${dias === 1 ? 'día' : 'días'}`)
+  if (horas > 0) partes.push(`${horas} h`)
+  if (minutos > 0 || partes.length === 0) partes.push(`${minutos} min`)
+  return partes.join(' ')
+}
+
 function redondear(valor: number): number {
   return Number(valor.toFixed(2))
 }
@@ -106,6 +126,7 @@ export type ContextoExportacion = {
   pestana: PestanaReportes
   resumen: ReportesSummary
   rango: RangoFechas
+  metodosHabilitados: MetodosPagoHabilitadosReporte
   /** Se pasa afuera para que el test no dependa del reloj. */
   generadoEn?: Date
 }
@@ -129,6 +150,7 @@ export function construirExportacion({
   pestana,
   resumen,
   rango,
+  metodosHabilitados,
   generadoEn = new Date(),
 }: ContextoExportacion): ExportarExcelInput {
   const etiqueta = PESTANAS_REPORTES.find((opcion) => opcion.valor === pestana)?.etiqueta ?? pestana
@@ -140,7 +162,7 @@ export function construirExportacion({
         ? filasPerdidas(resumen)
       : pestana === 'cortes'
         ? filasCortes(resumen)
-        : filasVentas(resumen, rango)
+        : filasVentas(resumen, rango, metodosHabilitados)
 
   const hoja: HojaExcel = {
     nombre: etiqueta,
@@ -153,11 +175,15 @@ export function construirExportacion({
   }
 }
 
-function filasVentas(resumen: ReportesSummary, rango: RangoFechas): FilaExcel[] {
+function filasVentas(
+  resumen: ReportesSummary,
+  rango: RangoFechas,
+  metodosHabilitados: MetodosPagoHabilitadosReporte,
+): FilaExcel[] {
   const ticketPromedio =
-    resumen.cantVentas > 0 ? resumen.totalVentas / resumen.cantVentas : 0
+    resumen.cantVentas > 0 ? resumen.totalVentas / resumen.cantVentas : null
 
-  const metodos = agruparMetodos(resumen.ventasPorMetodo)
+  const metodos = agruparMetodosHabilitados(resumen.ventasPorMetodo, metodosHabilitados)
   const ranking = construirRanking(resumen.productosMasVendidos, resumen.totalVentas)
   const ejeDias = construirEjeDias(resumen.ventasPorDia, rango)
 
@@ -165,9 +191,12 @@ function filasVentas(resumen: ReportesSummary, rango: RangoFechas): FilaExcel[] 
     seccion('Resumen'),
     par('Ingresos cobrados', resumen.totalCobrado),
     par('Ventas', resumen.cantVentas),
-    par('Pérdidas por mermas', resumen.perdidas.plataPerdida),
-    par('Resultado después de mermas', redondear(resumen.totalCobrado - resumen.perdidas.plataPerdida)),
-    par('Ticket promedio', redondear(ticketPromedio)),
+    par('Importe valuado de mermas', resumen.perdidas.plataPerdida),
+    par('Cobros netos de mermas valuadas', redondear(resumen.totalCobrado - resumen.perdidas.plataPerdida)),
+    par('Alcance del saldo', 'No descuenta costo de ventas ni incluye mermas sin costo histórico.'),
+    par('Mermas sin costo histórico', resumen.perdidas.cantidadSinValuar),
+    par('Unidades de merma sin valor', resumen.perdidas.unidadesSinValuar),
+    par('Ticket promedio', ticketPromedio === null ? '—' : redondear(ticketPromedio)),
     vacia(),
 
     seccion('Ingresos cobrados por día'),
@@ -184,12 +213,12 @@ function filasVentas(resumen: ReportesSummary, rango: RangoFechas): FilaExcel[] 
     vacia(),
 
     seccion('Medios de pago'),
-    encabezado('Medio', 'Monto', '% del total'),
+    encabezado('Medio', 'Monto neto', '% de cobros positivos'),
     ...(metodos.length > 0
       ? metodos.map((metodo) => [
           texto(metodo.etiqueta),
           numero(redondear(metodo.monto)),
-          numero(redondear(metodo.porcentaje)),
+          porcentajeMetodo(metodo.porcentaje),
         ])
       : [sinDatos()]),
     vacia(),
@@ -233,30 +262,50 @@ function filasMovimientos(resumen: ReportesSummary): FilaExcel[] {
 
 function filasPerdidas(resumen: ReportesSummary): FilaExcel[] {
   const { perdidas } = resumen
+  const fuenteCosto = (fuente: (typeof perdidas.mermas)[number]['fuenteCosto']): string => {
+    if (fuente === 'lote') return 'Costo histórico del lote'
+    if (fuente === 'referencia') return 'Costo de referencia al registrar'
+    return 'Sin costo histórico'
+  }
 
   return [
     seccion('Resumen'),
     par('Mermas', perdidas.cantidadMermas),
     par('Unidades perdidas', perdidas.unidadesPerdidas),
-    par('Plata perdida', redondear(perdidas.plataPerdida)),
+    par('Importe valuado', redondear(perdidas.plataPerdida)),
+    par('Valuado con costo histórico de lote', redondear(perdidas.plataPorCostoLote)),
+    par('Estimado con costo de referencia', redondear(perdidas.plataPorReferencia)),
+    par('Mermas sin costo histórico', perdidas.cantidadSinValuar),
+    par('Unidades sin costo histórico', perdidas.unidadesSinValuar),
+    par('Mermas sin producto vinculado', perdidas.mermasSinProducto),
     par('Productos afectados', perdidas.porProducto.length),
     vacia(),
 
-    seccion('Mermas por producto'),
-    encabezado('Producto', 'Unidades', 'Pérdida estimada'),
-    ...(perdidas.porProducto.length > 0
+    seccion('Detalle de mermas'),
+    encabezado('Fecha y hora', 'Producto', 'Unidades', 'Lote', 'Costo unitario', 'Base de valoración', 'Pérdida estimada', 'Motivo'),
+    ...(perdidas.mermas.length > 0
       ? [
-          ...perdidas.porProducto.map(
-            (producto): FilaExcel => [
-              texto(producto.nombre),
-              numero(producto.unidades),
-              numero(redondear(producto.perdido)),
+          ...perdidas.mermas.map(
+            (merma): FilaExcel => [
+              texto(formatearCierre(merma.fechaHora)),
+              texto(merma.nombreProducto),
+              numero(Math.abs(merma.cantidad)),
+              texto(merma.loteId === null ? 'Sin lote' : `Lote #${merma.loteId}`),
+              merma.costoUnitario === null ? texto('—', { align: 'right' }) : numero(redondear(merma.costoUnitario)),
+              texto(fuenteCosto(merma.fuenteCosto)),
+              merma.perdidaEstimada === null ? texto('Sin valor', { align: 'right' }) : numero(redondear(merma.perdidaEstimada)),
+              texto(merma.motivo?.trim() || 'Sin motivo registrado'),
             ],
           ),
           [
-            texto('Total', ENCABEZADO),
-            numero(perdidas.unidadesPerdidas, ENCABEZADO),
+            texto('Total conocido', ENCABEZADO),
+            texto(''),
+            numero(perdidas.unidadesPerdidas - perdidas.unidadesSinValuar, ENCABEZADO),
+            texto(''),
+            texto(''),
+            texto(''),
             numero(redondear(perdidas.plataPerdida), ENCABEZADO),
+            texto('No incluye mermas sin costo histórico', NOTA),
           ] as FilaExcel,
         ]
       : [sinDatos()]),
@@ -265,27 +314,32 @@ function filasPerdidas(resumen: ReportesSummary): FilaExcel[] {
 
 function filasCortes(resumen: ReportesSummary): FilaExcel[] {
   const { cortes } = resumen
-  const promedio = cortes.cantidad > 0 ? cortes.diferenciaTotal / cortes.cantidad : 0
+  const sinArqueosComparables = cortes.cortesConDatos === 0
+  const promedio = sinArqueosComparables ? null : cortes.diferenciaTotal / cortes.cortesConDatos
 
   return [
     seccion('Resumen'),
     par('Cortes', cortes.cantidad),
     par('Con descuadre', cortes.conDescuadre),
-    par('Diferencia acumulada', redondear(cortes.diferenciaTotal)),
-    par('Diferencia promedio', redondear(promedio)),
+    par('Sin datos de arqueo', cortes.sinDatosArqueo),
+    par('Arqueos con datos', cortes.cortesConDatos),
+    par('Diferencia acumulada', sinArqueosComparables ? '—' : redondear(cortes.diferenciaTotal)),
+    par('Diferencia promedio', promedio === null ? '—' : redondear(promedio)),
     vacia(),
 
     seccion('Arqueos de caja'),
-    encabezado('Cierre', 'Responsable', 'Inicial', 'Esperado', 'Real', 'Diferencia'),
+    encabezado('Cierre', 'Responsable', 'Esperado', 'Real', 'Diferencia', 'Apertura', 'Duración', 'Nota'),
     ...(cortes.cortes.length > 0
       ? cortes.cortes.map(
           (corte): FilaExcel => [
             texto(formatearCierre(corte.fechaCierre)),
             texto(corte.empleadoNombre),
-            numero(redondear(corte.montoInicial)),
             numeroOp(corte.montoEsperado),
             numeroOp(corte.montoReal),
             numeroOp(corte.diferencia),
+            texto(formatearCierre(corte.fechaApertura)),
+            texto(formatearDuracion(corte.fechaApertura, corte.fechaCierre)),
+            texto(corte.observaciones?.trim() || 'Sin nota registrada'),
           ],
         )
       : [sinDatos()]),

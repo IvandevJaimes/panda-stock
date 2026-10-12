@@ -6,21 +6,28 @@ import { EmptySearch } from '../../components/ui/EmptySearch'
 import { Modal } from '../../components/ui/Modal'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/Table'
 import { cn } from '../../lib/cn'
-import { movimientosService } from '../../services/movimientos.service'
 import { productosService } from '../../services/productos.service'
 import { MOVIMIENTO_CONFIG } from '../inventory/movementVisuals'
 import { SOMBRA_CARD } from './estilos'
 import { ProductoDetalleBasico } from './ProductoDetalleBasico'
 import { BarraFiltrosReporte, PaginacionReporte } from './TablaReporteUI'
 import { formatearMoneda, formatearUnidades } from './reportsQuery'
-import type { MovimientoStock, ProductoConLoteActivo } from '../../../electron/db/types'
+import type { MermaReporte, ProductoConLoteActivo, ResumenPerdidas } from '../../../electron/db/types'
 
 const POR_PAGINA = 30
 
-type PerdidaIndividual = MovimientoStock & {
-  nombreProducto: string
+type PerdidaIndividual = MermaReporte & {
   producto: ProductoConLoteActivo | null
-  perdidaEstimada: number
+}
+
+const FUENTE_COSTO: Record<MermaReporte['fuenteCosto'], string> = {
+  lote: 'Costo histórico del lote',
+  referencia: 'Costo de referencia al registrar',
+  sin_dato: 'Sin costo histórico',
+}
+
+function formatearPerdida(valor: number | null): string {
+  return valor === null ? 'Sin valor' : formatearMoneda(valor)
 }
 
 function formatearMomento(fechaHora: string): string {
@@ -73,7 +80,15 @@ function DetallePerdida({ perdida }: { perdida: PerdidaIndividual }) {
 
       <dl className="grid grid-cols-1 gap-x-6 sm:grid-cols-2">
         <DatoPerdida etiqueta="Lote afectado" valor={perdida.loteId === null ? 'Sin lote asociado' : `Lote #${perdida.loteId}`} />
-        <DatoPerdida etiqueta="Pérdida estimada" valor={formatearMoneda(perdida.perdidaEstimada)} />
+        <DatoPerdida etiqueta="Pérdida estimada" valor={formatearPerdida(perdida.perdidaEstimada)} />
+        <DatoPerdida
+          etiqueta="Base de valoración"
+          valor={FUENTE_COSTO[perdida.fuenteCosto]}
+        />
+        <DatoPerdida
+          etiqueta="Costo unitario"
+          valor={perdida.costoUnitario === null ? '—' : formatearMoneda(perdida.costoUnitario)}
+        />
         <DatoPerdida etiqueta="Stock anterior" valor={perdida.stockAnterior === null ? '—' : formatearUnidades(perdida.stockAnterior)} />
         <DatoPerdida etiqueta="Stock posterior" valor={perdida.stockPosterior === null ? '—' : formatearUnidades(perdida.stockPosterior)} />
         <div className="flex min-w-0 flex-col gap-0.5 border-b border-slate-100 py-2 dark:border-slate-800 sm:col-span-2">
@@ -90,53 +105,41 @@ function DetallePerdida({ perdida }: { perdida: PerdidaIndividual }) {
 }
 
 export function PerdidasPanel({
-  desde,
-  hasta,
+  resumen,
 }: {
-  desde: string | null
-  hasta: string | null
+  resumen: ResumenPerdidas | null
 }) {
-  const [movimientos, setMovimientos] = useState<PerdidaIndividual[] | null>(null)
-  const [error, setError] = useState(false)
-  const [recarga, setRecarga] = useState(0)
+  const [productos, setProductos] = useState<ProductoConLoteActivo[]>([])
+  const [errorProductos, setErrorProductos] = useState(false)
+  const [recargaProductos, setRecargaProductos] = useState(0)
   const [buscar, setBuscar] = useState('')
   const [pagina, setPagina] = useState(1)
   const [seleccionada, setSeleccionada] = useState<PerdidaIndividual | null>(null)
 
   useEffect(() => {
     let vigente = true
-    Promise.all([
-      movimientosService.getAll({ desde: desde ?? undefined, hasta: hasta ?? undefined }),
-      productosService.getAll(),
-    ]).then(([lista, productos]) => {
+    productosService.getAll().then((lista) => {
       if (!vigente) return
-      const productosPorId = new Map(productos.map((producto) => [producto.id, producto]))
-      const filas = lista
-        .filter((movimiento) => movimiento.tipo === 'merma')
-        .map((movimiento): PerdidaIndividual => {
-          const producto = movimiento.productoId === null
-            ? null
-            : productosPorId.get(movimiento.productoId) ?? null
-          return {
-            ...movimiento,
-            producto,
-            nombreProducto: movimiento.productoId === null
-              ? 'Sin producto asociado'
-              : producto?.nombre ?? `Producto #${movimiento.productoId}`,
-            perdidaEstimada: producto
-              ? Math.abs(movimiento.cantidad) * producto.costo
-              : 0,
-          }
-        })
-      setMovimientos(filas)
+      setProductos(lista)
+      setErrorProductos(false)
     }).catch(() => {
       if (!vigente) return
-      setError(true)
-      setMovimientos([])
+      setErrorProductos(true)
     })
 
     return () => { vigente = false }
-  }, [desde, hasta, recarga])
+  }, [recargaProductos])
+
+  const movimientos = useMemo<PerdidaIndividual[] | null>(() => {
+    if (resumen === null) return null
+    const productosPorId = new Map(productos.map((producto) => [producto.id, producto]))
+    return resumen.mermas.map((merma) => ({
+      ...merma,
+      producto: merma.productoId === null
+        ? null
+        : productosPorId.get(merma.productoId) ?? null,
+    }))
+  }, [resumen, productos])
 
   const filtradas = useMemo(() => {
     const consulta = buscar.trim().toLocaleLowerCase('es-AR')
@@ -167,9 +170,8 @@ export function PerdidasPanel({
     }
   }
   const reintentar = () => {
-    setError(false)
-    setMovimientos(null)
-    setRecarga((actual) => actual + 1)
+    setErrorProductos(false)
+    setRecargaProductos((actual) => actual + 1)
   }
 
   return (
@@ -184,10 +186,20 @@ export function PerdidasPanel({
               Historial de mermas
             </h3>
             <p className="mt-0.5 text-[11px] leading-snug text-slate-500 dark:text-slate-400">
-              Cada registro de pérdida del período, ordenado del más reciente al más antiguo.
+              Cada merma aparece por separado. El importe distingue el costo del lote, la referencia histórica y los registros sin costo disponible.
             </p>
           </div>
         </header>
+
+        {errorProductos && (
+          <div className="mx-4 mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 dark:border-amber-900/50 dark:bg-amber-950/20">
+            <p className="flex items-center gap-2 text-xs text-amber-800 dark:text-amber-300">
+              <AlertTriangle size={14} aria-hidden />
+              No se pudieron cargar las imágenes y fichas actuales; los datos históricos de las mermas siguen disponibles.
+            </p>
+            <Button variant="outline" size="sm" onClick={reintentar}>Reintentar</Button>
+          </div>
+        )}
 
         <BarraFiltrosReporte
           buscar={buscar}
@@ -202,14 +214,6 @@ export function PerdidasPanel({
           <div className="flex min-h-40 items-center justify-center gap-2 text-sm text-slate-400 dark:text-slate-500">
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
             Cargando mermas del período…
-          </div>
-        ) : error ? (
-          <div className="flex min-h-40 flex-col items-center justify-center gap-2 px-4 text-center">
-            <AlertTriangle className="h-5 w-5 text-amber-500" aria-hidden />
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              No se pudieron cargar las mermas del período.
-            </p>
-            <Button variant="outline" size="sm" onClick={reintentar}>Reintentar</Button>
           </div>
         ) : filtradas.length === 0 ? movimientos.length === 0 ? (
           <p className="px-4 py-8 text-center text-xs text-slate-500 dark:text-slate-400">
@@ -260,7 +264,10 @@ export function PerdidasPanel({
                         −{formatearUnidades(Math.abs(perdida.cantidad))}
                       </TableCell>
                       <TableCell className="text-right font-display font-bold tabular-nums text-rose-600 dark:text-rose-400">
-                        {formatearMoneda(perdida.perdidaEstimada)}
+                        <span className="block">{formatearPerdida(perdida.perdidaEstimada)}</span>
+                        <span className="block text-[10px] font-medium text-slate-500 dark:text-slate-400">
+                          {FUENTE_COSTO[perdida.fuenteCosto]}
+                        </span>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -294,9 +301,12 @@ export function PerdidasPanel({
                         </p>
                       </div>
                       <span className="shrink-0 font-display text-sm font-bold tabular-nums text-rose-600 dark:text-rose-400">
-                        {formatearMoneda(perdida.perdidaEstimada)}
+                        {formatearPerdida(perdida.perdidaEstimada)}
                       </span>
                     </div>
+                    <p className="mt-1 text-[10px] font-medium text-slate-500 dark:text-slate-400">
+                      {FUENTE_COSTO[perdida.fuenteCosto]}
+                    </p>
                     <div className="mt-1 flex items-center justify-between gap-3">
                       <p className="min-w-0 truncate text-[11px] text-slate-500 dark:text-slate-400">
                         {perdida.motivo?.trim() || 'Sin motivo registrado'}

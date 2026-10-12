@@ -207,6 +207,8 @@ export const movimientosStock = sqliteTable(
     ventaId: integer('venta_id').references(() => ventas.id),
     tipo: text('tipo').$type<TipoMovimientoStock>().notNull(),
     cantidad: real('cantidad').notNull(),
+    costoUnitarioReferencia: real('costo_unitario_referencia'),
+    fuenteCostoMerma: text('fuente_costo_merma').$type<'lote' | 'referencia'>(),
     stockAnterior: real('stock_anterior'),
     stockPosterior: real('stock_posterior'),
     motivo: text('motivo'),

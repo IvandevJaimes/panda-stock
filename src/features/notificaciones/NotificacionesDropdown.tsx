@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Bell, Trash2, X } from 'lucide-react'
+import { Bell, HandCoins, Trash2, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { cn } from '../../lib/cn'
 import { buildAssetUrl } from '../../lib/assets'
@@ -24,22 +24,42 @@ const ESTILOS_CARD: Record<Notificacion['tipo'], string> = {
     'border-amber-200/90 border-l-4 border-l-amber-500 bg-amber-50/70 hover:bg-amber-100/70 hover:border-y-amber-300 hover:border-r-amber-300 hover:border-l-amber-500 dark:border-amber-900/40 dark:border-l-amber-500 dark:bg-amber-950/25 dark:hover:bg-amber-950/40 dark:hover:border-y-amber-800/60 dark:hover:border-r-amber-800/60 dark:hover:border-l-amber-500',
   stock_bajo:
     'border-amber-200/90 border-l-4 border-l-amber-500 bg-amber-50/70 hover:bg-amber-100/70 hover:border-y-amber-300 hover:border-r-amber-300 hover:border-l-amber-500 dark:border-amber-900/40 dark:border-l-amber-500 dark:bg-amber-950/25 dark:hover:bg-amber-950/40 dark:hover:border-y-amber-800/60 dark:hover:border-r-amber-800/60 dark:hover:border-l-amber-500',
+  cuenta_corriente:
+    'border-violet-200/90 border-l-4 border-l-violet-500 bg-violet-50/70 hover:bg-violet-100/70 hover:border-y-violet-300 hover:border-r-violet-300 hover:border-l-violet-500 dark:border-violet-900/40 dark:border-l-violet-500 dark:bg-violet-950/25 dark:hover:bg-violet-950/40 dark:hover:border-y-violet-800/60 dark:hover:border-r-violet-800/60 dark:hover:border-l-violet-500',
 }
 
 const ESTILOS_BORDE_IMG: Record<Notificacion['severidad'], string> = {
   critica: 'border-red-200 dark:border-red-900/60',
   advertencia: 'border-amber-200 dark:border-amber-900/60',
+  cuenta: 'border-violet-200 dark:border-violet-900/60',
 }
 
 const CONFIG_BADGE: Record<
   Notificacion['tipo'],
-  { label: string; variant: 'expired' | 'warning' }
+  { label: string; variant: 'expired' | 'warning' | 'default'; className?: string }
 > = {
   vencido: { label: 'Vencido', variant: 'expired' },
   stock_agotado: { label: 'Sin stock', variant: 'expired' },
   por_vencer: { label: 'Por vencer', variant: 'warning' },
   stock_bajo: { label: 'Stock bajo', variant: 'warning' },
+  cuenta_corriente: {
+    label: 'Cuenta corriente',
+    variant: 'default',
+    className: 'bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300',
+  },
 }
+
+type FiltroNotificacion = 'todas' | 'stock' | Notificacion['tipo']
+
+const FILTROS: { id: FiltroNotificacion; label: string }[] = [
+  { id: 'todas', label: 'Todas' },
+  { id: 'stock', label: 'Stock' },
+  { id: 'stock_bajo', label: 'Stock bajo' },
+  { id: 'stock_agotado', label: 'Sin stock' },
+  { id: 'por_vencer', label: 'Por vencer' },
+  { id: 'vencido', label: 'Vencidos' },
+  { id: 'cuenta_corriente', label: 'Cuentas corrientes' },
+]
 
 const EXIT_MS = 200
 
@@ -76,9 +96,13 @@ function FilaNotificacion({
   }
 
   const enSalida = saliendo || saliendoTodo
-  const imagen =
-    buildAssetUrl(notificacion.imgPath) ??
-    getProductPlaceholder(notificacion.productoId)
+  const esCuentaCorriente = notificacion.tipo === 'cuenta_corriente'
+  const imagen = esCuentaCorriente
+    ? null
+    : buildAssetUrl(notificacion.imgPath) ??
+      (notificacion.productoId !== undefined
+        ? getProductPlaceholder(notificacion.productoId)
+        : null)
   const badge = CONFIG_BADGE[notificacion.tipo]
 
   return (
@@ -99,15 +123,21 @@ function FilaNotificacion({
         enSalida && 'animate-card-exit pointer-events-none',
       )}
     >
-      <img
-        src={imagen}
-        alt=""
-        aria-hidden="true"
-        className={cn(
-          'h-10 w-10 shrink-0 self-center rounded-lg object-cover border bg-white dark:bg-slate-800 shadow-2xs',
-          ESTILOS_BORDE_IMG[notificacion.severidad],
-        )}
-      />
+      {imagen ? (
+        <img
+          src={imagen}
+          alt=""
+          aria-hidden="true"
+          className={cn(
+            'h-10 w-10 shrink-0 self-center rounded-lg object-cover border bg-white dark:bg-slate-800 shadow-2xs',
+            ESTILOS_BORDE_IMG[notificacion.severidad],
+          )}
+        />
+      ) : (
+        <span className="grid h-10 w-10 shrink-0 self-center place-items-center rounded-lg border border-violet-200 bg-violet-100 text-violet-700 shadow-2xs dark:border-violet-900/60 dark:bg-violet-950/60 dark:text-violet-300">
+          <HandCoins size={18} aria-hidden="true" />
+        </span>
+      )}
 
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5 min-w-0">
@@ -116,7 +146,10 @@ function FilaNotificacion({
           </p>
           <Badge
             variant={badge.variant}
-            className="shrink-0 text-[10px] px-1.5 py-0 font-semibold leading-normal"
+            className={cn(
+              'shrink-0 text-[10px] px-1.5 py-0 font-semibold leading-normal',
+              badge.className,
+            )}
           >
             {badge.label}
           </Badge>
@@ -152,10 +185,18 @@ export function NotificacionesDropdown() {
   const [abierto, setAbierto] = useState(false)
   const [animando, setAnimando] = useState(false)
   const [limpiandoTodo, setLimpiandoTodo] = useState(false)
+  const [filtro, setFiltro] = useState<FiltroNotificacion>('todas')
   const timeoutAnimacionRef = useRef<number | null>(null)
   const timerLimpiarRef = useRef<number | null>(null)
 
   const total = notificaciones.length
+  const notificacionesFiltradas = notificaciones.filter((notificacion) => {
+    if (filtro === 'todas') return true
+    if (filtro === 'stock') {
+      return notificacion.tipo === 'stock_bajo' || notificacion.tipo === 'stock_agotado'
+    }
+    return notificacion.tipo === filtro
+  })
   const abreviado = total > 99 ? '99+' : String(total)
 
   const dispararAnimacion = useCallback(() => {
@@ -218,6 +259,10 @@ export function NotificacionesDropdown() {
 
   const abrirProducto = (notificacion: Notificacion) => {
     setAbierto(false)
+    if (notificacion.tipo === 'cuenta_corriente') {
+      navegar(`/accounts?q=${encodeURIComponent(notificacion.producto)}`)
+      return
+    }
     navegar({
       pathname: '/inventory',
       search: `?q=${encodeURIComponent(notificacion.termino)}`,
@@ -286,6 +331,31 @@ export function NotificacionesDropdown() {
           )}
         </div>
 
+        {total > 0 && (
+          <div className="flex shrink-0 flex-wrap gap-1.5 border-b border-slate-100 px-3 py-2 dark:border-slate-800/80">
+            {FILTROS.map((opcion) => {
+              const activo = filtro === opcion.id
+              const cuentaActiva = activo && opcion.id === 'cuenta_corriente'
+              return (
+                <button
+                  key={opcion.id}
+                  type="button"
+                  aria-pressed={activo}
+                  onClick={() => setFiltro(opcion.id)}
+                  className={cn(
+                    'cursor-pointer rounded-full border px-2 py-1 text-[10px] font-semibold transition-colors',
+                    activo && !cuentaActiva && 'border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+                    cuentaActiva && 'border-violet-500/40 bg-violet-500/10 text-violet-700 dark:text-violet-300',
+                    !activo && 'border-slate-200 bg-white text-slate-500 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400 dark:hover:bg-slate-800',
+                  )}
+                >
+                  {opcion.label}
+                </button>
+              )
+            })}
+          </div>
+        )}
+
         {total === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center py-10 px-4 text-center">
             <div className="grid h-12 w-12 place-items-center rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 mb-2.5">
@@ -295,27 +365,33 @@ export function NotificacionesDropdown() {
               Sin notificaciones pendientes
             </p>
             <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
-              El inventario y los vencimientos están al día
+              El inventario y las cuentas están al día
             </p>
           </div>
         ) : (
           <div className="flex-1 min-h-0 flex flex-col gap-2 p-2.5 overflow-y-auto overscroll-contain">
-            {notificaciones.map((notificacion) => (
-              <FilaNotificacion
-                key={notificacion.id}
-                notificacion={notificacion}
-                saliendoTodo={limpiandoTodo}
-                onAbrir={() => abrirProducto(notificacion)}
-                onEliminar={() => eliminar(notificacion.id)}
-              />
-            ))}
+            {notificacionesFiltradas.length === 0 ? (
+              <p className="py-8 text-center text-xs text-slate-400 dark:text-slate-500">
+                No hay notificaciones en este filtro.
+              </p>
+            ) : (
+              notificacionesFiltradas.map((notificacion) => (
+                <FilaNotificacion
+                  key={notificacion.id}
+                  notificacion={notificacion}
+                  saliendoTodo={limpiandoTodo}
+                  onAbrir={() => abrirProducto(notificacion)}
+                  onEliminar={() => eliminar(notificacion.id)}
+                />
+              ))
+            )}
           </div>
         )}
 
         {total > 0 && (
           <div className="shrink-0 flex items-center justify-between border-t border-slate-100 dark:border-slate-800/80 px-3.5 py-2 bg-slate-50/70 dark:bg-slate-900/50">
             <span className="text-[11px] text-slate-400 dark:text-slate-500">
-              Clic en una alerta para ver en Inventario
+              Clic en una alerta para abrir su sección
             </span>
             <button
               type="button"

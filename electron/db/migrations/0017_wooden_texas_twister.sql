@@ -1,0 +1,1 @@
+ALTER TABLE `movimientos_stock` ADD `fuente_costo_merma` text;

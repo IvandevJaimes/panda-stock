@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { ArrowRight } from 'lucide-react'
 import { cn } from '../../lib/cn'
 import { SOMBRA_CARD } from './estilos'
 
@@ -9,6 +10,7 @@ type ReporteKpiCardProps = {
   value: string | number
   valueClassName?: string
   subtitle: string
+  action?: { label: string; onClick: () => void }
   className?: string
 }
 
@@ -19,6 +21,7 @@ export function ReporteKpiCard({
   value,
   valueClassName,
   subtitle,
+  action,
   className,
 }: ReporteKpiCardProps) {
   return (
@@ -45,6 +48,16 @@ export function ReporteKpiCard({
         <p className="mt-1 text-[11px] leading-snug text-slate-500 dark:text-slate-400">
           {subtitle}
         </p>
+        {action && (
+          <button
+            type="button"
+            onClick={action.onClick}
+            className="mt-2 inline-flex cursor-pointer items-center gap-1 text-xs font-semibold text-emerald-700 transition-colors hover:text-emerald-800 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 dark:text-emerald-400 dark:hover:text-emerald-300 dark:focus-visible:ring-offset-[#111827]"
+          >
+            {action.label}
+            <ArrowRight size={13} aria-hidden="true" />
+          </button>
+        )}
       </div>
     </article>
   )

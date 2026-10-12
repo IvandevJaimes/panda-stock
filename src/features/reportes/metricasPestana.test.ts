@@ -14,8 +14,19 @@ function resumenVacio(): ReportesSummary {
     cantVentas: 0,
     caja: null,
     movimientos: { cantidad: 0, unidades: 0, entradas: 0, salidas: 0, porTipo: [] },
-    perdidas: { cantidadMermas: 0, unidadesPerdidas: 0, plataPerdida: 0, porProducto: [] },
-    cortes: { cantidad: 0, diferenciaTotal: 0, conDescuadre: 0, cortes: [] },
+    perdidas: {
+      cantidadMermas: 0,
+      unidadesPerdidas: 0,
+      cantidadSinValuar: 0,
+      unidadesSinValuar: 0,
+      mermasSinProducto: 0,
+      plataPorCostoLote: 0,
+      plataPorReferencia: 0,
+      plataPerdida: 0,
+      mermas: [],
+      porProducto: [],
+    },
+    cortes: { cantidad: 0, cortesConDatos: 0, sinDatosArqueo: 0, diferenciaTotal: 0, conDescuadre: 0, cortes: [] },
     ventasPorMetodo: [],
     productosMasVendidos: [],
     ventasPorDia: [],
@@ -41,8 +52,19 @@ const COMPLETO: ReportesSummary = {
       { tipo: 'merma', cantidad: 2, unidades: 13 },
     ],
   },
-  perdidas: { cantidadMermas: 2, unidadesPerdidas: 13, plataPerdida: 3400, porProducto: [] },
-  cortes: { cantidad: 7, diferenciaTotal: -125, conDescuadre: 3, cortes: [] },
+  perdidas: {
+    cantidadMermas: 2,
+    unidadesPerdidas: 13,
+    cantidadSinValuar: 0,
+    unidadesSinValuar: 0,
+    mermasSinProducto: 0,
+    plataPorCostoLote: 3400,
+    plataPorReferencia: 0,
+    plataPerdida: 3400,
+    mermas: [],
+    porProducto: [],
+  },
+  cortes: { cantidad: 7, cortesConDatos: 6, sinDatosArqueo: 1, diferenciaTotal: -125, conDescuadre: 3, cortes: [] },
 }
 
 describe('PESTANAS_REPORTES', () => {
@@ -86,26 +108,28 @@ describe('metricasDePestana', () => {
     }
   })
 
-  it('ventas: ingresos, resultado tras mermas, pérdidas y ticket promedio', () => {
+  it('ventas: ingresos, saldo neto de mermas, valoración y ticket promedio', () => {
     const [ventasNetas, resultado, perdidas, ticket] = metricasDePestana('ventas', COMPLETO)
 
     expect(ventasNetas?.titulo).toBe('Ingresos cobrados')
     expect(ventasNetas?.valor).toBe('$20000.00')
     expect(ventasNetas?.subtitulo).toContain('abonos recibidos')
-    expect(resultado?.titulo).toBe('Resultado después de mermas')
+    expect(resultado?.titulo).toBe('Cobros netos de mermas')
     expect(resultado?.valor).toBe('$16600.00')
-    expect(resultado?.subtitulo).toBe('Ganaste en el período')
+    expect(resultado?.subtitulo).toContain('Saldo positivo')
+    expect(resultado?.subtitulo).toContain('no descuenta costo de ventas')
     expect(resultado?.tono).toBe('emerald')
-    expect(perdidas?.titulo).toBe('Pérdidas por mermas')
+    expect(perdidas?.titulo).toBe('Mermas valuadas')
     expect(perdidas?.valor).toBe('$3400.00')
     expect(ticket?.titulo).toBe('Ticket promedio')
     expect(ticket?.valor).toBe('$500.00')
   })
 
-  it('ventas: ticket promedio es cero sin ventas, no NaN', () => {
+  it('ventas: no inventa un ticket promedio sin ventas', () => {
     const ticket = metricasDePestana('ventas', { ...COMPLETO, cantVentas: 0, totalVentas: 0 })[3]
 
-    expect(ticket?.valor).toBe('$0.00')
+    expect(ticket?.valor).toBe('—')
+    expect(ticket?.subtitulo).toBe('Sin ventas completadas en el período')
   })
 
   it('ventas: mantiene clara la semántica del ingreso cobrado', () => {
@@ -147,33 +171,78 @@ describe('metricasDePestana', () => {
     expect(plata?.tono).toBe('emerald')
   })
 
+  it('perdidas: avisa cuando faltan costos históricos y marca el importe como parcial', () => {
+    const resumen = {
+      ...COMPLETO,
+      perdidas: {
+        ...COMPLETO.perdidas,
+        cantidadSinValuar: 1,
+        unidadesSinValuar: 3,
+      },
+    }
+    const metricas = metricasDePestana('ventas', resumen)
+
+    expect(metricas[1]?.subtitulo).toContain('1 merma sin costo histórico')
+    expect(metricas[1]?.tono).toBe('amber')
+    expect(metricas[2]?.subtitulo).toContain('3 unidades sin valor')
+    expect(metricas[2]?.tono).toBe('amber')
+  })
+
   it('cortes: avisa cuántos descuadran', () => {
     const [cantidad, descuadres, diferencia, promedio] = metricasDePestana('cortes', COMPLETO)
 
     expect(cantidad?.valor).toBe(7)
     expect(cantidad?.subtitulo).toBe('Turnos cerrados')
     expect(descuadres?.valor).toBe(3)
-    expect(descuadres?.subtitulo).toBe('Cajas que no cerraron exactas')
+    expect(descuadres?.subtitulo).toContain('3 con diferencia')
+    expect(descuadres?.subtitulo).toContain('1 sin arqueo')
     expect(diferencia?.valor).toBe('$-125.00')
-    expect(promedio?.subtitulo).toBe('Por corte')
+    expect(promedio?.subtitulo).toBe('Por arqueo · 6 con datos de 7')
   })
 
   it('cortes: todos cuadrados se informa distinto', () => {
     const descuadres = metricasDePestana('cortes', {
       ...COMPLETO,
-      cortes: { cantidad: 4, diferenciaTotal: 0, conDescuadre: 0, cortes: [] },
+      cortes: { cantidad: 4, cortesConDatos: 4, sinDatosArqueo: 0, diferenciaTotal: 0, conDescuadre: 0, cortes: [] },
     })[1]
 
-    expect(descuadres?.subtitulo).toBe('Todos cuadrados')
+    expect(descuadres?.subtitulo).toBe('Todos los arqueos cerraron exactos')
     expect(descuadres?.tono).toBe('emerald')
   })
 
+  it('cortes: no informa todos cuadrados cuando hay cierres sin arqueo', () => {
+    const descuadres = metricasDePestana('cortes', {
+      ...COMPLETO,
+      cortes: { cantidad: 4, cortesConDatos: 3, sinDatosArqueo: 1, diferenciaTotal: 0, conDescuadre: 0, cortes: [] },
+    })[1]
+
+    expect(descuadres?.subtitulo).toBe('1 sin datos de arqueo')
+    expect(descuadres?.tono).toBe('amber')
+  })
+
+  it('cortes: no muestra una diferencia cero si ningún corte tiene arqueo', () => {
+    const metricas = metricasDePestana('cortes', {
+      ...COMPLETO,
+      cortes: { cantidad: 3, cortesConDatos: 0, sinDatosArqueo: 3, diferenciaTotal: 0, conDescuadre: 0, cortes: [] },
+    })
+
+    expect(metricas[2]?.valor).toBe('—')
+    expect(metricas[2]?.subtitulo).toBe('Sin datos de arqueo para calcularla')
+    expect(metricas[3]?.valor).toBe('—')
+  })
+
   it('cortes: diferencia negativa en rojo, positiva en verde', () => {
-    expect(metricasDePestana('cortes', COMPLETO)[2]?.tono).toBe('rose')
+    const negativoCompleto = metricasDePestana('cortes', {
+      ...COMPLETO,
+      cortes: { cantidad: 6, cortesConDatos: 6, sinDatosArqueo: 0, diferenciaTotal: -125, conDescuadre: 3, cortes: [] },
+    })
+    expect(negativoCompleto[2]?.tono).toBe('rose')
+
+    expect(metricasDePestana('cortes', COMPLETO)[2]?.tono).toBe('amber')
 
     const positiva = metricasDePestana('cortes', {
       ...COMPLETO,
-      cortes: { cantidad: 4, diferenciaTotal: 90, conDescuadre: 0, cortes: [] },
+      cortes: { cantidad: 4, cortesConDatos: 4, sinDatosArqueo: 0, diferenciaTotal: 90, conDescuadre: 0, cortes: [] },
     })
     expect(positiva[2]?.tono).toBe('emerald')
     expect(positiva[3]?.tono).toBe('emerald')
@@ -213,13 +282,13 @@ describe('filasMovimientos', () => {
   it('la suma de unidades del desglose es la métrica "Unidades movidas"', () => {
     const unidades = filasMovimientos(COMPLETO).reduce((acc, fila) => acc + fila.unidades, 0)
 
-    expect(String(unidades)).toBe(String(metricasDePestana('movimientos', COMPLETO)[1]?.valor))
+    expect(unidades).toBe(COMPLETO.movimientos.unidades)
   })
 
   it('la suma de movimientos del desglose es la métrica "Movimientos"', () => {
     const cantidad = filasMovimientos(COMPLETO).reduce((acc, fila) => acc + fila.cantidad, 0)
 
-    expect(cantidad).toBe(metricasDePestana('movimientos', COMPLETO)[0]?.valor)
+    expect(cantidad).toBe(metricasDePestana('movimientos', COMPLETO)[1]?.valor)
   })
 
   it('con resumen null devuelve lista vacía', () => {

@@ -62,12 +62,16 @@ export function MetodosPagoChart({ pagosPorMetodo }: MetodosPagoChartProps) {
     }),
     [pagosPorMetodo, tarjetaHabilitada, transferenciaHabilitada, qrHabilitado, cuentaCorrienteHabilitada],
   )
-  const total = filas.reduce((acc, fila) => acc + fila.monto, 0)
+  const filasPositivas = filas.filter((fila) => fila.monto > 0)
+  const totalPositivo = filasPositivas.reduce((acc, fila) => acc + fila.monto, 0)
+  const hayReintegrosNetos = filas.some((fila) => fila.monto < 0)
 
   return (
     <ChartCard
       title="Medios de pago"
-      description="Distribución de cobros registrados con los métodos habilitados."
+      description={hayReintegrosNetos
+        ? 'Hay reintegros netos; se omite la distribución porcentual para no mostrar una composición parcial.'
+        : 'Distribución de los cobros registrados con los métodos habilitados.'}
       icon={<CreditCard size={15} />}
       className={SOMBRA_CARD}
       contenidoClassName="overflow-visible"
@@ -114,39 +118,52 @@ export function MetodosPagoChart({ pagosPorMetodo }: MetodosPagoChartProps) {
                             </p>
                           </div>
                           <span className="shrink-0 rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold tabular-nums text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                            {punto.porcentaje.toFixed(1)}%
+                            {punto.porcentaje?.toFixed(1) ?? '—'}%
                           </span>
                         </div>
                       </div>
                     )
                   }}
                 />
-                <Pie
-                  data={filas}
-                  dataKey="monto"
-                  nameKey="etiqueta"
-                  innerRadius="55%"
-                  outerRadius="82%"
-                  paddingAngle={2}
-                  stroke={isDark ? '#111827' : '#ffffff'}
-                  strokeWidth={2}
-                  isAnimationActive={false}
-                >
-                  {filas.map((fila) => (
-                    <Cell key={fila.metodo} fill={COLORES[fila.metodo]} />
-                  ))}
-                </Pie>
+                {!hayReintegrosNetos && (
+                  <Pie
+                    data={filasPositivas}
+                    dataKey="monto"
+                    nameKey="etiqueta"
+                    innerRadius="55%"
+                    outerRadius="82%"
+                    paddingAngle={2}
+                    stroke={isDark ? '#111827' : '#ffffff'}
+                    strokeWidth={2}
+                    isAnimationActive={false}
+                  >
+                    {filasPositivas.map((fila) => (
+                      <Cell key={fila.metodo} fill={COLORES[fila.metodo]} />
+                    ))}
+                  </Pie>
+                )}
               </PieChart>
             </ResponsiveContainer>
             <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-[9px] font-medium text-slate-400 dark:text-slate-500">Activos</span>
+              <span className="text-center text-[9px] font-medium leading-tight text-slate-400 dark:text-slate-500">
+                {hayReintegrosNetos
+                  ? 'Neto con reintegros'
+                  : filasPositivas.length > 0 ? 'Cobros positivos' : 'Sin cobros positivos'}
+              </span>
               <span className="max-w-full truncate font-display text-xs font-bold tabular-nums text-slate-900 dark:text-white">
-                {formatearMonedaCompacta(total)}
+                {formatearMonedaCompacta(hayReintegrosNetos
+                  ? filas.reduce((total, fila) => total + fila.monto, 0)
+                  : totalPositivo)}
               </span>
             </div>
           </div>
 
           <ul className="min-w-0 flex-1 space-y-1.5">
+            {hayReintegrosNetos && (
+              <li className="pb-1 text-[10px] leading-snug text-amber-700 dark:text-amber-300">
+                Los porcentajes y el gráfico se ocultan mientras haya un medio con reintegro neto. Los importes listados conservan su signo.
+              </li>
+            )}
             {filas.map((fila) => (
               <li key={fila.metodo}>
                 <div className="flex items-center justify-between gap-3 text-xs">
@@ -157,11 +174,18 @@ export function MetodosPagoChart({ pagosPorMetodo }: MetodosPagoChartProps) {
                     />
                     <span className="truncate">{fila.etiqueta}</span>
                   </span>
-                  <span className="shrink-0 tabular-nums text-slate-500 dark:text-slate-400">
-                    {fila.porcentaje.toFixed(1)}%
+                  <span className="shrink-0 text-right tabular-nums text-slate-500 dark:text-slate-400">
+                    <span className="block">{formatearMoneda(fila.monto)}</span>
+                    <span className="block text-[10px]">
+                      {fila.porcentaje === null
+                        ? fila.monto < 0 ? 'Reintegro neto' : 'Distribución omitida'
+                        : `${fila.porcentaje.toFixed(1)}%`}
+                    </span>
                   </span>
                 </div>
-                <ProgressBar value={fila.porcentaje} className="mt-1 h-1" />
+                {fila.porcentaje !== null && (
+                  <ProgressBar value={fila.porcentaje} className="mt-1 h-1" />
+                )}
               </li>
             ))}
 

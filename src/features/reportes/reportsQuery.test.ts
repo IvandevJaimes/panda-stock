@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   agruparMetodos,
+  agruparMetodosHabilitados,
   construirEjeDias,
   construirRanking,
   calcularTotales,
@@ -245,6 +246,33 @@ describe('agruparMetodos', () => {
     expect(agruparMetodos([{ metodo: 'efectivo', monto: 0 }])[0].porcentaje).toBe(0)
   })
 
+  it('excluye los medios desactivados antes de calcular la distribución visible', () => {
+    const filas = agruparMetodosHabilitados([
+      { metodo: 'efectivo', monto: 80 },
+      { metodo: 'transferencia', monto: 900 },
+      { metodo: 'qr', monto: 20 },
+      { metodo: 'debito', monto: 500 },
+    ], {
+      tarjetaHabilitada: false,
+      transferenciaHabilitada: false,
+      qrHabilitado: true,
+      cuentaCorrienteHabilitada: true,
+    })
+
+    expect(filas.map((fila) => fila.metodo)).toEqual(['efectivo', 'qr'])
+    expect(filas.map((fila) => fila.porcentaje)).toEqual([80, 20])
+  })
+
+  it('omite todos los porcentajes cuando un medio queda en reintegro neto', () => {
+    const filas = agruparMetodos([
+      { metodo: 'efectivo', monto: -100 },
+      { metodo: 'transferencia', monto: 50 },
+    ])
+
+    expect(filas.find((fila) => fila.metodo === 'efectivo')?.porcentaje).toBeNull()
+    expect(filas.find((fila) => fila.metodo === 'transferencia')?.porcentaje).toBeNull()
+  })
+
   it('omite los medios que no aparecen', () => {
     const filas = agruparMetodos([{ metodo: 'efectivo', monto: 10 }])
     expect(filas.map((f) => f.etiqueta)).toEqual(['Efectivo'])
@@ -293,13 +321,12 @@ describe('calcularTotales', () => {
     expect(totales.ticketPromedio).toBe(250)
   })
 
-  it('no divide por cero sin ventas', () => {
+  it('no inventa un ticket promedio si no hay ventas', () => {
     const totales = calcularTotales({
       totalVentas: 0,
       cantVentas: 0,
       ventasPorDia: [],
     })
-    expect(totales.ticketPromedio).toBe(0)
-    expect(Number.isNaN(totales.ticketPromedio)).toBe(false)
+    expect(totales.ticketPromedio).toBeNull()
   })
 })

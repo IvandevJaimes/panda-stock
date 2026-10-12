@@ -1,4 +1,7 @@
-import type { ProductoConLoteActivo } from '../../../electron/db/types'
+import type {
+  ClienteConSaldo,
+  ProductoConLoteActivo,
+} from '../../../electron/db/types'
 import type { StockAlertHistoryEntry } from '../../stores/stockAlertHistoryStore'
 import { evaluateExpiry } from '../../lib/dateUtils'
 import { DIAS_POR_VENCER } from '../pos/posQuery'
@@ -8,15 +11,17 @@ export type TipoNotificacion =
   | 'por_vencer'
   | 'stock_agotado'
   | 'stock_bajo'
+  | 'cuenta_corriente'
 
-export type SeveridadNotificacion = 'critica' | 'advertencia'
+export type SeveridadNotificacion = 'critica' | 'advertencia' | 'cuenta'
 
 export interface Notificacion {
-  /** `${tipo}:${productoId}`: un producto puede tener varias a la vez. */
+  /** Identifica la condición de stock/vencimiento o la revisión de deuda. */
   id: string
   tipo: TipoNotificacion
   severidad: SeveridadNotificacion
-  productoId: number
+  productoId?: number
+  clienteId?: number
   producto: string
   /** Foto del producto para el thumbnail del desplegable. */
   imgPath: string | null
@@ -29,7 +34,8 @@ export interface Notificacion {
    * Stock al momento de generar la alerta. El store lo guarda cuando el usuario
    * cierra la notificación: mientras el stock no baje de ese valor, no vuelve.
    */
-  stockActual: number
+  stockActual?: number
+  saldoActual?: number
 }
 
 /** Críticas primero; dentro de cada severidad, vencimientos antes que stock. */
@@ -38,6 +44,7 @@ const PRIORIDAD: Record<TipoNotificacion, number> = {
   stock_agotado: 1,
   por_vencer: 2,
   stock_bajo: 3,
+  cuenta_corriente: 4,
 }
 
 const SEVERIDAD: Record<TipoNotificacion, SeveridadNotificacion> = {
@@ -45,6 +52,7 @@ const SEVERIDAD: Record<TipoNotificacion, SeveridadNotificacion> = {
   stock_agotado: 'critica',
   por_vencer: 'advertencia',
   stock_bajo: 'advertencia',
+  cuenta_corriente: 'cuenta',
 }
 
 /**
@@ -167,6 +175,25 @@ export function deriveNotificacionesVencimiento(
   return deriveNotificaciones(productos).filter(
     (notificacion) => notificacion.tipo === 'vencido' || notificacion.tipo === 'por_vencer',
   )
+}
+
+export function deriveNotificacionesCuentaCorriente(
+  clientes: ClienteConSaldo[],
+): Notificacion[] {
+  return clientes
+    .filter((cliente) => cliente.saldo > 0)
+    .map((cliente) => ({
+      id: `cuenta_corriente:${cliente.id}`,
+      tipo: 'cuenta_corriente',
+      severidad: SEVERIDAD.cuenta_corriente,
+      clienteId: cliente.id,
+      producto: cliente.nombre,
+      imgPath: null,
+      termino: cliente.nombre,
+      titulo: 'Deuda pendiente',
+      detalle: `Saldo pendiente $${cliente.saldo.toFixed(2)}`,
+      saldoActual: cliente.saldo,
+    }))
 }
 
 export function idsDe(notificaciones: Notificacion[]): string[] {

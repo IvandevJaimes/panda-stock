@@ -33,6 +33,7 @@ import { PeriodNav } from '../../components/ui/periodNav/PeriodNav'
 import { cn } from '../../lib/cn'
 import { productosService } from '../../services/productos.service'
 import { reportesService } from '../../services/reportes.service'
+import { useSettingsStore } from '../../stores/settings.store'
 import { HistorialVentas } from './HistorialVentas'
 import { MetodosPagoChart } from './MetodosPagoChart'
 import { MetodosPagoResumen } from './MetodosPagoResumen'
@@ -129,8 +130,11 @@ function ContenidoReportes() {
   const [periodo, setPeriodo] = useState<PeriodoReporte>('month')
   const [cursor, setCursor] = useState(() => new Date())
   const [resumen, setResumen] = useState<ReportesSummary | null>(null)
-  const [valorInventario, setValorInventario] = useState<number | null>(null)
-  const [inventarioDisponible, setInventarioDisponible] = useState(true)
+  const [inventarioCargado, setInventarioCargado] = useState<{
+    recarga: number
+    valor: number | null
+    disponible: boolean
+  } | null>(null)
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [recarga, setRecarga] = useState(0)
@@ -204,6 +208,7 @@ function ContenidoReportes() {
 
   useEffect(() => {
     let vigente = true
+
     productosService.getAll()
       .then((productos) => {
         if (!vigente) return
@@ -211,16 +216,20 @@ function ContenidoReportes() {
           (total, producto) => total + producto.stockActual * producto.costo,
           0,
         )
-        setValorInventario(Math.round(valor * 100) / 100)
+        setInventarioCargado({
+          recarga,
+          valor: Math.round(valor * 100) / 100,
+          disponible: true,
+        })
       })
       .catch(() => {
-        if (vigente) setInventarioDisponible(false)
+        if (vigente) setInventarioCargado({ recarga, valor: null, disponible: false })
       })
 
     return () => {
       vigente = false
     }
-  }, [])
+  }, [recarga])
 
   const ranking = useMemo(
     () => construirRanking(resumen?.productosMasVendidos ?? [], resumen?.totalVentas ?? 0),
@@ -234,10 +243,18 @@ function ContenidoReportes() {
     () => construirEjeDias(resumen?.ventasPorDia ?? [], rango),
     [resumen, rango],
   )
+  const inventarioActual = inventarioCargado?.recarga === recarga
+    ? inventarioCargado
+    : null
 
   const metricas = useMemo(
-    () => metricasDePestana(pestana, resumen, valorInventario, inventarioDisponible),
-    [pestana, resumen, valorInventario, inventarioDisponible],
+    () => metricasDePestana(
+      pestana,
+      resumen,
+      inventarioActual?.valor ?? null,
+      inventarioActual?.disponible ?? true,
+    ),
+    [pestana, resumen, inventarioActual],
   )
   const periodoSinDatos = resumen !== null
     && resumen.cantVentas === 0
@@ -316,6 +333,9 @@ function ContenidoReportes() {
                   value={metrica.valor}
                   valueClassName={metrica.valorClassName ?? VALOR_TONO[metrica.tono]}
                   subtitle={metrica.subtitulo}
+                  action={pestana === 'ventas' && metrica.titulo === 'Mermas valuadas'
+                    ? { label: 'Ver pérdidas', onClick: () => setPestana('perdidas') }
+                    : undefined}
                   className={cn(
                     SOMBRA_CARD,
                     FONDO_TONO[metrica.tono],
@@ -330,7 +350,10 @@ function ContenidoReportes() {
           {pestana === 'ventas' && (
             <p className={cn(CLASE_NOTA, '-mt-1')}>
               <Info size={15} className="mt-0.5 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
-              <span>El resultado descuenta las pérdidas estimadas por mermas. Las ventas netas ya descuentan las devoluciones.</span>
+              <span>
+                El saldo resta las mermas con costo histórico disponible y las ventas netas descuentan devoluciones.
+                No descuenta el costo de ventas; las mermas sin costo histórico quedan fuera del importe.
+              </span>
             </p>
           )}
 
@@ -354,7 +377,12 @@ function ContenidoReportes() {
               </div>
 
               <div className="animate-entry-up stagger-4">
-                <HistorialVentas key={`${rango.desde}|${rango.hasta}`} desde={rango.desde} hasta={rango.hasta} />
+                <HistorialVentas
+                  key={`${rango.desde}|${rango.hasta}`}
+                  desde={rango.desde}
+                  hasta={rango.hasta}
+                  onVentaAnulada={recargar}
+                />
               </div>
 
               <p className={cn(CLASE_NOTA, 'mx-auto max-w-2xl animate-entry-up stagger-4')}>
@@ -380,8 +408,7 @@ function ContenidoReportes() {
             <div className="animate-entry-up stagger-1">
               <PerdidasPanel
                 key={`${rango.desde}|${rango.hasta}`}
-                desde={rango.desde}
-                hasta={rango.hasta}
+                resumen={resumen?.perdidas ?? null}
               />
             </div>
           )}
@@ -459,10 +486,17 @@ const BotonExportarReporte = memo(function BotonExportarReporte({
     exportandoRef.current = true
     setExportando(true)
     try {
+      const ajustesPago = useSettingsStore.getState()
       const input = construirExportacion({
         pestana: actual.pestana,
         resumen: actual.resumen,
         rango: actual.rango,
+        metodosHabilitados: {
+          tarjetaHabilitada: ajustesPago.tarjetaHabilitada,
+          transferenciaHabilitada: ajustesPago.transferenciaHabilitada,
+          qrHabilitado: ajustesPago.qrHabilitado,
+          cuentaCorrienteHabilitada: ajustesPago.cuentaCorrienteHabilitada,
+        },
       })
       const ruta = await reportesService.exportarExcel({
         ...input,

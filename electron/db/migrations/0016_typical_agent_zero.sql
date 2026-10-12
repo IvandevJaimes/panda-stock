@@ -1,0 +1,1 @@
+ALTER TABLE `movimientos_stock` ADD `costo_unitario_referencia` real;

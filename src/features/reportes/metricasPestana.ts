@@ -57,6 +57,8 @@ export function metricasDePestana(
   const cantVentas = resumen?.cantVentas ?? 0
   const plataPerdida = resumen?.perdidas.plataPerdida ?? 0
   const resultadoPeriodo = Math.round((totalCobrado - plataPerdida) * 100) / 100
+  const unidadesSinValuar = resumen?.perdidas.unidadesSinValuar ?? 0
+  const cantidadSinValuar = resumen?.perdidas.cantidadSinValuar ?? 0
 
   const movimientos = resumen?.movimientos
   const perdidas = resumen?.perdidas
@@ -121,19 +123,23 @@ export function metricasDePestana(
       {
         titulo: 'Unidades perdidas',
         valor: formatearUnidades(unidadesPerdidas),
-        subtitulo: 'Mercadería descartada',
-        tono: mermas > 0 ? 'rose' : 'emerald',
+        subtitulo: unidadesSinValuar > 0
+          ? `${formatearUnidades(unidadesSinValuar)} sin costo histórico`
+          : 'Mercadería descartada',
+        tono: unidadesSinValuar > 0 ? 'amber' : mermas > 0 ? 'rose' : 'emerald',
       },
       {
-        titulo: 'Plata perdida',
+        titulo: 'Mermas valuadas',
         valor: formatearMoneda(perdidas?.plataPerdida ?? 0),
-        subtitulo: 'Estimación de las mermas',
-        tono: mermas > 0 ? 'rose' : 'emerald',
+        subtitulo: `${formatearMoneda(perdidas?.plataPorCostoLote ?? 0)} costo de lote · ${formatearMoneda(perdidas?.plataPorReferencia ?? 0)} referencia`,
+        tono: cantidadSinValuar > 0 ? 'amber' : mermas > 0 ? 'rose' : 'emerald',
       },
       {
         titulo: 'Productos afectados',
         valor: afectados,
-        subtitulo: afectados === 1 ? 'producto' : 'productos',
+        subtitulo: perdidas?.mermasSinProducto
+          ? `${perdidas.mermasSinProducto} ${perdidas.mermasSinProducto === 1 ? 'merma sin producto vinculado' : 'mermas sin producto vinculado'}`
+          : afectados === 1 ? 'producto' : 'productos',
         tono: 'amber',
       },
     ]
@@ -143,6 +149,10 @@ export function metricasDePestana(
     const diferencia = cortes?.diferenciaTotal ?? 0
     const descuadres = cortes?.conDescuadre ?? 0
     const cantidad = cortes?.cantidad ?? 0
+    const sinDatos = cortes?.sinDatosArqueo ?? 0
+    const conDatos = cortes?.cortesConDatos ?? 0
+    const sinCortes = cantidad === 0
+    const sinArqueosComparables = conDatos === 0
 
     return [
       {
@@ -154,25 +164,36 @@ export function metricasDePestana(
       {
         titulo: 'Con descuadre',
         valor: descuadres,
-        subtitulo: descuadres === 0 ? 'Todos cuadrados' : 'Cajas que no cerraron exactas',
-        tono: descuadres > 0 ? 'amber' : 'emerald',
+        subtitulo: descuadres > 0
+          ? `${descuadres} con diferencia · ${sinDatos} sin arqueo`
+          : sinCortes
+            ? 'Sin cortes en el período'
+          : sinDatos > 0
+            ? `${sinDatos} sin datos de arqueo`
+            : 'Todos los arqueos cerraron exactos',
+        tono: descuadres > 0 || sinDatos > 0 ? 'amber' : sinCortes ? 'violet' : 'emerald',
       },
       {
         titulo: 'Diferencia acumulada',
-        valor: formatearMoneda(diferencia),
-        subtitulo: 'Esperado contra real',
-        tono: diferencia < 0 ? 'rose' : 'emerald',
+        valor: sinArqueosComparables ? '—' : formatearMoneda(diferencia),
+        subtitulo: sinArqueosComparables
+          ? sinCortes ? 'Sin cortes cerrados en el período' : 'Sin datos de arqueo para calcularla'
+          : `Suma de ${conDatos} arqueos con datos`,
+        tono: sinDatos > 0 ? 'amber' : sinCortes ? 'violet' : diferencia < 0 ? 'rose' : 'emerald',
       },
       {
         titulo: 'Diferencia promedio',
-        valor: formatearMoneda(cantidad > 0 ? diferencia / cantidad : 0),
-        subtitulo: 'Por corte',
-        tono: diferencia < 0 ? 'rose' : 'emerald',
+        valor: sinArqueosComparables ? '—' : formatearMoneda(diferencia / conDatos),
+        subtitulo: sinArqueosComparables
+          ? sinCortes ? 'Sin cortes cerrados en el período' : 'Sin arqueos con datos'
+          : `Por arqueo · ${conDatos} con datos de ${cantidad}`,
+        tono: sinDatos > 0 ? 'amber' : sinCortes ? 'violet' : diferencia < 0 ? 'rose' : 'emerald',
       },
     ]
   }
 
-  const ticketPromedio = cantVentas > 0 ? totalVentas / cantVentas : 0
+  const ticketPromedio = cantVentas > 0 ? totalVentas / cantVentas : null
+  const resultadoIncompleto = cantidadSinValuar > 0
   const resultadoEsPositivo = resultadoPeriodo > 0
   const resultadoEsNegativo = resultadoPeriodo < 0
 
@@ -184,30 +205,42 @@ export function metricasDePestana(
       tono: 'emerald',
     },
     {
-      titulo: 'Resultado después de mermas',
+      titulo: 'Cobros netos de mermas',
       valor: formatearMoneda(resultadoPeriodo),
-      valorClassName: resultadoEsPositivo
+      valorClassName: resultadoIncompleto
+        ? 'text-amber-700 dark:text-amber-400'
+        : resultadoEsPositivo
         ? 'text-emerald-700 dark:text-emerald-400'
         : resultadoEsNegativo
           ? 'text-rose-600 dark:text-rose-400'
           : 'text-slate-700 dark:text-slate-300',
-      subtitulo: resultadoEsPositivo
-        ? 'Ganaste en el período'
-        : resultadoEsNegativo
-          ? 'Perdiste en el período'
-          : 'Sin ganancia ni pérdida',
-      tono: resultadoEsPositivo ? 'emerald' : resultadoEsNegativo ? 'rose' : 'violet',
+      subtitulo: resultadoIncompleto
+        ? `Saldo ${resultadoEsPositivo ? 'positivo' : resultadoEsNegativo ? 'negativo' : 'neutro'}; ${cantidadSinValuar} ${cantidadSinValuar === 1 ? 'merma' : 'mermas'} sin costo histórico. No descuenta costo de ventas.`
+        : resultadoEsPositivo
+          ? 'Saldo positivo tras mermas valuadas; no descuenta costo de ventas.'
+          : resultadoEsNegativo
+            ? 'Saldo negativo tras mermas valuadas; no descuenta costo de ventas.'
+            : 'Sin saldo después de mermas valuadas; no descuenta costo de ventas.',
+      tono: resultadoIncompleto
+        ? 'amber'
+        : resultadoEsPositivo
+          ? 'emerald'
+          : resultadoEsNegativo
+            ? 'rose'
+            : 'violet',
     },
     {
-      titulo: 'Pérdidas por mermas',
+      titulo: 'Mermas valuadas',
       valor: formatearMoneda(plataPerdida),
-      subtitulo: 'Estimadas para el período',
-      tono: plataPerdida > 0 ? 'rose' : 'emerald',
+      subtitulo: cantidadSinValuar > 0
+        ? `${cantidadSinValuar} registros y ${formatearUnidades(unidadesSinValuar)} unidades sin valor`
+        : 'Según costo histórico de lote o referencia al registrarlas',
+      tono: cantidadSinValuar > 0 ? 'amber' : plataPerdida > 0 ? 'rose' : 'emerald',
     },
     {
       titulo: 'Ticket promedio',
-      valor: formatearMoneda(ticketPromedio),
-      subtitulo: `Por ticket · ${cantVentas} ventas`,
+      valor: ticketPromedio === null ? '—' : formatearMoneda(ticketPromedio),
+      subtitulo: ticketPromedio === null ? 'Sin ventas completadas en el período' : `Por ticket · ${cantVentas} ventas`,
       tono: 'sky',
     },
   ]

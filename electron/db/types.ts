@@ -412,6 +412,8 @@ export type MovimientoStock = {
   ventaId: number | null
   tipo: TipoMovimientoStock
   cantidad: number
+  costoUnitarioReferencia: number | null
+  fuenteCostoMerma: 'lote' | 'referencia' | null
   stockAnterior: number | null
   stockPosterior: number | null
   motivo: string | null
@@ -497,10 +499,21 @@ export type ResumenMovimientos = {
 
 /** Merma de un producto: unidades perdidas y su importe estimado. */
 export type ProductoPerdida = {
-  productoId: number | null
+  productoId: number
   nombre: string
   unidades: number
+  unidadesSinValuar: number
+  mermasSinValuar: number
   perdido: number
+}
+
+export type FuenteCostoMerma = 'lote' | 'referencia' | 'sin_dato'
+
+export type MermaReporte = MovimientoStock & {
+  nombreProducto: string
+  costoUnitario: number | null
+  fuenteCosto: FuenteCostoMerma
+  perdidaEstimada: number | null
 }
 
 /**
@@ -513,7 +526,13 @@ export type ProductoPerdida = {
 export type ResumenPerdidas = {
   cantidadMermas: number
   unidadesPerdidas: number
+  cantidadSinValuar: number
+  unidadesSinValuar: number
+  mermasSinProducto: number
+  plataPorCostoLote: number
+  plataPorReferencia: number
   plataPerdida: number
+  mermas: MermaReporte[]
   porProducto: ProductoPerdida[]
 }
 
@@ -539,6 +558,8 @@ export type CorteCaja = {
  */
 export type ResumenCortes = {
   cantidad: number
+  cortesConDatos: number
+  sinDatosArqueo: number
   diferenciaTotal: number
   conDescuadre: number
   cortes: CorteCaja[]

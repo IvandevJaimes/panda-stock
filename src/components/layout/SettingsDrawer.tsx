@@ -310,7 +310,7 @@ export function SettingsDrawer() {
           </Card>
 
           <Card title="Notificaciones" description="Elegí si querés escuchar alertas." className="space-y-3">
-            <BasicSetting icon={<Volume2 size={17} />} title="Sonido de alertas" description="Notificaciones y alertas de stock." checked={sonidoAlertas} onCheckedChange={setSonidoAlertas} />
+            <BasicSetting icon={<Volume2 size={17} />} title="Sonido de alertas" description="Alertas de stock y cuentas corrientes." checked={sonidoAlertas} onCheckedChange={setSonidoAlertas} />
           </Card>
 
           <Card title="Soporte técnico" description="Contactanos si necesitás ayuda.">

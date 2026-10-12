@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Archive,
   BookUser,
@@ -13,6 +13,7 @@ import {
   X,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { useSearchParams } from 'react-router-dom'
 import { Button } from '../../components/ui/Button'
 import { ClienteCard } from '../../components/ui/ClienteCard'
 import { ConfirmModal } from '../../components/ui/ConfirmModal'
@@ -32,6 +33,8 @@ import type {
 import { cuentasCorrientesService } from '../../services/cuentas-corrientes.service'
 import { seguridadService } from '../../services/seguridad.service'
 import { cn } from '../../lib/cn'
+import { useHotkey } from '../../hooks/useHotkey'
+import { MOD_IS_META, modAtajo } from '../../lib/hotkeys'
 import { useSettingsStore } from '../../stores/settings.store'
 import { AbonoModal } from './AbonoModal'
 import { ClienteModal } from './ClienteModal'
@@ -52,13 +55,30 @@ const OPCIONES_ORDEN: SelectOption[] = [
   { value: 'nombre_asc', label: 'Nombre A→Z' },
 ]
 
+const MOD_TEXTO = MOD_IS_META ? 'Cmd' : 'Ctrl'
+
 export function CuentasCorrientesPage() {
   const protegerEliminacion = useSettingsStore((state) => state.proteccionesSeguridad.eliminarClientes)
   const contrasenaConfigurada = useSettingsStore((state) => state.contrasenaConfigurada)
   const [clientes, setClientes] = useState<ClienteConSaldo[]>([])
   const [clientesDesactivados, setClientesDesactivados] = useState<ClienteConSaldo[]>([])
   const [resumen, setResumen] = useState<ResumenCuentasCorrientes | null>(null)
-  const [busqueda, setBusqueda] = useState('')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const busqueda = searchParams.get('q') ?? ''
+  const buscadorRef = useRef<HTMLInputElement>(null)
+  const clientesGridRef = useRef<HTMLDivElement>(null)
+  const [clienteFoco, setClienteFoco] = useState<number | null>(null)
+  const setBusqueda = (texto: string) => {
+    setSearchParams((actuales) => {
+      const siguientes = new URLSearchParams(actuales)
+      if (texto) {
+        siguientes.set('q', texto)
+      } else {
+        siguientes.delete('q')
+      }
+      return siguientes
+    }, { replace: true })
+  }
   const [filtroSaldo, setFiltroSaldo] = useState<FiltroSaldo>('todos')
   const [orden, setOrden] = useState<OrdenClientes>('deuda_desc')
   const [seleccionado, setSeleccionado] = useState<ClienteConSaldo | null>(null)
@@ -153,6 +173,17 @@ export function CuentasCorrientesPage() {
     setBusqueda('')
     setFiltroSaldo('todos')
     setOrden('deuda_desc')
+    setClienteFoco(null)
+  }
+
+  const abrirNuevoCliente = () => {
+    setClienteEnEdicion(null)
+    setModalCliente(true)
+  }
+
+  const abrirDetalleCliente = (cliente: ClienteConSaldo) => {
+    setPestanaDetalleInicial('informacion')
+    setClienteEnDetalle(cliente)
   }
 
   // Al registrar un pago, actualizar la referencia permite que el modal refleje el saldo nuevo.
@@ -269,6 +300,86 @@ export function CuentasCorrientesPage() {
   const cerrarMenuContextual = useCallback(() => setMenuContextual(null), [])
   const clienteMenuContextual = menuContextual?.cliente ?? null
   const totalDesactivados = clientesDesactivados.length
+  const hayModalAbierto =
+    inactivosAbierta ||
+    modalCliente ||
+    modalAbono ||
+    clienteEnDetalle !== null ||
+    clienteAEliminar !== null ||
+    clientePendientePin !== null ||
+    menuContextual !== null
+  const indiceClienteFoco = clienteFoco === null
+    ? -1
+    : visibles.findIndex((cliente) => cliente.id === clienteFoco)
+  const clienteFocoValido = indiceClienteFoco >= 0 ? indiceClienteFoco : null
+
+  const enfocarBuscador = () => {
+    buscadorRef.current?.focus()
+    buscadorRef.current?.select()
+  }
+
+  const esTargetInteractivo = (target: EventTarget | null) => {
+    if (!(target instanceof HTMLElement)) return false
+    return target.closest(
+      'button, a, select, textarea, input, [role="button"], [role="menuitem"], [role="option"], [role="listbox"], [aria-expanded="true"], [contenteditable]',
+    ) !== null
+  }
+
+  const navegarCliente = (delta: number) => {
+    if (visibles.length === 0) return
+    const base = clienteFocoValido ?? (delta > 0 ? -1 : 0)
+    const nuevo = Math.min(Math.max(base + delta, 0), visibles.length - 1)
+    const cliente = visibles[nuevo]
+    if (!cliente) return
+    setClienteFoco(cliente.id)
+    clientesGridRef.current
+      ?.querySelector(`[data-cliente-idx="${nuevo}"]`)
+      ?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }
+
+  const abrirClienteFoco = () => {
+    if (clienteFocoValido === null) return
+    const cliente = visibles[clienteFocoValido]
+    if (cliente) abrirDetalleCliente(cliente)
+  }
+
+  useHotkey('f2', enfocarBuscador, {
+    enabled: !hayModalAbierto,
+    ignoreInputs: false,
+  })
+  useHotkey('/', enfocarBuscador, { enabled: !hayModalAbierto })
+  useHotkey('mod+n', abrirNuevoCliente, {
+    enabled: !hayModalAbierto,
+    ignoreInputs: false,
+  })
+  useHotkey(
+    'mod+d',
+    () => {
+      if (hayFiltroActivo) limpiarFiltros()
+    },
+    { enabled: !hayModalAbierto, ignoreInputs: false },
+  )
+  useHotkey(
+    'arrowdown',
+    (event) => {
+      if (!esTargetInteractivo(event.target)) navegarCliente(1)
+    },
+    { enabled: !hayModalAbierto },
+  )
+  useHotkey(
+    'arrowup',
+    (event) => {
+      if (!esTargetInteractivo(event.target)) navegarCliente(-1)
+    },
+    { enabled: !hayModalAbierto },
+  )
+  useHotkey(
+    'enter',
+    (event) => {
+      if (!esTargetInteractivo(event.target)) abrirClienteFoco()
+    },
+    { enabled: !hayModalAbierto },
+  )
 
   if (cargando && clientes.length === 0) {
     return (
@@ -301,17 +412,17 @@ export function CuentasCorrientesPage() {
               </span>
             </button>
           </Tooltip>
-          <Button
-            variant="primary"
-            onClick={() => {
-              setClienteEnEdicion(null)
-              setModalCliente(true)
-            }}
-            className="h-10 shrink-0 gap-2 rounded-2xl px-4 text-sm font-bold shadow-xs sm:h-12 sm:px-6 sm:text-base"
-          >
-            <Plus className="h-5 w-5" />
-            <span>Nuevo cliente</span>
-          </Button>
+          <Tooltip content={`Nuevo cliente · ${MOD_TEXTO}+N`} placement="bottom">
+            <Button
+              variant="primary"
+              onClick={abrirNuevoCliente}
+              aria-keyshortcuts={modAtajo('N')}
+              className="h-10 shrink-0 gap-2 rounded-2xl px-4 text-sm font-bold shadow-xs sm:h-12 sm:px-6 sm:text-base"
+            >
+              <Plus className="h-5 w-5" />
+              <span>Nuevo cliente</span>
+            </Button>
+          </Tooltip>
         </div>
       </header>
 
@@ -349,12 +460,17 @@ export function CuentasCorrientesPage() {
         <div className="sticky top-0 z-20 mb-3 flex w-full min-w-0 animate-entry-up stagger-4 flex-col gap-2.5 border-slate-200/80 bg-[#f4f6f8] py-3 transition-colors select-none relative after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-3 after:bg-gradient-to-b after:from-slate-900/10 after:to-transparent after:content-[''] dark:border-slate-800/60 dark:bg-[#0b0f17] dark:after:from-black/45">
           <div className="flex w-full min-w-0 flex-col gap-2 lg:flex-row lg:items-center">
             <Input
+              ref={buscadorRef}
               value={busqueda}
-              onChange={(event) => setBusqueda(event.target.value)}
+              onChange={(event) => {
+                setBusqueda(event.target.value)
+                setClienteFoco(null)
+              }}
               placeholder="Buscar por nombre o teléfono..."
               leftIcon={<Search size={16} />}
               wrapperClassName="min-w-0 flex-1"
               aria-label="Buscar cliente"
+              aria-keyshortcuts="F2"
               rightAction={busqueda.length > 0 ? (
                 <button type="button" onClick={() => setBusqueda('')} aria-label="Limpiar búsqueda" className="grid h-5 w-5 cursor-pointer place-items-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300">
                   <X size={14} />
@@ -365,21 +481,28 @@ export function CuentasCorrientesPage() {
               <CustomSelect
                 options={opcionesFiltro}
                 value={filtroSaldo}
-                onChange={(value) => setFiltroSaldo(value as FiltroSaldo)}
+                onChange={(value) => {
+                  setFiltroSaldo(value as FiltroSaldo)
+                  setClienteFoco(null)
+                }}
                 className="w-full min-w-0 lg:w-44"
               />
               <CustomSelect
                 options={OPCIONES_ORDEN}
                 value={orden}
-                onChange={(value) => setOrden(value as OrdenClientes)}
+                onChange={(value) => {
+                  setOrden(value as OrdenClientes)
+                  setClienteFoco(null)
+                }}
                 className="w-full min-w-0 lg:w-44"
               />
-              <Tooltip content={hayFiltroActivo ? 'Limpiar todos los filtros' : undefined} placement="top">
+              <Tooltip content={hayFiltroActivo ? `Limpiar todos los filtros · ${MOD_TEXTO}+D` : undefined} placement="top">
                 <button
                   type="button"
                   onClick={limpiarFiltros}
                   disabled={!hayFiltroActivo}
                   aria-label="Limpiar todos los filtros"
+                  aria-keyshortcuts={modAtajo('D')}
                   className={cn(
                     'shrink-0 select-none rounded-xl p-2 transition-colors duration-150',
                     hayFiltroActivo ? 'cursor-pointer text-slate-400 hover:text-red-600 dark:text-slate-500 dark:hover:text-red-400' : 'cursor-not-allowed text-slate-400 opacity-25 dark:text-slate-600',
@@ -429,29 +552,34 @@ export function CuentasCorrientesPage() {
             }
           />
         ) : (
-          <div className="grid min-w-0 px-1 grid-cols-1 gap-2.5">
-            {visibles.map((cliente) => {
+          <div ref={clientesGridRef} className="grid min-w-0 px-1 grid-cols-1 gap-2.5">
+            {visibles.map((cliente, index) => {
               const conDeuda = tieneDeuda(cliente)
               return (
-                <ClienteCard
+                <div
                   key={cliente.id}
-                  nombre={cliente.nombre}
-                  telefono={cliente.telefono}
-                  saldoPendiente={formatearMoneda(cliente.saldo)}
-                  conDeuda={conDeuda}
-                  archivado={cliente.activo === false}
-                  onContextMenu={(event) => abrirMenuContextual(event, cliente)}
-                  onOpen={() => {
-                    setPestanaDetalleInicial('informacion')
-                    setClienteEnDetalle(cliente)
-                  }}
-                  onCobrar={conDeuda ? () => { void abrirCobroDeuda(cliente, undefined, true) } : undefined}
-                  onEditar={() => {
-                    setClienteEnEdicion(cliente)
-                    setModalCliente(true)
-                  }}
-                  onEliminar={!conDeuda ? () => solicitarEliminacion(cliente) : undefined}
-                />
+                  data-cliente-idx={index}
+                  className={cn(
+                    'scroll-mt-36 rounded-2xl',
+                    clienteFocoValido === index && 'ring-2 ring-emerald-500/70',
+                  )}
+                >
+                  <ClienteCard
+                    nombre={cliente.nombre}
+                    telefono={cliente.telefono}
+                    saldoPendiente={formatearMoneda(cliente.saldo)}
+                    conDeuda={conDeuda}
+                    archivado={cliente.activo === false}
+                    onContextMenu={(event) => abrirMenuContextual(event, cliente)}
+                    onOpen={() => abrirDetalleCliente(cliente)}
+                    onCobrar={conDeuda ? () => { void abrirCobroDeuda(cliente, undefined, true) } : undefined}
+                    onEditar={() => {
+                      setClienteEnEdicion(cliente)
+                      setModalCliente(true)
+                    }}
+                    onEliminar={!conDeuda ? () => solicitarEliminacion(cliente) : undefined}
+                  />
+                </div>
               )
             })}
           </div>

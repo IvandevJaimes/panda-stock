@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { History, Loader2 } from 'lucide-react'
+import { AlertTriangle, History, Loader2 } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Button } from '../../components/ui/Button'
@@ -113,6 +113,8 @@ export function MovimientosRecientes({ desde, hasta, filasPorTipo, buscarInicial
   const seccionRef = useRef<HTMLElement>(null)
   const scrollAtendido = useRef(false)
   const [movimientos, setMovimientos] = useState<MovimientoConNombre[] | null>(null)
+  const [errorCarga, setErrorCarga] = useState(false)
+  const [recarga, setRecarga] = useState(0)
   const [buscar, setBuscar] = useState(buscarInicial)
   const [tipo, setTipo] = useState<FiltroTipo>('todos')
   const [pagina, setPagina] = useState(1)
@@ -127,6 +129,7 @@ export function MovimientosRecientes({ desde, hasta, filasPorTipo, buscarInicial
       productosService.getAll(),
     ]).then(([lista, productos]) => {
       if (!vigente) return
+      setErrorCarga(false)
       const productosPorId = new Map(productos.map((producto) => [producto.id, producto]))
       setMovimientos(lista.map((movimiento) => ({
         ...movimiento,
@@ -138,10 +141,10 @@ export function MovimientosRecientes({ desde, hasta, filasPorTipo, buscarInicial
           : (productosPorId.get(movimiento.productoId)?.nombre ?? `Producto #${movimiento.productoId}`),
       })))
     }).catch(() => {
-      if (vigente) setMovimientos([])
+      if (vigente) setErrorCarga(true)
     })
     return () => { vigente = false }
-  }, [desde, hasta])
+  }, [desde, hasta, recarga])
 
   useEffect(() => {
     if (movimientos === null || searchParams.get('scroll') !== 'movimientos' || scrollAtendido.current) return
@@ -161,6 +164,12 @@ export function MovimientosRecientes({ desde, hasta, filasPorTipo, buscarInicial
       porTipo.get(tipoMovimiento) ?? { tipo: tipoMovimiento, cantidad: 0, unidades: 0 },
     )
   }, [filasPorTipo])
+
+  const reintentarCarga = () => {
+    setErrorCarga(false)
+    setMovimientos(null)
+    setRecarga((actual) => actual + 1)
+  }
 
   const buscarPorEscaneo = async (barcode: string) => {
     const producto = await productosService.scan(barcode)
@@ -319,7 +328,15 @@ export function MovimientosRecientes({ desde, hasta, filasPorTipo, buscarInicial
           </div>
         </BarraFiltrosReporte>
 
-        {movimientos === null ? (
+        {errorCarga ? (
+          <div className="flex min-h-40 flex-col items-center justify-center gap-2 px-4 text-center">
+            <AlertTriangle className="h-5 w-5 text-amber-500" aria-hidden />
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              No se pudieron cargar los movimientos. No se muestran como un período vacío.
+            </p>
+            <Button variant="outline" size="sm" onClick={reintentarCarga}>Reintentar</Button>
+          </div>
+        ) : movimientos === null ? (
           <div className="flex min-h-40 items-center justify-center gap-2 text-sm text-slate-400 dark:text-slate-500">
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
             Cargando movimientos del período…

@@ -228,7 +228,17 @@ export const METODOS_AGRUPADOS: { metodo: MetodoPago; etiqueta: string }[] = [
   { metodo: 'cuenta_corriente', etiqueta: 'Tarjeta de crédito' },
 ]
 
-export type FilaMetodo = { metodo: MetodoPago; etiqueta: string; monto: number; porcentaje: number }
+export type FilaMetodo = {
+  metodo: MetodoPago
+  etiqueta: string
+  monto: number
+  /** Participación positiva; null si algún método tiene saldo neto negativo. */
+  porcentaje: number | null
+}
+
+function porcentajeCobros(monto: number, totalPositivo: number, hayNetoNegativo: boolean): number | null {
+  return hayNetoNegativo || monto < 0 ? null : porcentaje(monto, totalPositivo)
+}
 
 function esMedioCombinado(metodo: MetodoPago): boolean {
   return metodo === 'credito' || metodo === 'cuenta_corriente'
@@ -244,14 +254,15 @@ export function agruparMetodos(
     acumulado.set(clave, (acumulado.get(clave) ?? 0) + fila.monto)
   }
 
-  const total = [...acumulado.values()].reduce((acc, monto) => acc + monto, 0)
+  const totalPositivo = [...acumulado.values()].reduce((acc, monto) => acc + Math.max(monto, 0), 0)
+  const hayNetoNegativo = [...acumulado.values()].some((monto) => monto < 0)
 
   return METODOS_AGRUPADOS.filter((opcion) => acumulado.has(opcion.metodo))
     .map((opcion) => ({
       metodo: opcion.metodo,
       etiqueta: opcion.etiqueta,
       monto: acumulado.get(opcion.metodo) ?? 0,
-      porcentaje: porcentaje(acumulado.get(opcion.metodo) ?? 0, total),
+      porcentaje: porcentajeCobros(acumulado.get(opcion.metodo) ?? 0, totalPositivo, hayNetoNegativo),
     }))
     .sort((a, b) => b.monto - a.monto)
 }
@@ -299,7 +310,8 @@ export function agruparMetodosHabilitados(
     acumulado.set(fila.metodo, (acumulado.get(fila.metodo) ?? 0) + fila.monto)
   }
 
-  const total = [...acumulado.values()].reduce((acc, monto) => acc + monto, 0)
+  const totalPositivo = [...acumulado.values()].reduce((acc, monto) => acc + Math.max(monto, 0), 0)
+  const hayNetoNegativo = [...acumulado.values()].some((monto) => monto < 0)
 
   return METODOS_PAGO_DETALLADOS
     .filter((opcion) => acumulado.has(opcion.metodo))
@@ -308,7 +320,7 @@ export function agruparMetodosHabilitados(
       return {
         ...opcion,
         monto,
-        porcentaje: porcentaje(monto, total),
+        porcentaje: porcentajeCobros(monto, totalPositivo, hayNetoNegativo),
       }
     })
     .sort((a, b) => b.monto - a.monto)
@@ -331,7 +343,7 @@ export type Totales = {
   totalVentas: number
   cantVentas: number
   unidades: number
-  ticketPromedio: number
+  ticketPromedio: number | null
 }
 
 export function calcularTotales(
@@ -346,6 +358,6 @@ export function calcularTotales(
     totalVentas: resumen.totalVentas,
     cantVentas: resumen.cantVentas,
     unidades,
-    ticketPromedio: resumen.cantVentas === 0 ? 0 : resumen.totalVentas / resumen.cantVentas,
+    ticketPromedio: resumen.cantVentas === 0 ? null : resumen.totalVentas / resumen.cantVentas,
   }
 }

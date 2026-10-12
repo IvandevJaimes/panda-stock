@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Ban, BookUser, History, Receipt } from 'lucide-react'
+import { AlertTriangle, Ban, BookUser, History, Receipt } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { CustomSelect } from '../../components/ui/CustomSelect'
@@ -242,16 +242,19 @@ function convertirAHistorial(detalle: VentaDetalle): VentaHistorial {
 type HistorialVentasProps = {
   desde: string | null
   hasta: string | null
+  onVentaAnulada: () => void
 }
 
-export function HistorialVentas({ desde, hasta }: HistorialVentasProps) {
+export function HistorialVentas({ desde, hasta, onVentaAnulada }: HistorialVentasProps) {
   const [searchParams, setSearchParams] = useSearchParams()
   const scrollAtendido = useRef(false)
   const [ventas, setVentas] = useState<Venta[] | null>(null)
+  const [errorCarga, setErrorCarga] = useState(false)
   const [pagina, setPagina] = useState(1)
   const [buscar, setBuscar] = useState('')
   const [estadoFiltro, setEstadoFiltro] = useState<'todas' | EstadoVenta>('todas')
   const [detalles, setDetalles] = useState<Map<number, VentaDetalle>>(new Map())
+  const [detallesConError, setDetallesConError] = useState<Set<number>>(new Set())
   const [recarga, setRecarga] = useState(0)
   const [ventaSeleccionadaId, setVentaSeleccionadaId] = useState<number | null>(null)
   const [ventaAAnular, setVentaAAnular] = useState<VentaHistorial | null>(null)
@@ -279,7 +282,9 @@ export function HistorialVentas({ desde, hasta }: HistorialVentasProps) {
   if (filtroAplicado !== claveFiltro) {
     setFiltroAplicado(claveFiltro)
     setVentas(null)
+    setErrorCarga(false)
     setDetalles(new Map())
+    setDetallesConError(new Set())
     setPagina(1)
     setBuscar('')
     setEstadoFiltro('todas')
@@ -294,10 +299,12 @@ export function HistorialVentas({ desde, hasta }: HistorialVentasProps) {
     ventasService
       .getAll({ desde: desde ?? undefined, hasta: hasta ?? undefined, limit: TOPE })
       .then((lista) => {
-        if (vigente) setVentas(lista)
+        if (!vigente) return
+        setErrorCarga(false)
+        setVentas(lista)
       })
       .catch(() => {
-        if (vigente) setVentas([])
+        if (vigente) setErrorCarga(true)
       })
 
     return () => {
@@ -340,7 +347,9 @@ export function HistorialVentas({ desde, hasta }: HistorialVentasProps) {
     ventas del tope serían 200 idas al backend por cada cambio de filtro.
   */
   useEffect(() => {
-    const faltantes = visibles.map((venta) => venta.id).filter((id) => !detalles.has(id))
+    const faltantes = visibles
+      .map((venta) => venta.id)
+      .filter((id) => !detalles.has(id) && !detallesConError.has(id))
 
     if (faltantes.length === 0) return
 
@@ -360,12 +369,24 @@ export function HistorialVentas({ desde, hasta }: HistorialVentasProps) {
         }
         return siguiente
       })
+      setDetallesConError((previos) => {
+        const siguientes = new Set(previos)
+        for (const { id, detalle } of resultados) {
+          if (detalle) siguientes.delete(id)
+          else siguientes.add(id)
+        }
+        return siguientes
+      })
     })
+      .catch(() => {
+        if (!vigente) return
+        setDetallesConError((previos) => new Set([...previos, ...faltantes]))
+      })
 
     return () => {
       vigente = false
     }
-  }, [visibles, detalles])
+  }, [visibles, detalles, detallesConError])
 
   const enviarAnulacion = async (
     pin: string,
@@ -391,9 +412,11 @@ export function HistorialVentas({ desde, hasta }: HistorialVentasProps) {
     cerrarAnulacion()
     setVentaSeleccionadaId(null)
     setDetalles(new Map())
+    setDetallesConError(new Set())
     setRecarga((valor) => valor + 1)
 
     if (resultado) {
+      onVentaAnulada()
       const reintegros = resultado.reintegros
         .map(({ metodo, monto }) => `${ETIQUETAS_METODO[metodo]} ${formatearMoneda(monto)}`)
         .join(' · ')
@@ -409,10 +432,34 @@ export function HistorialVentas({ desde, hasta }: HistorialVentasProps) {
   const fechaSeleccionada = ventaSeleccionadaId === null
     ? null
     : ventas?.find((venta) => venta.id === ventaSeleccionadaId) ?? null
+  const reintentarVentas = () => {
+    setErrorCarga(false)
+    setVentas(null)
+    setRecarga((actual) => actual + 1)
+  }
+  const reintentarDetalle = (ventaId: number) => {
+    setDetallesConError((previos) => {
+      const siguientes = new Set(previos)
+      siguientes.delete(ventaId)
+      return siguientes
+    })
+  }
   const limpiarFiltros = () => {
     setBuscar('')
     setEstadoFiltro('todas')
     setPagina(1)
+  }
+
+  if (errorCarga) {
+    return (
+      <section className={`flex min-h-40 w-full flex-col items-center justify-center gap-2 rounded-2xl border border-amber-200 bg-white px-4 text-center dark:border-amber-900/50 dark:bg-[#111827] ${SOMBRA_CARD}`}>
+        <AlertTriangle className="h-5 w-5 text-amber-500" aria-hidden />
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          No se pudieron cargar las ventas. No se muestran como un período vacío.
+        </p>
+        <Button variant="outline" size="sm" onClick={reintentarVentas}>Reintentar</Button>
+      </section>
+    )
   }
 
   if (ventas === null) {
@@ -546,6 +593,11 @@ export function HistorialVentas({ desde, hasta }: HistorialVentasProps) {
                                 ? '—'
                                 : metodos.map((metodo) => ETIQUETAS_METODO[metodo]).join(' + ')}
                             </span>
+                            {esCuentaCorriente && detalle?.clienteNombre && (
+                              <span className="truncate pl-[1.1875rem] text-[11px] text-amber-700 dark:text-amber-300">
+                                Cliente: {detalle.clienteNombre}
+                              </span>
+                            )}
                             {esCuentaCorriente && detalle && venta.estado !== 'anulada' && (
                               <span className="pl-[1.1875rem] text-[11px] tabular-nums text-amber-700 dark:text-amber-300">
                                 Abonado en CC: {formatearMoneda(detalle.abonosCuentaCorriente)}
@@ -621,6 +673,11 @@ export function HistorialVentas({ desde, hasta }: HistorialVentasProps) {
                         </span>
                       )}
                     </div>
+                    {esCuentaCorriente && detalle?.clienteNombre && (
+                      <p className="mt-1.5 truncate text-[11px] font-medium text-amber-700 dark:text-amber-300">
+                        Cliente: {detalle.clienteNombre}
+                      </p>
+                    )}
                     {esCuentaCorriente && detalle && venta.estado !== 'anulada' && (
                       <p className="mt-1.5 pl-0.5 text-[11px] tabular-nums text-amber-700 dark:text-amber-300">
                         Abonado: {formatearMoneda(detalle.abonosCuentaCorriente)}
@@ -670,6 +727,16 @@ export function HistorialVentas({ desde, hasta }: HistorialVentasProps) {
     >
       {detalleSeleccionado ? (
         <DetalleVentaContenido detalle={detalleSeleccionado} />
+      ) : ventaSeleccionadaId !== null && detallesConError.has(ventaSeleccionadaId) ? (
+        <div className="flex min-h-40 flex-col items-center justify-center gap-2 text-center">
+          <AlertTriangle className="h-5 w-5 text-amber-500" aria-hidden />
+          <p className="text-sm text-slate-600 dark:text-slate-300">
+            No se pudo cargar el detalle de esta venta.
+          </p>
+          <Button variant="outline" size="sm" onClick={() => reintentarDetalle(ventaSeleccionadaId)}>
+            Reintentar
+          </Button>
+        </div>
       ) : (
         <LoadingState title="Cargando detalle de venta..." />
       )}

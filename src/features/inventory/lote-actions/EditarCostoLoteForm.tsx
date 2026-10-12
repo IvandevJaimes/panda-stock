@@ -92,7 +92,7 @@ export function EditarCostoLoteForm({
             className={noSpinnersClass}
             placeholder="Ej: 1250.50"
             {...register("nuevoCosto", {
-              required: "El costo de entrada es obligatorio",
+              required: "El costo unitario es obligatorio",
               validate: {
                 numeroValido: (val) =>
                   !Number.isNaN(Number(val)) || "Debe ser un número válido",

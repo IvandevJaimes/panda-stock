@@ -271,16 +271,25 @@ export function ProductDetailModal({
     .split(",")
     .map((codigo) => codigo.trim())
     .filter(Boolean);
+  const loteActivo = getLoteActivo(lotes);
+  const costoUnitarioActual = loteActivo?.costoUnitario ?? null;
+  const valorInventario =
+    lotes?.reduce(
+      (total, lote) => total + lote.cantidadActual * lote.costoUnitario,
+      0,
+    ) ?? null;
   const precioMayoreo =
     product.precioVenta > 0 ? product.precioVenta * 0.9 : null;
-  const margenDelta = product.precioVenta - (product.costo ?? 0);
+  const margenDelta =
+    costoUnitarioActual === null
+      ? null
+      : product.precioVenta - costoUnitarioActual;
   const margenPorcentaje =
-    (product.costo ?? 0) > 0
-      ? (margenDelta / (product.costo ?? 0)) * 100
+    costoUnitarioActual !== null && costoUnitarioActual > 0 && margenDelta !== null
+      ? (margenDelta / costoUnitarioActual) * 100
       : null;
-  const margenEsGanancia = margenDelta > 0;
+  const margenEsGanancia = margenDelta !== null && margenDelta > 0;
 
-  const loteActivo = getLoteActivo(lotes);
   const loteIdentidad = loteActivo
     ? (loteActivo.numeroLote ?? `Lote #${loteActivo.id}`)
     : null;
@@ -532,13 +541,17 @@ Lote activo
             <SectionTitle icon={DollarSign}>Precios y costos</SectionTitle>
             <dl className="grid grid-cols-3 gap-y-3 gap-x-6">
               <Dato etiqueta="Costo unitario" className="tabular-nums">
-                {formatearPrecio(product.costo)}
+                {costoUnitarioActual === null
+                  ? "—"
+                  : formatearPrecio(costoUnitarioActual)}
               </Dato>
               <Dato
                 etiqueta="Precio de venta"
                 className={cn(
                   "text-base font-bold",
-                  margenEsGanancia
+                  margenDelta === null
+                    ? "text-slate-800 dark:text-slate-100"
+                    : margenEsGanancia
                     ? "text-emerald-600 dark:text-emerald-400"
                     : "text-red-600 dark:text-red-400",
                 )}
@@ -549,19 +562,23 @@ Lote activo
                 {precioMayoreo !== null ? formatearPrecio(precioMayoreo) : "—"}
               </Dato>
               <Dato etiqueta="Valor del inventario">
-                {formatearPrecio(product.stockActual * (product.costo ?? 0))}
+                {valorInventario === null
+                  ? "—"
+                  : formatearPrecio(valorInventario)}
               </Dato>
               <Dato
                 etiqueta="Margen de ganancia"
                 className={cn(
                   "tabular-nums",
-                  margenEsGanancia
-                    ? "text-emerald-600 dark:text-emerald-400"
-                    : "text-red-600 dark:text-red-400",
+                  margenDelta === null
+                    ? ""
+                    : margenEsGanancia
+                      ? "text-emerald-600 dark:text-emerald-400"
+                      : "text-red-600 dark:text-red-400",
                 )}
               >
                 <span className="inline-flex items-center gap-1">
-                  {margenEsGanancia ? (
+                  {margenDelta === null ? null : margenEsGanancia ? (
                     <TrendingUp
                       className="h-3.5 w-3.5 shrink-0 text-emerald-500 dark:text-emerald-400"
                       aria-hidden
@@ -572,12 +589,18 @@ Lote activo
                       aria-hidden
                     />
                   )}
-                  {margenPorcentaje !== null
-                    ? `${margenPorcentaje.toFixed(1).replace(/\.0$/, "")}%`
-                    : "—"}
-                  {" · "}
-                  {margenDelta > 0 ? "+" : ""}
-                  {formatearPrecio(margenDelta)}
+                  {margenDelta === null ? (
+                    "—"
+                  ) : (
+                    <>
+                      {margenPorcentaje !== null
+                        ? `${margenPorcentaje.toFixed(1).replace(/\.0$/, "")}%`
+                        : "—"}
+                      {" · "}
+                      {margenDelta > 0 ? "+" : ""}
+                      {formatearPrecio(margenDelta)}
+                    </>
+                  )}
                 </span>
               </Dato>
             </dl>

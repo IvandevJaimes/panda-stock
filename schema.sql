@@ -126,6 +126,8 @@ CREATE TABLE IF NOT EXISTS "movimientos_stock" (
 	"venta_id" integer,
 	"tipo" text NOT NULL,
 	"cantidad" real NOT NULL,
+	"costo_unitario_referencia" real,
+	"fuente_costo_merma" text,
 	"stock_anterior" real,
 	"stock_posterior" real,
 	"motivo" text,

@@ -20,6 +20,7 @@ import {
 import { randomUUID } from 'node:crypto'
 import { getDb } from './index.ts'
 import { PROTECCIONES_INICIALES } from './types.ts'
+import { construirResumenPerdidas, diferenciaArqueo } from './reportes-query.ts'
 import {
   cajas,
   categorias,
@@ -2182,7 +2183,7 @@ export function createAjusteStock(data: AjusteStockInput): void {
 
   db.transaction((tx) => {
     const filaProducto = tx
-      .select({ stockActual: productos.stockActual })
+      .select({ stockActual: productos.stockActual, costo: productos.costo })
       .from(productos)
       .where(eq(productos.id, data.productoId))
       .get()
@@ -2207,6 +2208,8 @@ export function createAjusteStock(data: AjusteStockInput): void {
         ventaId: null,
         tipo: data.tipo,
         cantidad: data.cantidad,
+        costoUnitarioReferencia: data.tipo === 'merma' ? filaProducto.costo : null,
+        fuenteCostoMerma: data.tipo === 'merma' ? 'referencia' : null,
         stockAnterior,
         stockPosterior,
         motivo: data.motivo,
@@ -2300,35 +2303,29 @@ function getResumenPerdidas(
   if (filtros?.desde) condiciones.push(gte(movimientosStock.fechaHora, filtros.desde))
   if (filtros?.hasta) condiciones.push(lte(movimientosStock.fechaHora, filtros.hasta))
 
-  const porProducto = db
+  const filas = db
     .select({
+      id: movimientosStock.id,
       productoId: movimientosStock.productoId,
-      nombre: sql<string>`coalesce(${productos.nombre}, 'Producto eliminado')`,
-      unidades: sql<number>`coalesce(sum(abs(${movimientosStock.cantidad})), 0)`,
-      perdido: sql<number>`coalesce(sum(abs(${movimientosStock.cantidad}) * ${productos.costo}), 0)`,
+      loteId: movimientosStock.loteId,
+      ventaId: movimientosStock.ventaId,
+      tipo: movimientosStock.tipo,
+      cantidad: movimientosStock.cantidad,
+      costoUnitarioReferencia: movimientosStock.costoUnitarioReferencia,
+      fuenteCostoMerma: movimientosStock.fuenteCostoMerma,
+      stockAnterior: movimientosStock.stockAnterior,
+      stockPosterior: movimientosStock.stockPosterior,
+      motivo: movimientosStock.motivo,
+      fechaHora: movimientosStock.fechaHora,
+      nombreProducto: sql<string>`coalesce(${productos.nombre}, 'Producto sin referencia')`,
     })
     .from(movimientosStock)
     .leftJoin(productos, eq(movimientosStock.productoId, productos.id))
     .where(and(...condiciones))
-    .groupBy(movimientosStock.productoId, productos.nombre)
-    .orderBy(desc(sql`sum(abs(${movimientosStock.cantidad}) * ${productos.costo})`))
+    .orderBy(desc(movimientosStock.fechaHora), desc(movimientosStock.id))
     .all()
 
-  const totalMermas = db
-    .select({
-      cantidad: sql<number>`count(*)`,
-      unidades: sql<number>`coalesce(sum(abs(${movimientosStock.cantidad})), 0)`,
-    })
-    .from(movimientosStock)
-    .where(and(...condiciones))
-    .get()
-
-  return {
-    cantidadMermas: totalMermas?.cantidad ?? 0,
-    unidadesPerdidas: totalMermas?.unidades ?? 0,
-    plataPerdida: porProducto.reduce((acc, fila) => acc + fila.perdido, 0),
-    porProducto,
-  }
+  return construirResumenPerdidas(filas)
 }
 
 /**
@@ -2347,14 +2344,13 @@ function getResumenCortes(
   if (filtros?.desde) condiciones.push(gte(cajas.fechaCierre, filtros.desde))
   if (filtros?.hasta) condiciones.push(lte(cajas.fechaCierre, filtros.hasta))
 
-  const cortes = db
+  const cortesBase = db
     .select({
       id: cajas.id,
       empleadoNombre: empleados.nombre,
       montoInicial: cajas.montoInicial,
       montoEsperado: cajas.montoEsperado,
       montoReal: cajas.montoReal,
-      diferencia: cajas.diferencia,
       fechaApertura: cajas.fechaApertura,
       fechaCierre: cajas.fechaCierre,
       observaciones: cajas.observaciones,
@@ -2364,11 +2360,17 @@ function getResumenCortes(
     .where(and(...condiciones))
     .orderBy(desc(cajas.fechaCierre))
     .all()
+  const cortes = cortesBase.map((corte) => ({
+    ...corte,
+    diferencia: diferenciaArqueo(corte.montoEsperado, corte.montoReal),
+  }))
 
   return {
     cantidad: cortes.length,
+    cortesConDatos: cortes.filter((corte) => corte.diferencia !== null).length,
+    sinDatosArqueo: cortes.filter((corte) => corte.diferencia === null).length,
     diferenciaTotal: cortes.reduce((acc, corte) => acc + (corte.diferencia ?? 0), 0),
-    conDescuadre: cortes.filter((corte) => (corte.diferencia ?? 0) !== 0).length,
+    conDescuadre: cortes.filter((corte) => corte.diferencia !== null && corte.diferencia !== 0).length,
     cortes,
   }
 }
@@ -2860,6 +2862,7 @@ export function crearMovimientoStock(data: CrearMovimientoInput): void {
     if (stockPosteriorProducto < 0) throw new Error('El movimiento dejaría stock negativo en el producto')
 
     let loteDestinoId = data.loteId || null
+    let costoLoteDestino: number | null = null
 
     // 2. Handle Lot logic
     if (data.tipo === 'entrada') {
@@ -2891,12 +2894,14 @@ export function crearMovimientoStock(data: CrearMovimientoInput): void {
     } else if (loteDestinoId) {
       // Ajustes/Mermas en lote existente
       const filaLote = tx
-        .select({ cantidadActual: lotes.cantidadActual })
+        .select({ cantidadActual: lotes.cantidadActual, costoUnitario: lotes.costoUnitario, productoId: lotes.productoId })
         .from(lotes)
         .where(eq(lotes.id, loteDestinoId))
         .get()
 
       if (!filaLote) throw new Error('Lote no encontrado')
+      if (filaLote.productoId !== data.productoId) throw new Error('El lote no pertenece al producto seleccionado')
+      costoLoteDestino = filaLote.costoUnitario
 
       const stockPosteriorLote = filaLote.cantidadActual + delta
 
@@ -2922,6 +2927,12 @@ export function crearMovimientoStock(data: CrearMovimientoInput): void {
         ventaId: null,
         tipo: data.tipo,
         cantidad: data.cantidad,
+        costoUnitarioReferencia: data.tipo === 'merma'
+          ? costoLoteDestino ?? filaProducto.costo
+          : null,
+        fuenteCostoMerma: data.tipo === 'merma'
+          ? loteDestinoId === null ? 'referencia' : 'lote'
+          : null,
         stockAnterior: stockAnteriorProducto,
         stockPosterior: stockPosteriorProducto,
         motivo: data.motivo || null,

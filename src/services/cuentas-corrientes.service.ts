@@ -8,6 +8,7 @@ import type {
   MovimientoCuentaCorriente,
   ResumenCuentasCorrientes,
 } from '../../electron/db/types'
+import { solicitarActualizacionNotificaciones } from '../lib/notificacionesEvents'
 import { desenvolverResultadoSeguro, normalizarError } from './errors'
 
 export const cuentasCorrientesService = {
@@ -74,6 +75,7 @@ export const cuentasCorrientesService = {
   async registrarAbono(data: AbonoInput): Promise<void> {
     try {
       desenvolverResultadoSeguro(await window.electronAPI.cuentasCorrientes.registrarAbono(data))
+      solicitarActualizacionNotificaciones()
     } catch (error) {
       throw normalizarError(error)
     }
@@ -82,6 +84,7 @@ export const cuentasCorrientesService = {
   async registrarCargo(data: CargoManualInput): Promise<void> {
     try {
       desenvolverResultadoSeguro(await window.electronAPI.cuentasCorrientes.registrarCargo(data))
+      solicitarActualizacionNotificaciones()
     } catch (error) {
       throw normalizarError(error)
     }

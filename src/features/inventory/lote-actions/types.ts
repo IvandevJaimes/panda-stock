@@ -12,7 +12,7 @@ export const ACCION_LABEL_LOTE: Record<
   "ajustar-stock": "Ajustar Stock",
   "registrar-perdida": "Registrar merma",
   "editar-vencimiento": "Modificar Vencimiento",
-  "editar-costo": "Editar Costo de Entrada",
+  "editar-costo": "Editar costo unitario",
 };
 
 export const FORM_ID_LOTE: Record<

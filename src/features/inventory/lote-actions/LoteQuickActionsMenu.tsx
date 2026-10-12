@@ -49,7 +49,7 @@ export function LoteQuickActionsMenu({
             </span>
           </span>
           <span className="text-xs font-medium text-slate-400 dark:text-slate-500">
-            Costo{" "}
+            Costo unitario{" "}
             <span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400">
               {formatearPrecio(lote.costoUnitario)}
             </span>
@@ -138,7 +138,7 @@ export function LoteQuickActionsMenu({
           </span>
           <span className="min-w-0">
             <span className="block text-sm font-semibold text-slate-800 dark:text-slate-100">
-              Editar costo de entrada
+              Editar costo unitario
             </span>
             <span className="block text-xs font-medium text-slate-400 dark:text-slate-500">
               Actual: {formatearPrecio(lote.costoUnitario)}

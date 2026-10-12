@@ -1,14 +1,25 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
+import type { ClienteConSaldo } from '../../electron/db/types'
 import type { Notificacion } from '../features/notificaciones/notificacionesQuery'
 
-/** Las alertas de stock nacen por eventos de venta; las de vencimiento se sincronizan. */
+/** El stock se alerta por eventos de venta; vencimientos y saldos se sincronizan. */
 type NotificacionesState = {
   /** Último snapshot persistido: la campana se ve llena apenas abre la app. */
   visibles: Notificacion[]
   /** Mapa de id → stock al momento de descartarlo (-1 para sin condición). */
   descartes: Record<string, number>
-  sincronizar: (actuales: Notificacion[]) => void
+  /** Último saldo observado por cliente, persistido para comparar entre sesiones. */
+  saldosObservadosCuentas: Record<string, number>
+  /** Revisión de deuda que identifica cada nuevo aumento notificado. */
+  revisionesCuentas: Record<string, number>
+  /** Última revisión anunciada con el alert al abrir la app. */
+  revisionesAlertadasCuentas: Record<string, number>
+  sincronizar: (
+    actuales: Notificacion[],
+    clientesCuentaCorriente?: ClienteConSaldo[],
+  ) => Notificacion[]
+  obtenerAlertasCuentaAlInicio: (actuales: Notificacion[]) => Notificacion[]
   agregarAlertasDeVenta: (alertas: Notificacion[]) => void
   eliminar: (id: string) => void
   limpiar: () => void
@@ -24,16 +35,86 @@ export const useNotificacionesStore = create<NotificacionesState>()(
     (set) => ({
       visibles: [],
       descartes: {},
-      sincronizar: (actuales) => {
+      saldosObservadosCuentas: {},
+      revisionesCuentas: {},
+      revisionesAlertadasCuentas: {},
+      sincronizar: (actuales, clientesCuentaCorriente) => {
+        let nuevas: Notificacion[] = []
         set((estado) => {
           const estadoActual = (estado ?? {}) as Partial<NotificacionesState>
+          const saldosObservados = {
+            ...(estadoActual.saldosObservadosCuentas ?? {}),
+          }
+          const revisiones = { ...(estadoActual.revisionesCuentas ?? {}) }
+          const clientesConAumento = new Set<number>()
+          const clientesConHistorial = new Set<number>()
+
+          if (clientesCuentaCorriente) {
+            for (const cliente of clientesCuentaCorriente) {
+              const clave = String(cliente.id)
+              const saldoAnterior = saldosObservados[clave]
+              const saldoActual = Math.round(Math.max(0, cliente.saldo) * 100) / 100
+
+              if (saldoAnterior !== undefined) {
+                clientesConHistorial.add(cliente.id)
+              }
+
+              if (
+                saldoActual > 0 &&
+                (saldoAnterior === undefined || saldoActual > saldoAnterior)
+              ) {
+                revisiones[clave] = (revisiones[clave] ?? 0) + 1
+                clientesConAumento.add(cliente.id)
+              }
+
+              saldosObservados[clave] = saldoActual
+            }
+          }
+
+          const actualesConRevision = actuales.map((notificacion) => {
+            if (
+              notificacion.tipo !== 'cuenta_corriente' ||
+              notificacion.clienteId === undefined ||
+              !clientesCuentaCorriente
+            ) {
+              return notificacion
+            }
+
+            const clave = String(notificacion.clienteId)
+            const revision = revisiones[clave] ?? 1
+            const saldoActual = Math.round((notificacion.saldoActual ?? 0) * 100) / 100
+            const anterior = (estadoActual.visibles ?? []).find(
+              (visible) =>
+                visible.tipo === 'cuenta_corriente' &&
+                visible.clienteId === notificacion.clienteId,
+            )
+
+            return {
+              ...notificacion,
+              id: `cuenta_corriente:${clave}:${revision}`,
+              titulo:
+                clientesConAumento.has(notificacion.clienteId) &&
+                clientesConHistorial.has(notificacion.clienteId)
+                  ? 'Aumentó la deuda'
+                  : anterior?.titulo ?? notificacion.titulo,
+              detalle: `Saldo pendiente $${saldoActual.toFixed(2)}`,
+              saldoActual,
+            }
+          })
           const alertasDeVenta = (estadoActual.visibles ?? []).filter(
             (notificacion) => notificacion.origen === 'venta',
           )
-          const idsActuales = new Set(actuales.map((notificacion) => notificacion.id))
+          const idsActuales = new Set(actualesConRevision.map((notificacion) => notificacion.id))
           const combinadas = [
-            ...actuales,
+            ...actualesConRevision,
             ...alertasDeVenta.filter((notificacion) => !idsActuales.has(notificacion.id)),
+            ...(!clientesCuentaCorriente
+              ? (estadoActual.visibles ?? []).filter(
+                  (notificacion) =>
+                    notificacion.tipo === 'cuenta_corriente' &&
+                    !idsActuales.has(notificacion.id),
+                )
+              : []),
           ]
           const mapaActuales = new Map(combinadas.map((n) => [n.id, n]))
           const descartados: Record<string, number> = { ...(estadoActual.descartes ?? {}) }
@@ -51,8 +132,50 @@ export const useNotificacionesStore = create<NotificacionesState>()(
             if (d !== undefined) return false
             return true
           })
-          return { visibles, descartes: descartados }
+
+          const idsAnteriores = new Set(
+            (estadoActual.visibles ?? []).map((notificacion) => notificacion.id),
+          )
+          nuevas = visibles.filter((notificacion) => !idsAnteriores.has(notificacion.id))
+
+          return {
+            visibles,
+            descartes: descartados,
+            saldosObservadosCuentas: saldosObservados,
+            revisionesCuentas: revisiones,
+          }
         })
+        return nuevas
+      },
+      obtenerAlertasCuentaAlInicio: (actuales) => {
+        let alertas: Notificacion[] = []
+        set((estado) => {
+          const revisiones = { ...(estado.revisionesCuentas ?? {}) }
+          const revisionesAlertadas = { ...(estado.revisionesAlertadasCuentas ?? {}) }
+
+          alertas = actuales.flatMap((notificacion) => {
+            if (
+              notificacion.tipo !== 'cuenta_corriente' ||
+              notificacion.clienteId === undefined
+            ) {
+              return []
+            }
+
+            const clave = String(notificacion.clienteId)
+            const revision = revisiones[clave] ?? 0
+            if (revision <= (revisionesAlertadas[clave] ?? 0)) return []
+
+            revisionesAlertadas[clave] = revision
+            return [{
+              ...notificacion,
+              id: `cuenta_corriente:${clave}:${revision}`,
+              detalle: `Saldo pendiente $${(notificacion.saldoActual ?? 0).toFixed(2)}`,
+            }]
+          })
+
+          return { revisionesAlertadasCuentas: revisionesAlertadas }
+        })
+        return alertas
       },
       agregarAlertasDeVenta: (alertas) => {
         const nuevas = alertas.filter((alerta) => alerta.origen === 'venta')
@@ -83,7 +206,7 @@ export const useNotificacionesStore = create<NotificacionesState>()(
           const noti = visiblesActuales.find((n) => n.id === id)
           if (noti) {
             if (noti.tipo === 'stock_bajo') {
-              descartes[id] = noti.stockActual
+              descartes[id] = noti.stockActual ?? -1
             } else {
               descartes[id] = -1
             }
@@ -99,7 +222,7 @@ export const useNotificacionesStore = create<NotificacionesState>()(
           const descartes: Record<string, number> = { ...(estadoActual.descartes ?? {}) }
           visiblesActuales.forEach((n) => {
             if (n.tipo === 'stock_bajo') {
-              descartes[n.id] = n.stockActual
+              descartes[n.id] = n.stockActual ?? -1
             } else {
               descartes[n.id] = -1
             }
@@ -125,11 +248,17 @@ export const useNotificacionesStore = create<NotificacionesState>()(
     }),
     {
       name: 'panda-notificaciones-storage',
-      version: 2,
+      version: 4,
       storage: createJSONStorage(() => localStorage),
       migrate: (estadoPersistido) => {
         if (!estadoPersistido || typeof estadoPersistido !== 'object') {
-          return { visibles: [], descartes: {} }
+          return {
+            visibles: [],
+            descartes: {},
+            saldosObservadosCuentas: {},
+            revisionesCuentas: {},
+            revisionesAlertadasCuentas: {},
+          }
         }
 
         const estado = estadoPersistido as Partial<NotificacionesState>
@@ -140,11 +269,17 @@ export const useNotificacionesStore = create<NotificacionesState>()(
               notificacion.tipo !== 'stock_bajo' && notificacion.tipo !== 'stock_agotado',
           ),
           descartes: estado.descartes ?? {},
+          saldosObservadosCuentas: estado.saldosObservadosCuentas ?? {},
+          revisionesCuentas: estado.revisionesCuentas ?? {},
+          revisionesAlertadasCuentas: estado.revisionesAlertadasCuentas ?? {},
         }
       },
       partialize: (estado) => ({
         visibles: estado.visibles,
         descartes: estado.descartes,
+        saldosObservadosCuentas: estado.saldosObservadosCuentas,
+        revisionesCuentas: estado.revisionesCuentas,
+        revisionesAlertadasCuentas: estado.revisionesAlertadasCuentas,
       }),
     },
   ),

@@ -1,32 +1,41 @@
 import { useEffect } from 'react'
 import { productosService } from '../../services/productos.service'
+import { cuentasCorrientesService } from '../../services/cuentas-corrientes.service'
 import { useNotificacionesStore } from '../../stores/notificaciones.store'
 import { useSettingsStore } from '../../stores/settings.store'
 import { onAlertCreated } from '../../stores/stockAlertHistoryStore'
 import { hayAlertaStockActiva } from '../../lib/prioridadSonidos'
+import { solicitarActualizacionNotificaciones } from '../../lib/notificacionesEvents'
+import { showCuentaCorrienteAlert } from '../../components/ui/alerts/CuentaCorrienteAlert'
 import {
   deriveNotificacionesDeAlertaVenta,
+  deriveNotificacionesCuentaCorriente,
   deriveNotificacionesVencimiento,
   notificacionesNuevas,
 } from './notificacionesQuery'
-import { reproducirSonidoNotificacion } from './sonidoNotificacion'
+import {
+  reproducirSonidoCuentaCorriente,
+  reproducirSonidoNotificacion,
+} from './sonidoNotificacion'
 
 /** El stock cambia con cada venta: la campana no debe quedar con datos viejos. */
 const INTERVALO_REVISION_MS = 5 * 60 * 1000
 
-export function solicitarActualizacionNotificaciones(): void {
-  window.dispatchEvent(new Event('actualizar-notificaciones'))
-}
+export { solicitarActualizacionNotificaciones }
 
 export function useNotificaciones() {
   const notificaciones = useNotificacionesStore((estado) => estado.visibles)
   const sincronizar = useNotificacionesStore((estado) => estado.sincronizar)
+  const obtenerAlertasCuentaAlInicio = useNotificacionesStore(
+    (estado) => estado.obtenerAlertasCuentaAlInicio,
+  )
   const eliminar = useNotificacionesStore((estado) => estado.eliminar)
   const limpiar = useNotificacionesStore((estado) => estado.limpiar)
 
   useEffect(() => {
     let revisando = false
     let pendiente = false
+    let inicioPendiente = true
 
     const revisar = async () => {
       if (revisando) {
@@ -38,14 +47,43 @@ export function useNotificaciones() {
       try {
         // La referencia es la lista actual (persistida entre sesiones): solo
         // suena por notificaciones que llegan ahora, no por las heredadas.
-        const anteriores = useNotificacionesStore.getState().visibles
-        const productos = await productosService.getAll()
-        sincronizar(deriveNotificacionesVencimiento(productos))
-        const actuales = useNotificacionesStore.getState().visibles
-        const hayNuevas = notificacionesNuevas(anteriores, actuales).length > 0
-        if (hayNuevas) {
+        const consultarCuentas = inicioPendiente
+        const [productos, clientes] = await Promise.all([
+          productosService.getAll(),
+          consultarCuentas
+            ? cuentasCorrientesService.getClientes({ incluirInactivos: true })
+            : Promise.resolve(undefined),
+        ])
+        const notificacionesCuenta = clientes
+          ? deriveNotificacionesCuentaCorriente(clientes)
+          : []
+        const nuevas = sincronizar(
+          [...deriveNotificacionesVencimiento(productos), ...notificacionesCuenta],
+          clientes,
+        )
+
+        const alertasCuentaInicio = clientes !== undefined
+          ? obtenerAlertasCuentaAlInicio(notificacionesCuenta)
+          : []
+        if (clientes !== undefined) inicioPendiente = false
+
+        if (alertasCuentaInicio.length > 0) {
+          showCuentaCorrienteAlert(alertasCuentaInicio)
+          if (useSettingsStore.getState().sonidoAlertas) {
+            reproducirSonidoCuentaCorriente()
+          }
+        }
+
+        if (nuevas.length > 0) {
           window.dispatchEvent(new Event('nuevas-notificaciones'))
-          if (useSettingsStore.getState().sonidoAlertas && !hayAlertaStockActiva()) {
+          const nuevasDeInventario = nuevas.some(
+            (notificacion) => notificacion.tipo !== 'cuenta_corriente',
+          )
+          if (
+            nuevasDeInventario &&
+            useSettingsStore.getState().sonidoAlertas &&
+            !hayAlertaStockActiva()
+          ) {
             reproducirSonidoNotificacion()
           }
         }
@@ -95,7 +133,7 @@ export function useNotificaciones() {
       document.removeEventListener('visibilitychange', alVolver)
       window.removeEventListener('actualizar-notificaciones', alActualizar)
     }
-  }, [sincronizar])
+  }, [obtenerAlertasCuentaAlInicio, sincronizar])
 
   return { notificaciones, eliminar, limpiar }
 }

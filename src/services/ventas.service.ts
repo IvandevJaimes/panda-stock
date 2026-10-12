@@ -8,6 +8,7 @@ import type {
   VentaHistorial,
   VentaResult,
 } from '../../electron/db/types'
+import { solicitarActualizacionNotificaciones } from '../lib/notificacionesEvents'
 import { desenvolverResultadoSeguro, normalizarError, toErrorMessage } from './errors'
 
 /** Mínimo que siempre alcanza para una sesión de mostrador; el modal pagina más si hace falta. */
@@ -20,7 +21,11 @@ export const ventasService = {
     if (!venta.pagos.length) throw new Error('La venta no tiene pagos')
 
     try {
-      return await window.electronAPI.ventas.process(venta)
+      const resultado = await window.electronAPI.ventas.process(venta)
+      if (venta.pagos.some((pago) => pago.metodo === 'cuenta_corriente')) {
+        solicitarActualizacionNotificaciones()
+      }
+      return resultado
     } catch (error) {
       throw new Error(toErrorMessage(error), { cause: error })
     }
@@ -58,7 +63,11 @@ export const ventasService = {
     if (typeof input.pin !== 'string') throw new Error('La contraseña es obligatoria')
 
     try {
-      return desenvolverResultadoSeguro(await window.electronAPI.ventas.anular(input))
+      const resultado = desenvolverResultadoSeguro(
+        await window.electronAPI.ventas.anular(input),
+      )
+      if (resultado) solicitarActualizacionNotificaciones()
+      return resultado
     } catch (error) {
       throw normalizarError(error)
     }

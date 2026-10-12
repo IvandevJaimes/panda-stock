@@ -1,3 +1,5 @@
+import pandaStockLogo from '../../assets/panda-stock-logo.svg';
+
 export function SplashScreen() {
   return (
     <main className="fixed inset-0 flex flex-col items-center justify-center overflow-hidden bg-[#0b0f17] text-slate-100">
@@ -6,7 +8,7 @@ export function SplashScreen() {
         className="flex flex-col items-center text-center"
       >
         <img
-          src="./panda-stock-logo-512x512.png"
+          src={pandaStockLogo}
           alt="Panda Stock"
           className="mb-5 h-24 w-24 object-contain"
           draggable={false}
