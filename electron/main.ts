@@ -137,6 +137,7 @@ import {
 } from "./licencia/tipos.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PRELOAD_PATH = path.join(__dirname, "preload.cjs");
 declare const __PANDA_STOCK_LICENCIA_DEFAULT__: "on" | "off";
 
 const isDev = !app.isPackaged;
@@ -405,6 +406,13 @@ function escribirLog(tag: string, mensaje: string): void {
   }
 }
 
+function registrarErrorPreload(ventana: BrowserWindow, nombre: string): void {
+  ventana.webContents.on("preload-error", (_evento, rutaPreload, error) => {
+    const detalle = error.stack?.split("\n")[0] ?? error.message;
+    escribirLog("preload-error", `${nombre}: ${rutaPreload}: ${detalle}`);
+  });
+}
+
 // Registro el esquema custom panda-asset:// antes del arranque de la app para poder
 // servir los assets locales (logo del negocio, imágenes de productos) al renderer.
 if (tieneInstanciaUnica) {
@@ -434,13 +442,15 @@ function createWindow() {
     show: false,
     autoHideMenuBar: true,
     webPreferences: {
-      preload: path.join(__dirname, "../dist-electron/preload.cjs"),
+      preload: PRELOAD_PATH,
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
       devTools: isDev,
     },
   });
+
+  registrarErrorPreload(win, "principal");
 
   // Sin barra de menú nativa (solo menú de aplicación en macOS si aplica).
   win.setMenu(null);
@@ -617,13 +627,15 @@ function createSetupWindow() {
     autoHideMenuBar: true,
     title: "Panda Stock — Configuración inicial",
     webPreferences: {
-      preload: path.join(__dirname, "../dist-electron/preload.cjs"),
+      preload: PRELOAD_PATH,
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
       devTools: isDev,
     },
   });
+
+  registrarErrorPreload(win, "configuración inicial");
 
   win.setMenu(null);
   win.once("ready-to-show", () => revelarVentana(win));
@@ -671,13 +683,15 @@ function createLicenseWindow() {
     autoHideMenuBar: true,
     title: "Panda Stock — Activación",
     webPreferences: {
-      preload: path.join(__dirname, "../dist-electron/preload.cjs"),
+      preload: PRELOAD_PATH,
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
       devTools: isDev,
     },
   });
+
+  registrarErrorPreload(win, "activación");
 
   win.setMenu(null);
   ventanaLicencia = win;

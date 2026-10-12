@@ -174,7 +174,7 @@ export const PeriodNav = ({
                 "flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-full border-none px-3 py-1.5 text-sm font-semibold transition-all duration-150 active:scale-95",
                 period === p
                   ? "bg-emerald-600 text-white shadow-sm dark:bg-slate-700 dark:text-emerald-400"
-                  : "bg-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100",
+                  : "bg-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-100",
               )}
             >
               {p === "day" ? "Día" : p === "month" ? "Mes" : "Año"}

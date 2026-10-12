@@ -36,12 +36,6 @@ import type { EstadoLicencia, ResultadoLicencia } from "./licencia/tipos.ts";
 
 import { webFrame } from "electron";
 
-// Ajusta el zoom al 85% o 90% de inmediato
-webFrame.setZoomFactor(0.85);
-
-// Opcional: si quieres evitar que hagan zoom accidental con Ctrl + rueda / pinch
-webFrame.setVisualZoomLevelLimits(1, 1);
-
 contextBridge.exposeInMainWorld("electronAPI", {
   platform: process.platform,
   licencia: {
@@ -209,3 +203,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
     completada: () => ipcRenderer.invoke("configuracion:completada"),
   },
 });
+
+try {
+  webFrame.setZoomFactor(0.85);
+  webFrame.setVisualZoomLevelLimits(1, 1);
+} catch (error) {
+  console.warn("No se pudo configurar el zoom de la interfaz:", error);
+}

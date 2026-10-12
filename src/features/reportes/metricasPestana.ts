@@ -26,7 +26,7 @@ export type MetricaPestana = {
   /** `KpiCard` acepta string o number: los conteos van crudos, los montos formateados. */
   valor: string | number
   valorClassName?: string
-  subtitulo: string
+  subtitulo?: string
   tono: TonoMetrica
 }
 
@@ -126,13 +126,13 @@ export function metricasDePestana(
         subtitulo: unidadesSinValuar > 0
           ? `${formatearUnidades(unidadesSinValuar)} sin costo histórico`
           : 'Mercadería descartada',
-        tono: unidadesSinValuar > 0 ? 'amber' : mermas > 0 ? 'rose' : 'emerald',
+        tono: mermas > 0 ? 'rose' : 'emerald',
       },
       {
         titulo: 'Mermas valuadas',
         valor: formatearMoneda(perdidas?.plataPerdida ?? 0),
         subtitulo: `${formatearMoneda(perdidas?.plataPorCostoLote ?? 0)} costo de lote · ${formatearMoneda(perdidas?.plataPorReferencia ?? 0)} referencia`,
-        tono: cantidadSinValuar > 0 ? 'amber' : mermas > 0 ? 'rose' : 'emerald',
+        tono: mermas > 0 ? 'rose' : 'emerald',
       },
       {
         titulo: 'Productos afectados',
@@ -193,7 +193,6 @@ export function metricasDePestana(
   }
 
   const ticketPromedio = cantVentas > 0 ? totalVentas / cantVentas : null
-  const resultadoIncompleto = cantidadSinValuar > 0
   const resultadoEsPositivo = resultadoPeriodo > 0
   const resultadoEsNegativo = resultadoPeriodo < 0
 
@@ -205,29 +204,23 @@ export function metricasDePestana(
       tono: 'emerald',
     },
     {
-      titulo: 'Cobros netos de mermas',
+      titulo: resultadoEsPositivo
+        ? 'Ganancia del período'
+        : resultadoEsNegativo
+          ? 'Pérdida del período'
+          : 'Resultado del período',
       valor: formatearMoneda(resultadoPeriodo),
-      valorClassName: resultadoIncompleto
-        ? 'text-amber-700 dark:text-amber-400'
-        : resultadoEsPositivo
+      valorClassName: resultadoEsPositivo
         ? 'text-emerald-700 dark:text-emerald-400'
         : resultadoEsNegativo
           ? 'text-rose-600 dark:text-rose-400'
           : 'text-slate-700 dark:text-slate-300',
-      subtitulo: resultadoIncompleto
-        ? `Saldo ${resultadoEsPositivo ? 'positivo' : resultadoEsNegativo ? 'negativo' : 'neutro'}; ${cantidadSinValuar} ${cantidadSinValuar === 1 ? 'merma' : 'mermas'} sin costo histórico. No descuenta costo de ventas.`
-        : resultadoEsPositivo
-          ? 'Saldo positivo tras mermas valuadas; no descuenta costo de ventas.'
-          : resultadoEsNegativo
-            ? 'Saldo negativo tras mermas valuadas; no descuenta costo de ventas.'
-            : 'Sin saldo después de mermas valuadas; no descuenta costo de ventas.',
-      tono: resultadoIncompleto
-        ? 'amber'
-        : resultadoEsPositivo
-          ? 'emerald'
-          : resultadoEsNegativo
-            ? 'rose'
-            : 'violet',
+      subtitulo: 'Ingresos cobrados menos pérdidas de stock valuadas',
+      tono: resultadoEsPositivo
+        ? 'emerald'
+        : resultadoEsNegativo
+          ? 'rose'
+          : 'violet',
     },
     {
       titulo: 'Mermas valuadas',
@@ -235,7 +228,7 @@ export function metricasDePestana(
       subtitulo: cantidadSinValuar > 0
         ? `${cantidadSinValuar} registros y ${formatearUnidades(unidadesSinValuar)} unidades sin valor`
         : 'Según costo histórico de lote o referencia al registrarlas',
-      tono: cantidadSinValuar > 0 ? 'amber' : plataPerdida > 0 ? 'rose' : 'emerald',
+      tono: plataPerdida > 0 || cantidadSinValuar > 0 ? 'rose' : 'emerald',
     },
     {
       titulo: 'Ticket promedio',

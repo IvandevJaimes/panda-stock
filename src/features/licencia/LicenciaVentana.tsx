@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type DragEvent } from 'react'
+import { useEffect, useRef, useState, type DragEvent, type MouseEvent as ReactMouseEvent } from 'react'
 import { z } from 'zod'
 import { useForm, type Resolver, type ResolverResult } from 'react-hook-form'
 import {
@@ -12,6 +12,7 @@ import {
 import { Toaster, toast } from 'sonner'
 import pandaStockLogo from '../../assets/panda-stock-logo.svg'
 import { Button } from '../../components/ui/Button'
+import { ContextMenu, ContextMenuItem } from '../../components/ui/ContextMenu'
 import { cn } from '../../lib/cn'
 import { licenciaService } from '../../services/licencia.service'
 import { toErrorMessage } from '../../services/errors'
@@ -68,7 +69,9 @@ export function LicenciaVentana() {
   const [activando, setActivando] = useState(false)
   const [arrastrando, setArrastrando] = useState(false)
   const [nombreArchivo, setNombreArchivo] = useState('')
+  const [menuPegar, setMenuPegar] = useState<{ x: number; y: number; inicio: number; fin: number } | null>(null)
   const selectorArchivo = useRef<HTMLInputElement>(null)
+  const contenidoLicenciaRef = useRef<HTMLTextAreaElement>(null)
   const {
     register,
     handleSubmit,
@@ -136,6 +139,37 @@ export function LicenciaVentana() {
     }
   }
 
+  async function pegarDesdeMenu() {
+    const campo = contenidoLicenciaRef.current
+    const menu = menuPegar
+    if (!campo || !menu) return
+
+    try {
+      const texto = await navigator.clipboard.readText()
+      const contenidoActual = campo.value
+      const contenidoNuevo = `${contenidoActual.slice(0, menu.inicio)}${texto}${contenidoActual.slice(menu.fin)}`
+      const cursor = menu.inicio + texto.length
+      setValue('contenido', contenidoNuevo, { shouldDirty: true, shouldTouch: true, shouldValidate: true })
+      setNombreArchivo('')
+      window.requestAnimationFrame(() => {
+        campo.focus()
+        campo.setSelectionRange(cursor, cursor)
+      })
+    } catch {
+      toast.error('No se pudo leer el portapapeles. Probá con Ctrl+V.')
+    }
+  }
+
+  function abrirMenuPegar(evento: ReactMouseEvent<HTMLTextAreaElement>) {
+    evento.preventDefault()
+    setMenuPegar({
+      x: evento.clientX,
+      y: evento.clientY,
+      inicio: evento.currentTarget.selectionStart,
+      fin: evento.currentTarget.selectionEnd,
+    })
+  }
+
   async function activar(valores: FormularioLicencia) {
     clearErrors('contenido')
     setActivando(true)
@@ -171,7 +205,9 @@ export function LicenciaVentana() {
     <main className="h-screen overflow-hidden bg-slate-100 text-slate-800 dark:bg-[#0b0f17] dark:text-slate-100">
       <div className="mx-auto flex h-full w-full max-w-3xl flex-col overflow-hidden px-4 py-4 sm:px-8 sm:py-5">
         <header className="flex flex-col items-center gap-1.5">
-          <img src={pandaStockLogo} alt="Logo de Panda Stock" className="h-20 w-20 object-contain" />
+          <div className="grid h-20 w-20 place-items-center overflow-hidden rounded-xl bg-emerald-500">
+            <img src={pandaStockLogo} alt="Logo de Panda Stock" className="h-16 w-16 object-cover" />
+          </div>
           <p className="font-display text-base font-bold text-secondary dark:text-white">Panda Stock</p>
         </header>
 
@@ -275,6 +311,11 @@ export function LicenciaVentana() {
                         aria-invalid={Boolean(errors.contenido)}
                         aria-describedby={errors.contenido ? 'error-licencia' : undefined}
                         {...campoLicencia}
+                        ref={(campo) => {
+                          campoLicencia.ref(campo)
+                          contenidoLicenciaRef.current = campo
+                        }}
+                        onContextMenu={abrirMenuPegar}
                         onChange={(evento) => {
                           setNombreArchivo('')
                           void campoLicencia.onChange(evento)
@@ -315,6 +356,16 @@ export function LicenciaVentana() {
         </div>
 
       </div>
+      <ContextMenu
+        open={menuPegar !== null}
+        x={menuPegar?.x ?? 0}
+        y={menuPegar?.y ?? 0}
+        onClose={() => setMenuPegar(null)}
+      >
+        <ContextMenuItem icon={<Clipboard size={16} />} onClick={() => void pegarDesdeMenu()}>
+          Pegar
+        </ContextMenuItem>
+      </ContextMenu>
       <Toaster position="bottom-left" theme={theme} richColors />
     </main>
   )

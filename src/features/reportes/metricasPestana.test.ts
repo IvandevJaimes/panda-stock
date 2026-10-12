@@ -114,7 +114,7 @@ describe('metricasDePestana', () => {
     expect(ventasNetas?.titulo).toBe('Ingresos cobrados')
     expect(ventasNetas?.valor).toBe('$20000.00')
     expect(ventasNetas?.subtitulo).toContain('abonos recibidos')
-    expect(resultado?.titulo).toBe('Cobros netos de mermas')
+    expect(resultado?.titulo).toBe('Ganancia del período')
     expect(resultado?.valor).toBe('$16600.00')
     expect(resultado?.subtitulo).toContain('Saldo positivo')
     expect(resultado?.subtitulo).toContain('no descuenta costo de ventas')
@@ -183,9 +183,9 @@ describe('metricasDePestana', () => {
     const metricas = metricasDePestana('ventas', resumen)
 
     expect(metricas[1]?.subtitulo).toContain('1 merma sin costo histórico')
-    expect(metricas[1]?.tono).toBe('amber')
+    expect(metricas[1]?.tono).toBe('emerald')
     expect(metricas[2]?.subtitulo).toContain('3 unidades sin valor')
-    expect(metricas[2]?.tono).toBe('amber')
+    expect(metricas[2]?.tono).toBe('rose')
   })
 
   it('cortes: avisa cuántos descuadran', () => {

@@ -9,7 +9,7 @@ type ReporteKpiCardProps = {
   title: string
   value: string | number
   valueClassName?: string
-  subtitle: string
+  subtitle?: string
   action?: { label: string; onClick: () => void }
   className?: string
 }
@@ -45,9 +45,11 @@ export function ReporteKpiCard({
         )}>
           {value}
         </p>
-        <p className="mt-1 text-[11px] leading-snug text-slate-500 dark:text-slate-400">
-          {subtitle}
-        </p>
+        {subtitle && (
+          <p className="mt-1 text-[11px] leading-snug text-slate-500 dark:text-slate-400">
+            {subtitle}
+          </p>
+        )}
         {action && (
           <button
             type="button"
