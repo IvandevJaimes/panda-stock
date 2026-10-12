@@ -12,6 +12,7 @@ import {
 import { BarChart3 } from 'lucide-react'
 import { ChartCard } from '../../components/ui/ChartCard'
 import { EmptyState } from '../../components/ui/EmptyState'
+import { cn } from '../../lib/cn'
 import { useUIStore } from '../../stores/ui.store'
 import { SOMBRA_CARD } from './estilos'
 import {
@@ -51,9 +52,16 @@ export function VentasPorDiaChart({ puntos }: VentasPorDiaChartProps) {
 
   return (
     <ChartCard
-      title="Ingresos y resultado por día"
-      description="El costo es el que tenía la mercadería cuando se vendió, no el precio de compra de hoy."
+      title="Ventas, costo y ganancia bruta"
+      description="El costo usa el valor registrado al vender. Las mermas se descuentan en el neto estimado."
       icon={<BarChart3 size={15} />}
+      acciones={(
+        <div className="flex flex-wrap justify-end gap-x-3 gap-y-1 text-[10px] font-medium text-slate-500 dark:text-slate-400">
+          <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500" />Ventas</span>
+          <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-amber-500" />Costo</span>
+          <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-sky-500" />Ganancia bruta</span>
+        </div>
+      )}
       className={SOMBRA_CARD}
     >
       {hayDatos ? (
@@ -109,12 +117,12 @@ export function VentasPorDiaChart({ puntos }: VentasPorDiaChartProps) {
                       {punto.unidades} unidades
                     </p>
                     <dl className="mt-1.5 space-y-0.5 text-[11px]">
-                      <FilaTooltip etiqueta="Ingresos" valor={formatearMoneda(punto.total)} color="#10b981" />
-                      <FilaTooltip etiqueta="Costo" valor={formatearMoneda(punto.costo)} color="#f59e0b" />
+                      <FilaTooltip etiqueta="Ventas" valor={formatearMoneda(punto.total)} tono="emerald" />
+                      <FilaTooltip etiqueta="Costo" valor={formatearMoneda(punto.costo)} tono="amber" />
                       <FilaTooltip
-                        etiqueta="Resultado"
+                        etiqueta="Ganancia bruta"
                         valor={formatearMoneda(punto.resultado)}
-                        color={punto.resultado < 0 ? '#ef4444' : '#0ea5e9'}
+                        tono="sky"
                       />
                     </dl>
                   </div>
@@ -125,7 +133,7 @@ export function VentasPorDiaChart({ puntos }: VentasPorDiaChartProps) {
             <Area
               type="monotone"
               dataKey="total"
-              name="Ingresos"
+              name="Ventas"
               stroke="#10b981"
               strokeWidth={2}
               fill="url(#gradIngresos)"
@@ -143,7 +151,7 @@ export function VentasPorDiaChart({ puntos }: VentasPorDiaChartProps) {
             <Line
               type="monotone"
               dataKey="resultado"
-              name="Resultado"
+              name="Ganancia bruta"
               stroke="#0ea5e9"
               strokeWidth={2}
               dot={false}
@@ -164,11 +172,17 @@ export function VentasPorDiaChart({ puntos }: VentasPorDiaChartProps) {
   )
 }
 
-function FilaTooltip({ etiqueta, valor, color }: { etiqueta: string; valor: string; color: string }) {
+function FilaTooltip({ etiqueta, valor, tono }: { etiqueta: string; valor: string; tono: 'emerald' | 'amber' | 'sky' }) {
+  const color = {
+    emerald: 'bg-emerald-500',
+    amber: 'bg-amber-500',
+    sky: 'bg-sky-500',
+  }[tono]
+
   return (
     <div className="flex items-center justify-between gap-4">
       <dt className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
-        <span className="h-2 w-2 rounded-full" style={{ backgroundColor: color }} aria-hidden="true" />
+        <span className={cn('h-2 w-2 rounded-full', color)} aria-hidden="true" />
         {etiqueta}
       </dt>
       <dd className="font-display font-semibold tabular-nums text-slate-900 dark:text-white">

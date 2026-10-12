@@ -515,6 +515,8 @@ export type CrearMovimientoInput = {
 
 export type FiltrosMovimientos = {
   productoId?: number
+  desde?: string
+  hasta?: string
   limit?: number
 }
 

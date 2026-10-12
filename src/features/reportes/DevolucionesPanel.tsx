@@ -357,48 +357,56 @@ function TablaTickets({
   }
 
   return (
-    <TableContainer>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Ticket</TableHead>
-            <TableHead>Fecha de venta</TableHead>
-            <TableHead>Cliente</TableHead>
-            <TableHead>Medio</TableHead>
-            <TableHead>Unidades del ticket</TableHead>
-            <TableHead className="text-right">Importe del ticket</TableHead>
-            <TableHead />
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {pagina.items.map((fila) => (
-            <TableRow key={fila.venta.id}>
-              <TableCell className="font-display font-bold tabular-nums text-slate-900 dark:text-white">
-                #{fila.venta.id}
-              </TableCell>
-              <TableCell className="whitespace-nowrap text-xs tabular-nums text-slate-500 dark:text-slate-400">
-                {fechaHora(fila.venta.fechaHora)}
-              </TableCell>
-              <TableCell>{fila.clienteNombre ?? '—'}</TableCell>
-              <TableCell className="text-xs">
-                {fila.metodos.map((metodo) => ETIQUETAS_METODO[metodo]).join(' + ') || '—'}
-              </TableCell>
-              <TableCell className="tabular-nums">
-                {formatearUnidades(fila.unidades)}
-              </TableCell>
-              <TableCell className="text-right font-display font-semibold tabular-nums">
-                {formatearMoneda(fila.venta.total)}
-              </TableCell>
-              <TableCell className="text-right">
-                <Button size="sm" onClick={() => onDevolver(fila.venta.id)}>
-                  Devolver ticket
-                </Button>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </TableContainer>
+    <>
+      <div className="hidden lg:block">
+        <TableContainer className="rounded-none border-0 shadow-none">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Ticket</TableHead>
+                <TableHead>Fecha de venta</TableHead>
+                <TableHead>Cliente</TableHead>
+                <TableHead>Medio</TableHead>
+                <TableHead>Unidades del ticket</TableHead>
+                <TableHead className="text-right">Importe del ticket</TableHead>
+                <TableHead />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {pagina.items.map((fila) => (
+                <TableRow key={fila.venta.id}>
+                  <TableCell className="font-display font-bold tabular-nums text-slate-900 dark:text-white">#{fila.venta.id}</TableCell>
+                  <TableCell className="whitespace-nowrap text-xs tabular-nums text-slate-500 dark:text-slate-400">{fechaHora(fila.venta.fechaHora)}</TableCell>
+                  <TableCell>{fila.clienteNombre ?? '—'}</TableCell>
+                  <TableCell className="text-xs">{fila.metodos.map((metodo) => ETIQUETAS_METODO[metodo]).join(' + ') || '—'}</TableCell>
+                  <TableCell className="tabular-nums">{formatearUnidades(fila.unidades)}</TableCell>
+                  <TableCell className="text-right font-display font-semibold tabular-nums">{formatearMoneda(fila.venta.total)}</TableCell>
+                  <TableCell className="text-right"><Button size="sm" onClick={() => onDevolver(fila.venta.id)}>Devolver ticket</Button></TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </div>
+      <ul className="divide-y divide-slate-100 px-4 dark:divide-slate-800/60 lg:hidden">
+        {pagina.items.map((fila) => (
+          <li key={fila.venta.id} className="py-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="font-display text-sm font-bold text-slate-900 dark:text-white">Ticket #{fila.venta.id}</p>
+                <p className="mt-0.5 truncate text-[11px] text-slate-500 dark:text-slate-400">{fila.clienteNombre ?? 'Sin cliente'} · {fechaHora(fila.venta.fechaHora)}</p>
+              </div>
+              <span className="shrink-0 font-display text-sm font-bold tabular-nums text-slate-900 dark:text-white">{formatearMoneda(fila.venta.total)}</span>
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-500 dark:text-slate-400">
+              <span>{formatearUnidades(fila.unidades)} unidades</span>
+              <span>{fila.metodos.map((metodo) => ETIQUETAS_METODO[metodo]).join(' + ') || 'Sin medio registrado'}</span>
+            </div>
+            <Button size="sm" onClick={() => onDevolver(fila.venta.id)} className="mt-3 w-full">Devolver ticket</Button>
+          </li>
+        ))}
+      </ul>
+    </>
   )
 }
 
@@ -415,47 +423,61 @@ function TablaHistorial({
   }
 
   return (
-    <TableContainer>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Devolución</TableHead>
-            <TableHead>Ticket original</TableHead>
-            <TableHead>Fecha</TableHead>
-            <TableHead>Artículos y cantidades</TableHead>
-            <TableHead>Importe / liquidación</TableHead>
-            <TableHead>Ganancia revertida</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {pagina.items.map((fila) => (
-            <TableRow key={fila.id}>
-              <TableCell className="font-display font-bold tabular-nums">#{fila.id}</TableCell>
-              <TableCell className="font-display font-bold tabular-nums">#{fila.ventaId}</TableCell>
-              <TableCell className="whitespace-nowrap text-xs tabular-nums text-slate-500 dark:text-slate-400">
-                {fechaHora(fila.fechaHora)}
-              </TableCell>
-              <TableCell className="max-w-72 text-xs">
-                {fila.items.map((item) => `${item.descripcionItem} × ${formatearUnidades(item.cantidad)}`).join(' · ')}
-              </TableCell>
-              <TableCell className="text-xs">
-                <span className="block font-semibold tabular-nums">{formatearMoneda(fila.total)}</span>
-                <span className="text-slate-500 dark:text-slate-400">
-                  {[
-                    fila.deudaReducida > 0
-                      ? `Descontado de deuda ${formatearMoneda(fila.deudaReducida)}`
-                      : null,
-                    ...fila.reintegros.map((r) => `${ETIQUETAS_METODO[r.metodo]} ${formatearMoneda(r.monto)}`),
-                  ].filter((parte): parte is string => parte !== null).join(' · ') || 'Sin reintegro monetario'}
-                </span>
-              </TableCell>
-              <TableCell className="font-display font-semibold tabular-nums text-rose-600 dark:text-rose-400">
-                {formatearMoneda(fila.gananciaRevertida)}
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </TableContainer>
+    <>
+      <div className="hidden lg:block">
+        <TableContainer className="rounded-none border-0 shadow-none">
+          <Table>
+            <TableHeader>
+              <TableRow><TableHead>Devolución</TableHead><TableHead>Ticket original</TableHead><TableHead>Fecha</TableHead><TableHead>Artículos y cantidades</TableHead><TableHead>Importe / liquidación</TableHead><TableHead>Ganancia revertida</TableHead></TableRow>
+            </TableHeader>
+            <TableBody>
+              {pagina.items.map((fila) => (
+                <TableRow key={fila.id}>
+                  <TableCell className="font-display font-bold tabular-nums">#{fila.id}</TableCell>
+                  <TableCell className="font-display font-bold tabular-nums">#{fila.ventaId}</TableCell>
+                  <TableCell className="whitespace-nowrap text-xs tabular-nums text-slate-500 dark:text-slate-400">{fechaHora(fila.fechaHora)}</TableCell>
+                  <TableCell className="max-w-72 text-xs">{fila.items.map((item) => `${item.descripcionItem} × ${formatearUnidades(item.cantidad)}`).join(' · ')}</TableCell>
+                  <TableCell className="text-xs">
+                    <span className="block font-semibold tabular-nums">{formatearMoneda(fila.total)}</span>
+                    <span className="text-slate-500 dark:text-slate-400">
+                      {[
+                        fila.deudaReducida > 0 ? `Descontado de deuda ${formatearMoneda(fila.deudaReducida)}` : null,
+                        ...fila.reintegros.map((r) => `${ETIQUETAS_METODO[r.metodo]} ${formatearMoneda(r.monto)}`),
+                      ].filter((parte): parte is string => parte !== null).join(' · ') || 'Sin reintegro monetario'}
+                    </span>
+                  </TableCell>
+                  <TableCell className="font-display font-semibold tabular-nums text-rose-600 dark:text-rose-400">{formatearMoneda(fila.gananciaRevertida)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </div>
+      <ul className="divide-y divide-slate-100 px-4 dark:divide-slate-800/60 lg:hidden">
+        {pagina.items.map((fila) => (
+          <li key={fila.id} className="py-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="font-display text-sm font-bold text-slate-900 dark:text-white">Devolución #{fila.id} · Ticket #{fila.ventaId}</p>
+                <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">{fechaHora(fila.fechaHora)}{fila.clienteNombre ? ` · ${fila.clienteNombre}` : ''}</p>
+              </div>
+              <span className="shrink-0 font-display text-sm font-bold tabular-nums text-slate-900 dark:text-white">{formatearMoneda(fila.total)}</span>
+            </div>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600 dark:text-slate-300">
+              {fila.items.map((item) => `${item.descripcionItem} × ${formatearUnidades(item.cantidad)}`).join(' · ')}
+            </p>
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[10px]">
+              <span className="text-slate-500 dark:text-slate-400">
+                {[
+                  fila.deudaReducida > 0 ? `Deuda −${formatearMoneda(fila.deudaReducida)}` : null,
+                  ...fila.reintegros.map((r) => `${ETIQUETAS_METODO[r.metodo]} ${formatearMoneda(r.monto)}`),
+                ].filter((parte): parte is string => parte !== null).join(' · ') || 'Sin reintegro monetario'}
+              </span>
+              <span className="font-semibold tabular-nums text-rose-600 dark:text-rose-400">Ganancia revertida {formatearMoneda(fila.gananciaRevertida)}</span>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </>
   )
 }

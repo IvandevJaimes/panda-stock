@@ -1,5 +1,5 @@
 import { Banknote, CreditCard, Landmark, QrCode, Wallet } from 'lucide-react'
-import { KpiCard } from '../../components/ui/KpiCard'
+import { cn } from '../../lib/cn'
 import { SOMBRA_CARD } from './estilos'
 import { formatearMoneda } from './reportsQuery'
 import { useSettingsStore } from '../../stores/settings.store'
@@ -36,6 +36,39 @@ export function CajaResumen({ caja, resumen }: CajaResumenProps) {
     )
   }
 
+  const metodos = [
+    {
+      etiqueta: 'Efectivo neto',
+      importe: resumen?.totalEfectivo ?? 0,
+      detalle: resumen?.totalEgresosEfectivo
+        ? `${formatearMoneda(resumen.totalEgresosEfectivo)} reintegrados`
+        : 'Cobros netos',
+      Icono: Banknote,
+      tono: 'bg-sky-500/10 text-sky-600 dark:text-sky-400',
+    },
+    {
+      etiqueta: 'Transferencia',
+      importe: resumen?.totalTransferencia ?? 0,
+      detalle: 'Transferencias bancarias',
+      Icono: Landmark,
+      tono: 'bg-violet-500/10 text-violet-600 dark:text-violet-400',
+    },
+    {
+      etiqueta: 'QR',
+      importe: resumen?.totalQr ?? 0,
+      detalle: 'Pagos con QR',
+      Icono: QrCode,
+      tono: 'bg-fuchsia-500/10 text-fuchsia-600 dark:text-fuchsia-400',
+    },
+    {
+      etiqueta: 'Tarjeta',
+      importe: resumen?.totalTarjeta ?? 0,
+      detalle: 'Débito y crédito',
+      Icono: CreditCard,
+      tono: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+    },
+  ]
+
   return (
     <section className={`w-full rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800/80 dark:bg-[#111827] ${SOMBRA_CARD}`}>
       <header className="mb-3 flex items-start justify-between gap-3">
@@ -53,57 +86,36 @@ export function CajaResumen({ caja, resumen }: CajaResumenProps) {
         </span>
       </header>
 
-      {/*
-        El breakpoint baja a 2 columnas en `xl` a propósito. Este bloque vive en
-        la columna lateral (1/3 del ancho): a 4 columnas cada card queda de unos
-        200px y el monto se corta contra el ícono. Arriba de `xl` la caja ocupa
-        el ancho completo, así que ahí sí rinde 4.
-      */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5 xl:grid-cols-2">
-        <KpiCard
-          icon={<Wallet size={17} />}
-          iconBgClass="bg-emerald-100 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400"
-          title="Total del turno"
-          value={formatearMoneda(resumen?.totalVentas ?? 0)}
-          subtitle={`${resumen?.cantidadVentas ?? 0} ${resumen?.cantidadVentas === 1 ? 'venta' : 'ventas'}`}
-          className={SOMBRA_CARD}
-        />
-        <KpiCard
-          icon={<Banknote size={17} />}
-          iconBgClass="bg-sky-100 text-sky-600 dark:bg-sky-950/40 dark:text-sky-400"
-          title="Efectivo neto"
-          value={formatearMoneda(resumen?.totalEfectivo ?? 0)}
-          subtitle={
-            resumen?.totalEgresosEfectivo
-              ? `${formatearMoneda(resumen.totalEgresosEfectivo)} reintegrados`
-              : 'Cobros netos en efectivo'
-          }
-          className={SOMBRA_CARD}
-        />
-        <KpiCard
-          icon={<Landmark size={17} />}
-          iconBgClass="bg-violet-100 text-violet-600 dark:bg-violet-950/40 dark:text-violet-400"
-          title="Transferencia"
-          value={formatearMoneda(resumen?.totalTransferencia ?? 0)}
-          subtitle="Transferencias bancarias"
-          className={SOMBRA_CARD}
-        />
-        <KpiCard
-          icon={<QrCode size={17} />}
-          iconBgClass="bg-fuchsia-100 text-fuchsia-600 dark:bg-fuchsia-950/40 dark:text-fuchsia-400"
-          title="QR"
-          value={formatearMoneda(resumen?.totalQr ?? 0)}
-          subtitle="Pagos con QR"
-          className={SOMBRA_CARD}
-        />
-        <KpiCard
-          icon={<CreditCard size={17} />}
-          iconBgClass="bg-amber-100 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400"
-          title="Tarjeta"
-          value={formatearMoneda(resumen?.totalTarjeta ?? 0)}
-          subtitle="Débito y crédito"
-          className={SOMBRA_CARD}
-        />
+      <div className="rounded-xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white p-3.5 dark:border-emerald-900/60 dark:from-emerald-950/30 dark:to-slate-900/70">
+        <div className="flex items-center justify-between gap-3">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-emerald-500/10 text-emerald-700 dark:text-emerald-400">
+            <Wallet size={18} />
+          </span>
+          <span className="rounded-full bg-white/80 px-2.5 py-1 text-[11px] font-medium tabular-nums text-slate-600 dark:bg-slate-900/70 dark:text-slate-300">
+            {resumen?.cantidadVentas ?? 0} {(resumen?.cantidadVentas ?? 0) === 1 ? 'venta' : 'ventas'}
+          </span>
+        </div>
+        <p className="mt-2 text-[11px] font-medium text-slate-500 dark:text-slate-400">Total del turno</p>
+        <p className="mt-0.5 truncate font-display text-2xl font-bold tabular-nums tracking-tight text-slate-900 dark:text-white">
+          {formatearMoneda(resumen?.totalVentas ?? 0)}
+        </p>
+      </div>
+
+      <div className="mt-3 grid gap-2 2xl:grid-cols-2">
+        {metodos.map(({ etiqueta, importe, detalle, Icono, tono }) => (
+          <div key={etiqueta} className="flex min-w-0 items-center gap-2.5 rounded-xl border border-slate-100 px-3 py-2.5 dark:border-slate-800/70">
+            <span className={cn('grid h-8 w-8 shrink-0 place-items-center rounded-lg', tono)}>
+              <Icono size={15} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[11px] font-medium text-slate-500 dark:text-slate-400">{etiqueta}</p>
+              <p className="truncate font-display text-sm font-bold tabular-nums text-slate-900 dark:text-white">
+                {formatearMoneda(importe)}
+              </p>
+              <p className="truncate text-[10px] text-slate-400 dark:text-slate-500">{detalle}</p>
+            </div>
+          </div>
+        ))}
       </div>
 
       <p className="mt-3 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">

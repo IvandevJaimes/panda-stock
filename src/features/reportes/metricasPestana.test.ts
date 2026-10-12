@@ -95,17 +95,17 @@ describe('metricasDePestana', () => {
     }
   })
 
-  it('ventas: ingresos, ganancia, costo y ticket promedio', () => {
-    const [ingresos, ganancia, costo, ticket] = metricasDePestana('ventas', COMPLETO)
+  it('ventas: neto, ganancia bruta, mermas y ticket promedio', () => {
+    const [ventasNetas, ganancia, perdidas, ticket] = metricasDePestana('ventas', COMPLETO)
 
-    expect(ingresos?.titulo).toBe('Ingresos')
-    expect(ingresos?.valor).toBe('$20000.00')
-    expect(ingresos?.subtitulo).toBe('40 ventas')
-    expect(ganancia?.titulo).toBe('Ganancia estimada')
+    expect(ventasNetas?.titulo).toBe('Ventas netas')
+    expect(ventasNetas?.valor).toBe('$20000.00')
+    expect(ventasNetas?.subtitulo).toBe('40 ventas completadas')
+    expect(ganancia?.titulo).toBe('Ganancia bruta')
     expect(ganancia?.valor).toBe('$8000.00')
-    expect(ganancia?.subtitulo).toBe('40.0% de margen')
-    expect(costo?.titulo).toBe('Costo de mercadería')
-    expect(costo?.valor).toBe('$12000.00')
+    expect(ganancia?.subtitulo).toBe('40.0% luego del costo vendido')
+    expect(perdidas?.titulo).toBe('Pérdidas por mermas')
+    expect(perdidas?.valor).toBe('$3400.00')
     expect(ticket?.titulo).toBe('Ticket promedio')
     expect(ticket?.valor).toBe('$500.00')
   })
@@ -117,9 +117,9 @@ describe('metricasDePestana', () => {
   })
 
   it('ventas: singulariza la cantidad de ventas', () => {
-    const [ingresos] = metricasDePestana('ventas', { ...COMPLETO, cantVentas: 1 })
+    const [ventasNetas] = metricasDePestana('ventas', { ...COMPLETO, cantVentas: 1 })
 
-    expect(ingresos?.subtitulo).toBe('1 venta')
+    expect(ventasNetas?.subtitulo).toBe('1 venta completada')
   })
 
   it('ventas: resultado negativo se marca en rojo', () => {

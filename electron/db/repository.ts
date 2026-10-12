@@ -2578,10 +2578,13 @@ export function getMasVendidos(limite: number): MasVendido[] {
 
 export function getMovimientosStock(filtros?: FiltrosMovimientos): MovimientoStock[] {
   const db = getDb()
+  const condiciones: SQL[] = []
+  if (filtros?.productoId != null) condiciones.push(eq(movimientosStock.productoId, filtros.productoId))
+  if (filtros?.desde) condiciones.push(gte(movimientosStock.fechaHora, filtros.desde))
+  if (filtros?.hasta) condiciones.push(lte(movimientosStock.fechaHora, filtros.hasta))
   const base = db.select().from(movimientosStock)
-  const filtrado = filtros?.productoId != null
-    ? base.where(eq(movimientosStock.productoId, filtros.productoId))
-    : base
+  const condicion = and(...condiciones)
+  const filtrado = condicion ? base.where(condicion) : base
   const ordenado = filtrado.orderBy(desc(movimientosStock.fechaHora))
 
   return (filtros?.limit != null ? ordenado.limit(filtros.limit) : ordenado).all()

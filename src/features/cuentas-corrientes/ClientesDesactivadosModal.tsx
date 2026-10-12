@@ -142,8 +142,8 @@ export function ClientesDesactivadosModal({
                   key={cliente.id}
                   className="flex w-full items-stretch overflow-hidden rounded-xl border border-slate-200 text-left dark:border-slate-800"
                 >
-                  <div className="flex w-13 shrink-0 items-center justify-center bg-slate-200/60 sm:w-15 dark:bg-slate-800/60">
-                    <span className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 bg-white font-display text-sm font-bold text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+                  <div className="flex w-13 shrink-0 items-center justify-center border-r border-slate-300 bg-slate-100 sm:w-15 dark:border-slate-800 dark:bg-slate-900/70">
+                    <span className="font-display text-sm font-bold text-slate-600 dark:text-slate-300">
                       {cliente.nombre.trim().split(/\s+/).slice(0, 2).map((parte) => parte[0] ?? '').join('').toUpperCase() || 'CL'}
                     </span>
                   </div>

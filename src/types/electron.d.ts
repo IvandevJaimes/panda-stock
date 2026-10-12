@@ -51,7 +51,6 @@ import type {
   ResultadoSeguro,
 } from '../../electron/db/types'
 import type { ExportarExcelInput } from '../../electron/exportaciones.types'
-import type { ResultadoDatosPrueba } from '../../electron/db/testdata.repository'
 import type { ConfiguracionCopias, EstadoDestinoCopias, TipoDestinoCopias } from '../../electron/db/types'
 import type { EstadoLicencia, ResultadoLicencia } from '../../electron/licencia/tipos'
 
@@ -167,11 +166,6 @@ declare global {
         ) => Promise<ResultadoSeguro<MovimientoCuentaCorriente[]>>
         registrarAbono: (data: AbonoInput) => Promise<ResultadoSeguro<void>>
         registrarCargo: (data: CargoManualInput) => Promise<ResultadoSeguro<void>>
-      }
-      datosPrueba: {
-        hay: () => Promise<boolean>
-        generar: () => Promise<ResultadoDatosPrueba>
-        borrar: () => Promise<ResultadoDatosPrueba>
       }
       app: {
         /** Llega cuando se intentó cerrar la app con una caja abierta. */

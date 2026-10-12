@@ -12,7 +12,6 @@ export type PestanaReportes =
 export const PESTANAS_REPORTES: {
   valor: PestanaReportes
   etiqueta: string
-  /** Qué muestra la pestaña, para el subtítulo de la barra. */
   resumen: string
 }[] = [
   { valor: 'ventas', etiqueta: 'Ventas', resumen: 'Ingresos y ganancia estimada' },
@@ -47,16 +46,7 @@ export function etiquetaMovimiento(tipo: TipoMovimientoStock): string {
 }
 
 /**
- * Las cuatro métricas de la pestaña activa.
- *
- * El usuario pidió que el bloque de métricas cambie con la pestaña en vez de
- * mostrar siempre las mismas cuatro de ventas, y que las cards vivan en una
- * grilla de cuatro columnas arriba de las pestañas. Por eso cada pestaña
- * devuelve exactamente cuatro: la grilla no tiene que cambiar de ancho entre
- * pestañas.
- *
- * `resumen` llega `null` mientras carga: se devuelven los mismos valores en
- * cero para que las cards no baileen de ancho cuando llegan los datos.
+ * Cada vista mantiene cuatro métricas para conservar una grilla estable.
  */
 export function metricasDePestana(
   pestana: PestanaReportes,
@@ -65,6 +55,7 @@ export function metricasDePestana(
   const totalVentas = resumen?.totalVentas ?? 0
   const resultado = resumen?.resultado ?? 0
   const cantVentas = resumen?.cantVentas ?? 0
+  const plataPerdida = resumen?.perdidas.plataPerdida ?? 0
 
   const movimientos = resumen?.movimientos
   const perdidas = resumen?.perdidas
@@ -233,22 +224,22 @@ export function metricasDePestana(
 
   return [
     {
-      titulo: 'Ingresos',
+      titulo: 'Ventas netas',
       valor: formatearMoneda(totalVentas),
-      subtitulo: `${cantVentas} ${cantVentas === 1 ? 'venta' : 'ventas'}`,
+      subtitulo: `${cantVentas} ${cantVentas === 1 ? 'venta completada' : 'ventas completadas'}`,
       tono: 'emerald',
     },
     {
-      titulo: 'Ganancia estimada',
+      titulo: 'Ganancia bruta',
       valor: formatearMoneda(resultado),
-      subtitulo: `${margen.toFixed(1)}% de margen`,
+      subtitulo: `${margen.toFixed(1)}% luego del costo vendido`,
       tono: margenEsNegativo(resultado) ? 'rose' : 'emerald',
     },
     {
-      titulo: 'Costo de mercadería',
-      valor: formatearMoneda(resumen?.totalCosto ?? 0),
-      subtitulo: 'Costo real de lo vendido',
-      tono: 'amber',
+      titulo: 'Pérdidas por mermas',
+      valor: formatearMoneda(plataPerdida),
+      subtitulo: 'Estimadas al costo actual',
+      tono: plataPerdida > 0 ? 'rose' : 'emerald',
     },
     {
       titulo: 'Ticket promedio',

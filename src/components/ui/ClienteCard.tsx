@@ -60,9 +60,11 @@ export function ClienteCard({
     >
       <div className={cn(
         'flex h-full w-12 shrink-0 items-center justify-center border-r font-display text-sm font-bold sm:w-14 sm:text-base',
-        conDeuda
-          ? 'border-amber-200/80 text-amber-700 dark:border-amber-900/50 dark:text-amber-300'
-          : 'border-slate-200 text-emerald-700 dark:border-slate-800 dark:text-emerald-400',
+        archivado
+          ? 'border-slate-300 bg-slate-100 text-slate-600 dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-300'
+          : conDeuda
+            ? 'border-amber-200/80 bg-amber-50 text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-300'
+            : 'border-emerald-200/80 bg-emerald-50 text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/35 dark:text-emerald-300',
       )}>
         {iniciales || 'CL'}
       </div>
@@ -117,52 +119,54 @@ export function ClienteCard({
           </Tooltip>
         )}
         <div className="flex shrink-0 items-center gap-1 border-l border-slate-200/70 pl-2 dark:border-slate-800/80">
-          <div className="hidden items-center gap-0.5 md:flex">
+          <div className="hidden items-center md:flex">
             <Tooltip content="Editar" placement="top">
-              <Button size="icon" variant="ghost" aria-label={`Editar a ${nombre}`} onClick={onEditar}>
-                <Pencil size={15} />
-              </Button>
+              <button
+                type="button"
+                aria-label={`Editar a ${nombre}`}
+                onClick={onEditar}
+                className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-black/5 hover:text-slate-800 sm:h-8 sm:w-8 sm:rounded-xl dark:hover:bg-white/5 dark:hover:text-slate-100"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
             </Tooltip>
             {onEliminar && (
-              <Tooltip content="Eliminar" placement="top">
-                <Button
-                  size="icon"
-                  variant="ghost"
+              <Tooltip content="Eliminar cliente" placement="top">
+                <button
+                  type="button"
                   aria-label={`Eliminar cliente ${nombre}`}
                   onClick={onEliminar}
-                  className="text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40 dark:hover:text-red-400"
+                  className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 sm:h-8 sm:w-8 sm:rounded-xl dark:hover:bg-red-950/40 dark:hover:text-red-400"
                 >
-                  <Trash2 size={15} />
-                </Button>
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
               </Tooltip>
             )}
           </div>
           <div className="md:hidden">
-            {conDeuda ? (
-              <Tooltip content="Editar" placement="top">
-                <Button size="icon" variant="ghost" aria-label={`Editar a ${nombre}`} onClick={onEditar} className="h-8 w-8">
-                  <Pencil size={15} />
-                </Button>
+            <DropdownMenu placement="bottom-end">
+              <Tooltip content="Ver acciones">
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label={`Más opciones para ${nombre}`}
+                    className="cursor-pointer rounded-lg border border-transparent p-1.5 text-slate-400 transition-all hover:border-slate-300/60 hover:bg-slate-200/60 dark:hover:border-slate-700/60 dark:hover:bg-slate-800/60 dark:hover:text-slate-200"
+                  >
+                    <MoreVertical className="h-4 w-4" />
+                  </button>
+                </DropdownMenuTrigger>
               </Tooltip>
-            ) : (
-              <DropdownMenu placement="bottom-end">
-                <Tooltip content="Más opciones">
-                  <DropdownMenuTrigger asChild>
-                    <button type="button" aria-label={`Más opciones para ${nombre}`} className="cursor-pointer rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-200/60 hover:text-slate-700 dark:hover:bg-slate-800/60 dark:hover:text-slate-200">
-                      <MoreVertical size={17} />
-                    </button>
-                  </DropdownMenuTrigger>
-                </Tooltip>
-                <DropdownMenuContent className="w-48">
-                  <DropdownMenuItem icon={<Pencil size={14} />} onClick={onEditar}>Editar cliente</DropdownMenuItem>
-                  {onEliminar && (
-                    <DropdownMenuItem variant="danger" icon={<Trash2 size={14} />} onClick={onEliminar}>
-                      Eliminar cliente
-                    </DropdownMenuItem>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
+              <DropdownMenuContent className="w-48">
+                <DropdownMenuItem icon={<Pencil className="h-3.5 w-3.5" />} onClick={onEditar}>
+                  Editar cliente
+                </DropdownMenuItem>
+                {onEliminar && (
+                  <DropdownMenuItem variant="danger" icon={<Trash2 className="h-3.5 w-3.5" />} onClick={onEliminar}>
+                    Eliminar cliente
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </div>

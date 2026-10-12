@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { History, Receipt } from 'lucide-react'
-import { Pagination } from '../../components/ui/Pagination'
+import { CustomSelect } from '../../components/ui/CustomSelect'
 import {
   Table,
   TableBody,
@@ -10,6 +10,7 @@ import {
   TableRow,
 } from '../../components/ui/Table'
 import { SOMBRA_CARD } from './estilos'
+import { BarraFiltrosReporte, PaginacionReporte } from './TablaReporteUI'
 import { ventasService } from '../../services/ventas.service'
 import { cn } from '../../lib/cn'
 import { formatearMoneda, formatearUnidades } from './reportsQuery'
@@ -56,6 +57,8 @@ type HistorialVentasProps = {
 export function HistorialVentas({ desde, hasta }: HistorialVentasProps) {
   const [ventas, setVentas] = useState<Venta[] | null>(null)
   const [pagina, setPagina] = useState(1)
+  const [buscar, setBuscar] = useState('')
+  const [estadoFiltro, setEstadoFiltro] = useState<'todas' | EstadoVenta>('todas')
   const [detalles, setDetalles] = useState<Map<number, VentaDetalle>>(new Map())
 
   /*
@@ -79,6 +82,8 @@ export function HistorialVentas({ desde, hasta }: HistorialVentasProps) {
     setVentas(null)
     setDetalles(new Map())
     setPagina(1)
+    setBuscar('')
+    setEstadoFiltro('todas')
   }
 
   useEffect(() => {
@@ -98,12 +103,23 @@ export function HistorialVentas({ desde, hasta }: HistorialVentasProps) {
     }
   }, [desde, hasta])
 
-  const totalPaginas = Math.max(1, Math.ceil((ventas?.length ?? 0) / POR_PAGINA))
+  const filtradas = useMemo(() => {
+    if (!ventas) return []
+    const consulta = buscar.trim().toLocaleLowerCase('es-AR')
+    return ventas.filter((venta) => {
+      if (estadoFiltro !== 'todas' && venta.estado !== estadoFiltro) return false
+      if (!consulta) return true
+      const estado = ESTADOS[venta.estado].etiqueta.toLocaleLowerCase('es-AR')
+      return [String(venta.id), venta.fechaHora, formatearMoneda(venta.total), estado]
+        .some((valor) => valor.toLocaleLowerCase('es-AR').includes(consulta))
+    })
+  }, [ventas, buscar, estadoFiltro])
+
   const visibles = useMemo(() => {
     if (ventas === null) return []
     const inicio = (pagina - 1) * POR_PAGINA
-    return ventas.slice(inicio, inicio + POR_PAGINA)
-  }, [ventas, pagina])
+    return filtradas.slice(inicio, inicio + POR_PAGINA)
+  }, [ventas, filtradas, pagina])
 
   /*
     Solo se pide el detalle de las filas visibles. Traer el detalle de las 200
@@ -167,12 +183,41 @@ export function HistorialVentas({ desde, hasta }: HistorialVentasProps) {
         </div>
       </header>
 
-      {ventas.length === 0 ? (
-        <p className="px-4 pb-5 text-xs text-slate-500 dark:text-slate-400">
-          No hay ventas registradas en el período seleccionado.
+      <BarraFiltrosReporte
+        buscar={buscar}
+        onBuscarChange={(valor) => {
+          setBuscar(valor)
+          setPagina(1)
+        }}
+        placeholder="Buscar por ticket, fecha o importe"
+        total={filtradas.length}
+      >
+        <div className="w-full sm:w-44">
+          <CustomSelect
+            value={estadoFiltro}
+            options={[
+              { value: 'todas', label: 'Todos los estados' },
+              { value: 'completada', label: 'Completadas' },
+              { value: 'anulada', label: 'Anuladas' },
+            ]}
+            onChange={(valor) => {
+              setEstadoFiltro(valor as 'todas' | EstadoVenta)
+              setPagina(1)
+            }}
+            buttonClassName="h-10 text-xs"
+          />
+        </div>
+      </BarraFiltrosReporte>
+
+      {filtradas.length === 0 ? (
+        <p className="px-4 py-8 text-center text-xs text-slate-500 dark:text-slate-400">
+          {ventas.length === 0
+            ? 'No hay ventas registradas en el período seleccionado.'
+            : 'No hay ventas que coincidan con los filtros.'}
         </p>
       ) : (
         <>
+          <div className="hidden lg:block">
           <Table>
             <TableHeader>
               <TableRow>
@@ -243,12 +288,47 @@ export function HistorialVentas({ desde, hasta }: HistorialVentasProps) {
               })}
             </TableBody>
           </Table>
+          </div>
 
-          {totalPaginas > 1 && (
-            <div className="border-t border-slate-100 px-4 py-3 dark:border-slate-800/60">
-              <Pagination currentPage={pagina} totalPages={totalPaginas} onPageChange={setPagina} />
-            </div>
-          )}
+          <ul className="divide-y divide-slate-100 px-4 dark:divide-slate-800/60 lg:hidden">
+            {visibles.map((venta) => {
+              const estado = ESTADOS[venta.estado]
+              const detalle = detalles.get(venta.id)
+              const unidades = detalle?.items.reduce((acc, item) => acc + item.cantidad, 0)
+              return (
+                <li key={venta.id} className="py-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-display text-sm font-bold text-slate-900 dark:text-white">
+                        Ticket #{venta.id}
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+                        {formatearMomento(venta.fechaHora)}
+                      </p>
+                    </div>
+                    <span className="shrink-0 font-display text-sm font-bold tabular-nums text-slate-900 dark:text-white">
+                      {formatearMoneda(venta.total)}
+                    </span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                    <span className={cn('rounded-full px-2.5 py-1 text-[10px] font-semibold', estado.clase)}>
+                      {estado.etiqueta}
+                    </span>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                      {unidades === undefined ? 'Cargando artículos…' : `${formatearUnidades(unidades)} unidades`}
+                    </span>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+
+          <PaginacionReporte
+            pagina={pagina}
+            tamanoPagina={POR_PAGINA}
+            total={filtradas.length}
+            onCambiarPagina={setPagina}
+          />
         </>
       )}
     </section>

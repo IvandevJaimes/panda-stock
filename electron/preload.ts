@@ -197,11 +197,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
     registrarCargo: (data: CargoManualInput): Promise<ResultadoSeguro<void>> =>
       ipcRenderer.invoke("cuentas-corrientes:cargo", data),
   },
-  datosPrueba: {
-    hay: () => ipcRenderer.invoke("datosPrueba:hay"),
-    generar: () => ipcRenderer.invoke("datosPrueba:generar"),
-    borrar: () => ipcRenderer.invoke("datosPrueba:borrar"),
-  },
   app: {
     /** El main avisa que intentó cerrarse la app con la caja abierta. */
     onPedirCierre: (callback: () => void) => {

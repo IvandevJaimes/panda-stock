@@ -1,11 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
-  CICLO_PERIODOS,
   agruparMetodos,
   construirEjeDias,
   construirRanking,
+  calcularResultadoNeto,
   calcularTotales,
-  etiquetaPeriodo,
   etiquetaVisible,
   formatearDia,
   formatearMoneda,
@@ -14,10 +13,8 @@ import {
   margenEsNegativo,
   pasoEje,
   porcentaje,
-  rangoDesdePreset,
-  siguientePeriodo,
+  rangoDesdePeriodo,
   totalTarjetaCuentaCorriente,
-  type PresetRango,
   type RangoFechas,
 } from './reportsQuery'
 import type { ProductoRanking, VentaDiaria } from '../../../electron/db/types'
@@ -47,6 +44,16 @@ describe('formateo', () => {
   })
 })
 
+describe('calcularResultadoNeto', () => {
+  it('resta el costo vendido y las mermas a las ventas netas', () => {
+    expect(calcularResultadoNeto(1000, 600, 50)).toBe(350)
+  })
+
+  it('conserva dos decimales y permite un resultado negativo', () => {
+    expect(calcularResultadoNeto(100, 80.25, 30)).toBe(-10.25)
+  })
+})
+
 describe('porcentaje', () => {
   it('devuelve 0 en vez de NaN cuando el total es cero', () => {
     expect(porcentaje(100, 0)).toBe(0)
@@ -58,102 +65,37 @@ describe('porcentaje', () => {
   })
 })
 
-describe('rangoDesdePreset', () => {
-  const hoy = new Date(2026, 2, 15, 14, 30) // 15/03/2026, 14:30 local
+describe('rangoDesdePeriodo', () => {
+  const hoy = new Date(2026, 2, 15, 14, 30)
 
-  it('hoy acota al día completo', () => {
-    const { desde, hasta } = rangoDesdePreset('hoy', hoy)
-    expect(desde).toBe(new Date(2026, 2, 15, 0, 0, 0, 0).toISOString())
-    expect(hasta).toBe(new Date(2026, 2, 15, 23, 59, 59, 999).toISOString())
-  })
-
-  it('últimos 7 días incluye hoy, o sea 6 días hacia atrás', () => {
-    const { desde, hasta } = rangoDesdePreset('siete', hoy)
+  it('limita el día seleccionado a sus extremos locales', () => {
+    const { desde, hasta } = rangoDesdePeriodo('day', new Date(2026, 2, 9), hoy)
     expect(desde).toBe(new Date(2026, 2, 9, 0, 0, 0, 0).toISOString())
+    expect(hasta).toBe(new Date(2026, 2, 9, 23, 59, 59, 999).toISOString())
+  })
+
+  it('muestra el mes completo cuando se elige uno anterior', () => {
+    const { desde, hasta } = rangoDesdePeriodo('month', new Date(2026, 1, 1), hoy)
+    expect(desde).toBe(new Date(2026, 1, 1, 0, 0, 0, 0).toISOString())
+    expect(hasta).toBe(new Date(2026, 1, 28, 23, 59, 59, 999).toISOString())
+  })
+
+  it('cierra el mes actual al día de hoy', () => {
+    const { desde, hasta } = rangoDesdePeriodo('month', hoy, hoy)
+    expect(desde).toBe(new Date(2026, 2, 1, 0, 0, 0, 0).toISOString())
     expect(hasta).toBe(new Date(2026, 2, 15, 23, 59, 59, 999).toISOString())
   })
 
-  it('últimos 30 días incluye hoy, o sea 29 días hacia atrás', () => {
-    // 14/02 a 15/03 son 30 días cerrados. Con 30 hacia atrás serían 31.
-    const { desde } = rangoDesdePreset('treinta', hoy)
-    expect(desde).toBe(new Date(2026, 1, 14, 0, 0, 0, 0).toISOString())
-  })
-
-  it('este mes arranca el día 1 y no el 15', () => {
-    const { desde } = rangoDesdePreset('mes_actual', hoy)
-    expect(desde).toBe(new Date(2026, 2, 1, 0, 0, 0, 0).toISOString())
-  })
-
-  it('mes anterior cruza el cambio de año', () => {
-    const enero = new Date(2026, 0, 20, 10)
-    const { desde, hasta } = rangoDesdePreset('mes_anterior', enero)
-    expect(desde).toBe(new Date(2025, 11, 1, 0, 0, 0, 0).toISOString())
+  it('cierra el año elegido al 31 de diciembre', () => {
+    const { desde, hasta } = rangoDesdePeriodo('year', new Date(2025, 6, 1), hoy)
+    expect(desde).toBe(new Date(2025, 0, 1, 0, 0, 0, 0).toISOString())
     expect(hasta).toBe(new Date(2025, 11, 31, 23, 59, 59, 999).toISOString())
   })
 
-  it('todo no pone límites', () => {
-    expect(rangoDesdePreset('todo', hoy)).toEqual({ desde: null, hasta: null })
-  })
-
-  it('devuelve ISO completo con hora, nunca YYYY-MM-DD pelado', () => {
-    // Motivo: la base compara strings contra un fecha_hora en UTC, y '2026-03-01'
-    // es prefijo de '2026-03-01T12:00:00Z', así que el día 1 quedaría excluido.
-    const { desde } = rangoDesdePreset('mes_actual', new Date(2026, 2, 15))
-    expect(desde).not.toBe('2026-03-01')
-    expect(desde).toContain('T')
-  })
-
-  it('este año arranca el 1 de enero y cierra hoy', () => {
-    const { desde, hasta } = rangoDesdePreset('anio_actual', new Date(2026, 2, 15))
+  it('cierra el año actual al día de hoy', () => {
+    const { desde, hasta } = rangoDesdePeriodo('year', hoy, hoy)
     expect(desde).toBe(new Date(2026, 0, 1, 0, 0, 0, 0).toISOString())
     expect(hasta).toBe(new Date(2026, 2, 15, 23, 59, 59, 999).toISOString())
-  })
-
-  it('este año en diciembre no se pasa al año siguiente', () => {
-    const diciembre = new Date(2026, 11, 31, 10)
-    const { desde, hasta } = rangoDesdePreset('anio_actual', diciembre)
-    expect(desde).toBe(new Date(2026, 0, 1, 0, 0, 0, 0).toISOString())
-    expect(hasta).toBe(new Date(2026, 11, 31, 23, 59, 59, 999).toISOString())
-  })
-
-  it('no le cruza el horario: el inicio del día es local', () => {
-    const { desde } = rangoDesdePreset('hoy', new Date(2026, 2, 15, 0, 30))
-    expect(desde).toBe(new Date(2026, 2, 15, 0, 0, 0, 0).toISOString())
-  })
-})
-
-describe('siguientePeriodo', () => {
-  it('recorre día → semana → mes → año', () => {
-    expect(siguientePeriodo('hoy')).toBe('siete')
-    expect(siguientePeriodo('siete')).toBe('mes_actual')
-    expect(siguientePeriodo('mes_actual')).toBe('anio_actual')
-  })
-
-  it('vuelve al primer período después del último', () => {
-    expect(siguientePeriodo('anio_actual')).toBe('hoy')
-  })
-
-  it('si el preset no está en el ciclo arranca en el primero', () => {
-    // Queda en `hoy` en vez de devolver un período indefinido.
-    expect(siguientePeriodo('todo')).toBe('hoy')
-    expect(siguientePeriodo('mes_anterior')).toBe('hoy')
-  })
-
-  it('dar vueltas tantas veces como valores tiene el ciclo vuelve al inicio', () => {
-    let preset: PresetRango = 'mes_actual'
-    for (let i = 0; i < CICLO_PERIODOS.length; i += 1) {
-      preset = siguientePeriodo(preset)
-    }
-    expect(preset).toBe('mes_actual')
-  })
-})
-
-describe('etiquetaPeriodo', () => {
-  it('usa el nombre corto del ciclo', () => {
-    expect(etiquetaPeriodo('hoy')).toBe('Día')
-    expect(etiquetaPeriodo('siete')).toBe('Semana')
-    expect(etiquetaPeriodo('mes_actual')).toBe('Mes')
-    expect(etiquetaPeriodo('anio_actual')).toBe('Año')
   })
 })
 
@@ -193,14 +135,14 @@ describe('formatearRangoLegible', () => {
     ).toBe('09/03')
   })
 
-  it('preset "hoy" muestra un solo día', () => {
+  it('un día seleccionado muestra un solo día', () => {
     const hoy = new Date(2026, 2, 15)
-    expect(formatearRangoLegible(rangoDesdePreset('hoy', hoy))).toBe('15/03')
+    expect(formatearRangoLegible(rangoDesdePeriodo('day', hoy, hoy))).toBe('15/03')
   })
 
-  it('preset "mes actual" muestra el mes completo', () => {
+  it('el mes actual muestra desde su inicio hasta hoy', () => {
     const hoy = new Date(2026, 2, 15)
-    expect(formatearRangoLegible(rangoDesdePreset('mes_actual', hoy))).toBe('01/03 - 15/03')
+    expect(formatearRangoLegible(rangoDesdePeriodo('month', hoy, hoy))).toBe('01/03 - 15/03')
   })
 
   it('sin ninguna punta dice todo el historial', () => {

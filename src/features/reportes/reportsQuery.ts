@@ -30,19 +30,19 @@ export function porcentaje(parte: number, total: number): number {
   return (parte / total) * 100
 }
 
+/** Ventas ya netas de devoluciones, menos el costo vendido y las mermas estimadas. */
+export function calcularResultadoNeto(
+  ventasNetas: number,
+  costoVendido: number,
+  perdidasMermas: number,
+): number {
+  return Math.round((ventasNetas - costoVendido - perdidasMermas) * 100) / 100
+}
+
 // ── Rango de fechas ──────────────────────────────────────────────────────────
 
-export type PresetRango =
-  | 'hoy'
-  | 'ayer'
-  | 'siete'
-  | 'treinta'
-  | 'mes_actual'
-  | 'mes_anterior'
-  | 'anio_actual'
-  | 'todo'
-
 export type RangoFechas = { desde: string | null; hasta: string | null }
+export type PeriodoReporte = 'day' | 'month' | 'year'
 
 function aISO(date: Date): string {
   const mes = String(date.getMonth() + 1).padStart(2, '0')
@@ -60,78 +60,39 @@ function finDelDia(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999)
 }
 
-function menosDias(date: Date, dias: number): Date {
-  const copia = new Date(date)
-  copia.setDate(copia.getDate() - dias)
-  return copia
+// Se envían límites ISO completos para incluir el período al compararlo con fecha_hora.
+export function rangoDesdePeriodo(
+  periodo: PeriodoReporte,
+  cursor: Date,
+  hoy: Date = new Date(),
+): RangoFechas {
+  const inicio = periodo === 'day'
+    ? inicioDelDia(cursor)
+    : periodo === 'month'
+      ? new Date(cursor.getFullYear(), cursor.getMonth(), 1)
+      : new Date(cursor.getFullYear(), 0, 1)
+
+  const periodoActual = periodo === 'day'
+    ? isSameDayDate(cursor, hoy)
+    : periodo === 'month'
+      ? cursor.getMonth() === hoy.getMonth() && cursor.getFullYear() === hoy.getFullYear()
+      : cursor.getFullYear() === hoy.getFullYear()
+
+  const fin = periodoActual
+    ? finDelDia(hoy)
+    : periodo === 'day'
+      ? finDelDia(cursor)
+      : periodo === 'month'
+        ? finDelDia(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0))
+        : finDelDia(new Date(cursor.getFullYear(), 11, 31))
+
+  return { desde: inicio.toISOString(), hasta: fin.toISOString() }
 }
 
-/**
- * El rango vuelve en ISO COMPLETO con hora local (`2026-03-01T00:00:00.000-03:00`),
- * no en `YYYY-MM-DD`.
- *
- * `ventas.fecha_hora` guarda `toISOString()`, que es UTC. La base compara con
- * `>=` y `<=` sobre strings, así que mandar `2026-03-01` excluiría las ventas de
- * todo el 1 de marzo: la comparación de texto puts `'2026-03-01T12:00:00Z' <
- * '2026-03-01'` porque la segunda cadena es prefijo de la primera. Con el ISO
- * completo con offset, el string ordena por instante y el filtro cae en el día
- * que el usuario eligió.
- */
-export function rangoDesdePreset(preset: PresetRango, hoy: Date = new Date()): RangoFechas {
-  switch (preset) {
-    case 'hoy':
-      return { desde: inicioDelDia(hoy).toISOString(), hasta: finDelDia(hoy).toISOString() }
-    case 'ayer': {
-      const ayer = menosDias(hoy, 1)
-      return { desde: inicioDelDia(ayer).toISOString(), hasta: finDelDia(ayer).toISOString() }
-    }
-    case 'siete': {
-      const desde = menosDias(hoy, 6)
-      return { desde: inicioDelDia(desde).toISOString(), hasta: finDelDia(hoy).toISOString() }
-    }
-    case 'treinta': {
-      const desde = menosDias(hoy, 29)
-      return { desde: inicioDelDia(desde).toISOString(), hasta: finDelDia(hoy).toISOString() }
-    }
-    case 'mes_actual':
-      return {
-        desde: new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString(),
-        hasta: finDelDia(hoy).toISOString(),
-      }
-    case 'mes_anterior': {
-      const primeroAnterior = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1)
-      const ultimoAnterior = new Date(hoy.getFullYear(), hoy.getMonth(), 0)
-      return { desde: primeroAnterior.toISOString(), hasta: finDelDia(ultimoAnterior).toISOString() }
-    }
-    case 'anio_actual':
-      return {
-        desde: new Date(hoy.getFullYear(), 0, 1).toISOString(),
-        hasta: finDelDia(hoy).toISOString(),
-      }
-    case 'todo':
-      return { desde: null, hasta: null }
-  }
-}
-
-/** Los períodos del botón del título, en el orden en que los recorre el clic. */
-export type PeriodoCiclo = 'hoy' | 'siete' | 'mes_actual' | 'anio_actual'
-
-export const CICLO_PERIODOS: { valor: PeriodoCiclo; etiqueta: string }[] = [
-  { valor: 'hoy', etiqueta: 'Día' },
-  { valor: 'siete', etiqueta: 'Semana' },
-  { valor: 'mes_actual', etiqueta: 'Mes' },
-  { valor: 'anio_actual', etiqueta: 'Año' },
-]
-
-/** El período siguiente del ciclo, volviendo al primero al llegar al último. */
-export function siguientePeriodo(actual: PresetRango): PeriodoCiclo {
-  const indice = CICLO_PERIODOS.findIndex((periodo) => periodo.valor === actual)
-  const siguiente = (indice + 1) % CICLO_PERIODOS.length
-  return CICLO_PERIODOS[siguiente]!.valor
-}
-
-export function etiquetaPeriodo(preset: PresetRango): string {
-  return CICLO_PERIODOS.find((periodo) => periodo.valor === preset)?.etiqueta ?? 'Día'
+function isSameDayDate(primera: Date, segunda: Date): boolean {
+  return primera.getFullYear() === segunda.getFullYear()
+    && primera.getMonth() === segunda.getMonth()
+    && primera.getDate() === segunda.getDate()
 }
 
 // ── Eje de días ──────────────────────────────────────────────────────────────
@@ -168,12 +129,7 @@ export function formatearDia(fechaISO: string): string {
   return `${diaLocal}/${mesLocal}`
 }
 
-/**
- * El rango ya resuelto, en texto.
- *
- * El pill junto al título dice QUÉ preset está elegido ("Este mes"); esto dice
- * QUÉ fechas resolvió ese preset, que es lo que no se ve en el selector.
- */
+/** Formatea el rango resuelto para encabezados y reportes exportados. */
 export function formatearRangoLegible(rango: RangoFechas): string {
   const { desde, hasta } = rango
 

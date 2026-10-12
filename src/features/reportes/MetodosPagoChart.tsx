@@ -1,4 +1,5 @@
 import { CreditCard } from 'lucide-react'
+import { cn } from '../../lib/cn'
 import {
   Cell,
   Pie,
@@ -11,7 +12,7 @@ import { EmptyState } from '../../components/ui/EmptyState'
 import { ProgressBar } from '../../components/ui/ProgressBar'
 import { useUIStore } from '../../stores/ui.store'
 import { SOMBRA_CARD } from './estilos'
-import { formatearMoneda, type FilaMetodo } from './reportsQuery'
+import { formatearMoneda, formatearMonedaCompacta, type FilaMetodo } from './reportsQuery'
 
 /**
  * Paleta del pie. Va por prop y no con clases `dark:` porque Recharts escribe
@@ -19,6 +20,7 @@ import { formatearMoneda, type FilaMetodo } from './reportsQuery'
  * el sector quedaría del mismo color en los dos temas.
  */
 const COLORES = ['#10b981', '#0ea5e9', '#8b5cf6', '#f59e0b', '#64748b']
+const CLASES_COLOR = ['bg-emerald-500', 'bg-sky-500', 'bg-violet-500', 'bg-amber-500', 'bg-slate-500']
 
 type MetodosPagoChartProps = {
   filas: FilaMetodo[]
@@ -33,7 +35,7 @@ export function MetodosPagoChart({ filas, totalTarjetaCuentaCorriente }: Metodos
   return (
     <ChartCard
       title="Medios de pago"
-      description="Cómo se cobró lo del período."
+      description="Importes registrados por medio de pago, incluida la cuenta corriente."
       icon={<CreditCard size={15} />}
       className={SOMBRA_CARD}
     >
@@ -46,8 +48,8 @@ export function MetodosPagoChart({ filas, totalTarjetaCuentaCorriente }: Metodos
           />
         </div>
       ) : (
-        <div className="flex h-full flex-col gap-3 lg:flex-row lg:items-center">
-          <div className="h-[170px] w-full shrink-0 lg:h-full lg:w-[45%]">
+        <div className="flex h-full min-w-0 flex-row items-center gap-2">
+          <div className="relative h-full w-[40%] min-w-24 max-w-44 shrink-0">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <RechartsTooltip
@@ -84,16 +86,21 @@ export function MetodosPagoChart({ filas, totalTarjetaCuentaCorriente }: Metodos
                 </Pie>
               </PieChart>
             </ResponsiveContainer>
+            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+              <span className="text-[9px] font-medium text-slate-400 dark:text-slate-500">Registrado</span>
+              <span className="max-w-full truncate font-display text-xs font-bold tabular-nums text-slate-900 dark:text-white">
+                {formatearMonedaCompacta(total)}
+              </span>
+            </div>
           </div>
 
-          <ul className="min-w-0 flex-1 space-y-2">
+          <ul className="min-w-0 flex-1 space-y-1.5">
             {filas.map((fila, indice) => (
               <li key={fila.metodo}>
                 <div className="flex items-center justify-between gap-3 text-xs">
                   <span className="flex min-w-0 items-center gap-1.5 text-slate-600 dark:text-slate-300">
                     <span
-                      className="h-2.5 w-2.5 shrink-0 rounded-full"
-                      style={{ backgroundColor: COLORES[indice % COLORES.length] }}
+                      className={cn('h-2.5 w-2.5 shrink-0 rounded-full', CLASES_COLOR[indice % CLASES_COLOR.length])}
                       aria-hidden="true"
                     />
                     <span className="truncate">{fila.etiqueta}</span>

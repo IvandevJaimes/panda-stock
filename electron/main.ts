@@ -98,11 +98,6 @@ import {
   registrarAbono,
   registrarCargoManual,
 } from "./db/repository.ts";
-import {
-  borrarDatosPrueba,
-  generarDatosPrueba,
-  hayDatosPrueba,
-} from "./db/testdata.repository.ts";
 import { exportarExcel } from "./exportaciones.ts";
 import type { ExportarExcelInput } from "./exportaciones.types.ts";
 import type {
@@ -1102,12 +1097,6 @@ function registerIpcHandlers() {
       return registrarCargoManual(data);
     }),
   );
-
-  ipcMain.handle("datosPrueba:hay", () => hayDatosPrueba());
-
-  ipcMain.handle("datosPrueba:generar", () => generarDatosPrueba());
-
-  ipcMain.handle("datosPrueba:borrar", () => borrarDatosPrueba());
 
   ipcMain.handle("copias:get-configuracion", () => obtenerConfiguracionCopias());
   ipcMain.handle("copias:verificar-destino", (_event, tipoDestino: TipoDestinoCopias) => {

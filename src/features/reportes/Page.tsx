@@ -7,7 +7,6 @@ import {
   Loader2,
   PackageX,
   Receipt,
-  RefreshCw,
   RotateCw,
   ShoppingCart,
   TrendingUp,
@@ -15,19 +14,19 @@ import {
 import type { LucideIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '../../components/ui/Button'
-import { KpiCard } from '../../components/ui/KpiCard'
 import { LoadingState } from '../../components/ui/LoadingState'
-import { Tooltip } from '../../components/ui/Tooltip'
+import { PeriodNav } from '../../components/ui/periodNav/PeriodNav'
 import { cn } from '../../lib/cn'
 import { cajasService } from '../../services/cajas.service'
 import { reportesService } from '../../services/reportes.service'
-import { BotonDatosPrueba } from './BotonDatosPrueba'
 import { CajaResumen } from './CajaResumen'
 import { DevolucionesPanel } from './DevolucionesPanel'
 import { HistorialVentas } from './HistorialVentas'
 import { MetodosPagoChart } from './MetodosPagoChart'
 import { CortesPanel, MovimientosPanel, PerdidasPanel } from './PanelesPestana'
 import { RankingProductos } from './RankingProductos'
+import { ReporteKpiCard } from './ReporteKpiCard'
+import { ResultadoNetoVentas } from './ResultadoNetoVentas'
 import { VentasPorDiaChart } from './VentasPorDiaChart'
 import { SOMBRA_CARD } from './estilos'
 import {
@@ -40,18 +39,12 @@ import {
   agruparMetodos,
   construirEjeDias,
   construirRanking,
-  etiquetaPeriodo,
-  formatearRangoLegible,
-  rangoDesdePreset,
-  siguientePeriodo,
+  rangoDesdePeriodo,
   totalTarjetaCuentaCorriente,
-  type PresetRango,
+  type PeriodoReporte,
 } from './reportsQuery'
 import { construirExportacion } from './exportacionQuery'
 import type { CajaConResponsable, CajaSummary, ReportesSummary } from '../../../electron/db/types'
-
-/** Arranca en "Mes": el ciclo empieza en Día, y "Todo" no tiene eje diario que densificar. */
-const PRESET_INICIAL: PresetRango = 'mes_actual'
 
 const ICONO_TONO: Record<TonoMetrica, LucideIcon> = {
   emerald: TrendingUp,
@@ -60,6 +53,8 @@ const ICONO_TONO: Record<TonoMetrica, LucideIcon> = {
   violet: BarChart3,
   rose: AlertTriangle,
 }
+
+const RETRASOS_METRICAS = ['stagger-1', 'stagger-2', 'stagger-3', 'stagger-4'] as const
 
 const COLOR_TONO: Record<TonoMetrica, string> = {
   emerald: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400',
@@ -70,16 +65,13 @@ const COLOR_TONO: Record<TonoMetrica, string> = {
 }
 
 export function ReportesPage() {
-  return (
-    <div className="flex h-full flex-col overflow-hidden">
-      <ContenidoReportes />
-    </div>
-  )
+  return <ContenidoReportes />
 }
 
 function ContenidoReportes() {
   const [pestana, setPestana] = useState<PestanaReportes>('ventas')
-  const [preset, setPreset] = useState<PresetRango>(PRESET_INICIAL)
+  const [periodo, setPeriodo] = useState<PeriodoReporte>('month')
+  const [cursor, setCursor] = useState(() => new Date())
   const [resumen, setResumen] = useState<ReportesSummary | null>(null)
   const [caja, setCaja] = useState<CajaConResponsable | null>(null)
   const [resumenCaja, setResumenCaja] = useState<CajaSummary | null>(null)
@@ -87,11 +79,10 @@ function ContenidoReportes() {
   const [error, setError] = useState<string | null>(null)
   const [recarga, setRecarga] = useState(0)
 
-  const rango = useMemo(() => rangoDesdePreset(preset), [preset])
-
-  const avanzarPeriodo = useCallback(() => {
-    setPreset((actual) => siguientePeriodo(actual))
-  }, [])
+  const rango = useMemo(
+    () => rangoDesdePeriodo(periodo, cursor),
+    [periodo, cursor],
+  )
 
   /*
     Reset durante el render (mismo patrón que `HistorialVentasModal`): el effect
@@ -118,7 +109,7 @@ function ContenidoReportes() {
       reportesService.getSummary({
         desde: rango.desde ?? undefined,
         hasta: rango.hasta ?? undefined,
-        topProductos: 10,
+        topProductos: 100,
       }),
       cajasService.getActive(),
     ])
@@ -155,8 +146,6 @@ function ContenidoReportes() {
     [resumen, rango],
   )
 
-  const etiquetaPreset = useMemo(() => etiquetaPeriodo(preset), [preset])
-
   const metricas = useMemo(() => metricasDePestana(pestana, resumen), [pestana, resumen])
 
   const [exportando, setExportando] = useState(false)
@@ -185,14 +174,9 @@ function ContenidoReportes() {
     }
   }, [exportando, pestana, resumen, rango])
 
-  const pestanaActiva = useMemo(
-    () => PESTANAS_REPORTES.find((opcion) => opcion.valor === pestana) ?? PESTANAS_REPORTES[0]!,
-    [pestana],
-  )
-
   if (error !== null) {
     return (
-      <div className="flex flex-1 items-center justify-center p-6">
+      <div className="flex min-h-[60vh] items-center justify-center py-6">
         <div className="max-w-md text-center">
           <span className="mx-auto grid h-11 w-11 place-items-center rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400">
             <AlertTriangle size={20} />
@@ -211,161 +195,176 @@ function ContenidoReportes() {
   }
 
   if (cargando && resumen === null) {
-    return <LoadingState title="Cargando reportes..." description="Consultando ventas del período." />
+    return (
+      <div className="flex h-full w-full items-center justify-center">
+        <LoadingState
+          title="Cargando reportes..."
+          description="Consultando ventas del período."
+          fullPage
+        />
+      </div>
+    )
   }
 
   return (
-    <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-6">
-      {/* Título + acciones, mismo estilo que el encabezado de Inventario */}
-      <div className="flex flex-row items-center justify-between gap-3">
+    <div className="w-full space-y-4 py-4">
+      <div className="flex items-center justify-between gap-3 animate-entry-up">
         <div className="flex min-w-0 items-center gap-2">
           <h1 className="font-display text-xl font-bold text-slate-900 dark:text-white sm:text-2xl">
             Reportes
           </h1>
-          <Tooltip
-            content={
-              <span className="block">
-                <span className="block font-display font-semibold">{formatearRangoLegible(rango)}</span>
-                <span className="mt-0.5 block text-[11px] opacity-70">Clic para cambiar de período</span>
-              </span>
-            }
-            delay={[200, 50]}
-          >
-            <button
-              type="button"
-              onClick={avanzarPeriodo}
-              aria-label={`Período: ${etiquetaPreset}. Clic para cambiar.`}
-              className={cn(
-                'inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-slate-200 bg-slate-100 px-2.5 py-0.5 font-display text-sm font-bold text-emerald-600 transition-colors hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 active:scale-95 focus-visible:ring-2 focus-visible:ring-emerald-500/60 focus-visible:outline-none dark:border-slate-700/80 dark:bg-slate-800 dark:text-emerald-400 dark:hover:border-emerald-600/60 dark:hover:bg-slate-700 dark:hover:text-emerald-300',
-                cargando && 'animate-pulse',
-              )}
-            >
-              {etiquetaPreset}
-              <RefreshCw size={12} className={cn('transition-transform', cargando && 'animate-spin')} />
-            </button>
-          </Tooltip>
         </div>
+        <Button
+          onClick={exportarReporte}
+          disabled={exportando || cargando}
+          aria-label={exportando ? 'Exportando reporte' : 'Exportar reporte'}
+          title="Elige la carpeta donde guardar la pestaña activa como .xlsx"
+          variant="primary"
+          className="h-10 shrink-0 gap-2 rounded-2xl px-4 text-sm font-bold shadow-xs sm:h-12 sm:px-6 sm:text-base"
+        >
+          {exportando ? (
+            <Loader2 className="h-5 w-5 shrink-0 animate-spin" />
+          ) : (
+            <FileSpreadsheet className="h-5 w-5 shrink-0" />
+          )}
+          {exportando ? 'Exportando…' : 'Exportar'}
+        </Button>
+      </div>
 
-        <div className="flex shrink-0 items-center gap-2">
-          <BotonDatosPrueba alCambiar={recargar} />
+      <div className="sticky top-0 z-30 w-full bg-[#f4f6f8] dark:bg-[#0b0f17]">
+        <div className="relative flex w-full min-w-0 flex-col gap-3 pt-3 pb-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="order-2 flex flex-wrap items-center gap-1.5 xl:order-1">
+            {PESTANAS_REPORTES.map((opcion) => {
+              const activa = opcion.valor === pestana
+
+              return (
+                <button
+                  key={opcion.valor}
+                  type="button"
+                  onClick={() => setPestana(opcion.valor)}
+                  aria-pressed={activa}
+                  className={cn(
+                    'shrink-0 cursor-pointer whitespace-nowrap rounded-full border px-4 py-2.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500',
+                    activa
+                      ? 'border-emerald-500 bg-emerald-500 text-white shadow-xs'
+                      : 'border-slate-200 bg-white text-slate-600 hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-emerald-700 dark:hover:bg-emerald-950/30 dark:hover:text-emerald-300',
+                  )}
+                >
+                  {opcion.etiqueta}
+                </button>
+              )
+            })}
+          </div>
+
+          <div className="order-1 flex w-full min-w-0 justify-start overflow-visible xl:order-2 xl:w-auto">
+            <div className="min-w-0 max-w-full">
+              <PeriodNav
+                period={periodo}
+                onPeriodChange={setPeriodo}
+                cursor={cursor}
+                onCursorChange={setCursor}
+                onToday={() => setCursor(new Date())}
+              />
+            </div>
+          </div>
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 top-full h-3 bg-gradient-to-b from-slate-900/10 to-transparent dark:from-black/45"
+          />
         </div>
       </div>
 
+      {pestana === 'ventas' && resumen !== null && (
+        <ResultadoNetoVentas
+          ventasNetas={resumen.totalVentas}
+          costoVendido={resumen.totalCosto}
+          perdidasMermas={resumen.perdidas.plataPerdida}
+        />
+      )}
+
       {/* Métricas de la pestaña activa */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {metricas.map((metrica) => {
+        {metricas.map((metrica, index) => {
           const Icono = ICONO_TONO[metrica.tono]
 
           return (
-            <KpiCard
+            <ReporteKpiCard
               key={metrica.titulo}
               icon={<Icono size={17} />}
               iconBgClass={COLOR_TONO[metrica.tono]}
               title={metrica.titulo}
               value={metrica.valor}
               subtitle={metrica.subtitulo}
-              className={SOMBRA_CARD}
+              className={cn(
+                SOMBRA_CARD,
+                'animate-entry-up',
+                RETRASOS_METRICAS[index] ?? 'stagger-4',
+              )}
             />
           )
         })}
       </div>
 
-      {/* Pestañas */}
-      <div className={`flex flex-wrap items-center gap-1.5 rounded-2xl border border-slate-200 bg-white p-1.5 dark:border-slate-800/80 dark:bg-[#111827] ${SOMBRA_CARD}`}>
-        {PESTANAS_REPORTES.map((opcion) => {
-          const activa = opcion.valor === pestana
-
-          return (
-            <button
-              key={opcion.valor}
-              type="button"
-              onClick={() => setPestana(opcion.valor)}
-              aria-pressed={activa}
-              className={cn(
-                'cursor-pointer rounded-xl px-3.5 py-2 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500',
-                activa
-                  ? 'bg-emerald-500 text-white shadow-xs'
-                  : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200',
-              )}
-            >
-              {opcion.etiqueta}
-            </button>
-          )
-        })}
-
-        {/* Mismo estilo que las pestañas, pero es una acción: el ícono la
-            distingue de las selecciones de la barra. */}
-        <button
-          type="button"
-          onClick={exportarReporte}
-          disabled={exportando || cargando}
-          title="Elige la carpeta donde guardar la pestaña activa como .xlsx"
-          className={cn(
-            'inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-xl px-3.5 py-2',
-            'text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500',
-            'text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200',
-            'disabled:pointer-events-none disabled:opacity-60',
-          )}
-        >
-          {exportando ? (
-            <Loader2 size={14} className="shrink-0 animate-spin" />
-          ) : (
-            <FileSpreadsheet size={14} className="shrink-0" />
-          )}
-          {exportando ? 'Exportando…' : 'Exportar'}
-        </button>
-
-        <div className="ml-auto flex items-center gap-2">
-          <span className="text-[11px] text-slate-400 dark:text-slate-500">
-            {pestanaActiva.resumen}
-          </span>
-        </div>
-      </div>
-
       {/* Contenido de la pestaña */}
       {pestana === 'ventas' && (
         <>
-          <div className="grid gap-4 xl:grid-cols-3">
+          <div className="grid gap-4 xl:grid-cols-3 animate-entry-up stagger-1">
             <div className="xl:col-span-2">
               <VentasPorDiaChart puntos={ejeDias} />
             </div>
             <MetodosPagoChart filas={metodos} totalTarjetaCuentaCorriente={totalTarjetaCuentaCorriente(metodos)} />
           </div>
 
-          <div className="grid gap-4 xl:grid-cols-3">
+          <div className="grid gap-4 xl:grid-cols-3 animate-entry-up stagger-2">
             <div className="xl:col-span-2">
-              <RankingProductos filas={ranking} />
+              <RankingProductos key={`${rango.desde}|${rango.hasta}`} filas={ranking} />
             </div>
             <div className="space-y-4">
               <CajaResumen caja={caja} resumen={resumenCaja} />
             </div>
           </div>
 
-          <HistorialVentas desde={rango.desde} hasta={rango.hasta} />
+          <div className="animate-entry-up stagger-3">
+            <HistorialVentas key={`${rango.desde}|${rango.hasta}`} desde={rango.desde} hasta={rango.hasta} />
+          </div>
 
-          <p className="flex items-center justify-center gap-1.5 pb-2 text-[11px] text-slate-400 dark:text-slate-500">
+          <p className="flex items-center justify-center gap-1.5 pb-2 text-[11px] text-slate-400 dark:text-slate-500 animate-entry-up stagger-4">
             <ShoppingCart size={12} />
             Los movimientos de stock están en la pestaña Movimientos.
           </p>
         </>
       )}
 
-      {pestana === 'movimientos' && <MovimientosPanel resumen={resumen} />}
+      {pestana === 'movimientos' && (
+        <div className="animate-entry-up stagger-1">
+          <MovimientosPanel key={`${rango.desde}|${rango.hasta}`} resumen={resumen} desde={rango.desde} hasta={rango.hasta} />
+        </div>
+      )}
 
-      {pestana === 'perdidas' && <PerdidasPanel resumen={resumen} />}
+      {pestana === 'perdidas' && (
+        <div className="animate-entry-up stagger-1">
+          <PerdidasPanel key={`${rango.desde}|${rango.hasta}`} resumen={resumen} />
+        </div>
+      )}
 
-      {pestana === 'cortes' && <CortesPanel resumen={resumen} />}
+      {pestana === 'cortes' && (
+        <div className="animate-entry-up stagger-1">
+          <CortesPanel key={`${rango.desde}|${rango.hasta}`} resumen={resumen} />
+        </div>
+      )}
 
       {pestana === 'devoluciones' && (
-        <DevolucionesPanel
-          desde={rango.desde}
-          hasta={rango.hasta}
-          onSuccess={recargar}
-        />
+        <div className="animate-entry-up stagger-1">
+          <DevolucionesPanel
+            desde={rango.desde}
+            hasta={rango.hasta}
+            onSuccess={recargar}
+          />
+        </div>
       )}
 
       {pestana !== 'ventas' && pestana !== 'devoluciones' && (
-        <p className="flex items-center justify-center gap-1.5 pb-2 text-[11px] text-slate-400 dark:text-slate-500">
+        <p className="flex items-center justify-center gap-1.5 pb-2 text-[11px] text-slate-400 dark:text-slate-500 animate-entry-up stagger-2">
           <PackageX size={12} />
           {pestana === 'perdidas'
             ? 'Las mermas se valoran al costo actual del producto, no al del día de la merma.'
