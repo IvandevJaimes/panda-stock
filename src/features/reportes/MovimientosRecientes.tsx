@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowDownRight, ArrowUpRight, History } from 'lucide-react'
 import { CustomSelect } from '../../components/ui/CustomSelect'
+import { EmptySearch } from '../../components/ui/EmptySearch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/Table'
 import { cn } from '../../lib/cn'
 import { movimientosService } from '../../services/movimientos.service'
@@ -10,7 +11,7 @@ import { BarraFiltrosReporte, PaginacionReporte } from './TablaReporteUI'
 import { formatearUnidades } from './reportsQuery'
 import type { MovimientoStock, TipoMovimientoStock } from '../../../electron/db/types'
 
-const POR_PAGINA = 10
+const POR_PAGINA = 30
 const ETIQUETAS: Record<TipoMovimientoStock, string> = {
   entrada: 'Entrada', venta: 'Venta', ajuste_positivo: 'Ajuste positivo',
   ajuste_negativo: 'Ajuste negativo', merma: 'Merma', devolucion: 'Devolución',
@@ -89,10 +90,12 @@ export function MovimientosRecientes({ desde, hasta }: MovimientosRecientesProps
       </BarraFiltrosReporte>
       {movimientos === null ? (
         <p className="px-4 py-8 text-center text-xs text-slate-400 dark:text-slate-500">Cargando movimientos del período…</p>
-      ) : filtrados.length === 0 ? (
+      ) : filtrados.length === 0 ? movimientos.length === 0 ? (
         <p className="px-4 py-8 text-center text-xs text-slate-500 dark:text-slate-400">
-          {movimientos.length === 0 ? 'No hay movimientos de stock en este período.' : 'No hay movimientos que coincidan con los filtros.'}
+          No hay movimientos de stock en este período.
         </p>
+      ) : (
+        <EmptySearch onClear={() => { setBuscar(''); setTipo('todos'); setPagina(1) }} />
       ) : (
         <>
           <div className="hidden lg:block">

@@ -1,24 +1,21 @@
 import type { ReportesSummary, TipoMovimientoStock } from '../../../electron/db/types'
-import { formatearMoneda, formatearUnidades, margenEsNegativo, porcentaje } from './reportsQuery'
+import { formatearMoneda, formatearUnidades } from './reportsQuery'
 
 export type PestanaReportes =
   | 'ventas'
   | 'movimientos'
   | 'perdidas'
   | 'cortes'
-  | 'anulaciones'
-  | 'devoluciones'
 
 export const PESTANAS_REPORTES: {
   valor: PestanaReportes
   etiqueta: string
   resumen: string
 }[] = [
-  { valor: 'ventas', etiqueta: 'Ventas', resumen: 'Ingresos y ganancia estimada' },
+  { valor: 'ventas', etiqueta: 'Ventas', resumen: 'Ingresos cobrados y productos vendidos' },
   { valor: 'movimientos', etiqueta: 'Movimientos', resumen: 'Entradas y salidas de mercadería' },
-  { valor: 'perdidas', etiqueta: 'Pérdidas', resumen: 'Mermas y plata perdida' },
+  { valor: 'perdidas', etiqueta: 'Pérdidas', resumen: 'Mermas y pérdidas estimadas' },
   { valor: 'cortes', etiqueta: 'Cortes de caja', resumen: 'Arqueos de los turnos cerrados' },
-  { valor: 'devoluciones', etiqueta: 'Devoluciones', resumen: 'Reintegros y stock devuelto' },
 ]
 
 /** Semántica del color, para que el componente elija el icono y las clases. */
@@ -28,6 +25,7 @@ export type MetricaPestana = {
   titulo: string
   /** `KpiCard` acepta string o number: los conteos van crudos, los montos formateados. */
   valor: string | number
+  valorClassName?: string
   subtitulo: string
   tono: TonoMetrica
 }
@@ -53,9 +51,10 @@ export function metricasDePestana(
   resumen: ReportesSummary | null,
 ): MetricaPestana[] {
   const totalVentas = resumen?.totalVentas ?? 0
-  const resultado = resumen?.resultado ?? 0
+  const totalCobrado = resumen?.totalCobrado ?? 0
   const cantVentas = resumen?.cantVentas ?? 0
   const plataPerdida = resumen?.perdidas.plataPerdida ?? 0
+  const resultadoPeriodo = Math.round((totalCobrado - plataPerdida) * 100) / 100
 
   const movimientos = resumen?.movimientos
   const perdidas = resumen?.perdidas
@@ -96,6 +95,7 @@ export function metricasDePestana(
   if (pestana === 'perdidas') {
     const mermas = perdidas?.cantidadMermas ?? 0
     const afectados = perdidas?.porProducto.length ?? 0
+    const unidadesPerdidas = perdidas?.unidadesPerdidas ?? 0
 
     return [
       {
@@ -106,14 +106,14 @@ export function metricasDePestana(
       },
       {
         titulo: 'Unidades perdidas',
-        valor: formatearUnidades(perdidas?.unidadesPerdidas ?? 0),
+        valor: formatearUnidades(unidadesPerdidas),
         subtitulo: 'Mercadería descartada',
         tono: mermas > 0 ? 'rose' : 'emerald',
       },
       {
         titulo: 'Plata perdida',
         valor: formatearMoneda(perdidas?.plataPerdida ?? 0),
-        subtitulo: 'Al costo actual del producto',
+        subtitulo: 'Estimación de las mermas',
         tono: mermas > 0 ? 'rose' : 'emerald',
       },
       {
@@ -158,93 +158,42 @@ export function metricasDePestana(
     ]
   }
 
-  if (pestana === 'anulaciones') {
-    const anuladas = resumen?.ventasAnuladas?.cantidad ?? 0
-    const montoAnulado = resumen?.ventasAnuladas?.monto ?? 0
-    return [
-      {
-        titulo: 'Tickets emitidos',
-        valor: cantVentas + anuladas,
-        subtitulo: 'Del período',
-        tono: 'sky',
-      },
-      {
-        titulo: 'Vigentes',
-        valor: cantVentas,
-        subtitulo: 'Completadas',
-        tono: 'emerald',
-      },
-      {
-        titulo: 'Anuladas',
-        valor: anuladas,
-        subtitulo: anuladas === 1 ? 'venta anulada' : 'ventas anuladas',
-        tono: anuladas > 0 ? 'rose' : 'emerald',
-      },
-      {
-        titulo: 'Monto anulado',
-        valor: formatearMoneda(montoAnulado),
-        subtitulo: 'Sumatoria de anuladas',
-        tono: anuladas > 0 ? 'rose' : 'emerald',
-      },
-    ]
-  }
-
-  if (pestana === 'devoluciones') {
-    const devoluciones = resumen?.devoluciones
-    return [
-      {
-        titulo: 'Devoluciones',
-        valor: devoluciones?.cantidad ?? 0,
-        subtitulo: 'Completadas en el período',
-        tono: 'rose',
-      },
-      {
-        titulo: 'Unidades devueltas',
-        valor: formatearUnidades(devoluciones?.unidades ?? 0),
-        subtitulo: 'Reintegradas al stock',
-        tono: 'sky',
-      },
-      {
-        titulo: 'Importe devuelto',
-        valor: formatearMoneda(devoluciones?.total ?? 0),
-        subtitulo: 'A valor histórico del ticket',
-        tono: 'amber',
-      },
-      {
-        titulo: 'Ganancia revertida',
-        valor: formatearMoneda(devoluciones?.gananciaRevertida ?? 0),
-        subtitulo: 'Según costo y precio del ticket',
-        tono: 'rose',
-      },
-    ]
-  }
-
-  const margen = porcentaje(resultado, totalVentas)
   const ticketPromedio = cantVentas > 0 ? totalVentas / cantVentas : 0
+  const resultadoEsPositivo = resultadoPeriodo > 0
+  const resultadoEsNegativo = resultadoPeriodo < 0
 
   return [
     {
-      titulo: 'Ventas netas',
-      valor: formatearMoneda(totalVentas),
-      subtitulo: `${cantVentas} ${cantVentas === 1 ? 'venta completada' : 'ventas completadas'}`,
+      titulo: 'Ingresos cobrados',
+      valor: formatearMoneda(totalCobrado),
+      subtitulo: 'Ventas cobradas y abonos recibidos, netos de reintegros',
       tono: 'emerald',
     },
     {
-      titulo: 'Ganancia bruta',
-      valor: formatearMoneda(resultado),
-      subtitulo: `${margen.toFixed(1)}% luego del costo vendido`,
-      tono: margenEsNegativo(resultado) ? 'rose' : 'emerald',
+      titulo: 'Resultado después de mermas',
+      valor: formatearMoneda(resultadoPeriodo),
+      valorClassName: resultadoEsPositivo
+        ? 'text-emerald-700 dark:text-emerald-400'
+        : resultadoEsNegativo
+          ? 'text-rose-600 dark:text-rose-400'
+          : 'text-slate-700 dark:text-slate-300',
+      subtitulo: resultadoEsPositivo
+        ? 'Ganaste en el período'
+        : resultadoEsNegativo
+          ? 'Perdiste en el período'
+          : 'Sin ganancia ni pérdida',
+      tono: resultadoEsPositivo ? 'emerald' : resultadoEsNegativo ? 'rose' : 'violet',
     },
     {
       titulo: 'Pérdidas por mermas',
       valor: formatearMoneda(plataPerdida),
-      subtitulo: 'Estimadas al costo actual',
+      subtitulo: 'Estimadas para el período',
       tono: plataPerdida > 0 ? 'rose' : 'emerald',
     },
     {
       titulo: 'Ticket promedio',
       valor: formatearMoneda(ticketPromedio),
-      subtitulo: 'Por venta',
+      subtitulo: `Por ticket · ${cantVentas} ventas`,
       tono: 'sky',
     },
   ]

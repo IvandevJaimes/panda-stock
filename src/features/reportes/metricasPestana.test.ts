@@ -10,8 +10,7 @@ import {
 function resumenVacio(): ReportesSummary {
   return {
     totalVentas: 0,
-    totalCosto: 0,
-    resultado: 0,
+    totalCobrado: 0,
     cantVentas: 0,
     caja: null,
     movimientos: { cantidad: 0, unidades: 0, entradas: 0, salidas: 0, porTipo: [] },
@@ -26,9 +25,9 @@ function resumenVacio(): ReportesSummary {
 const COMPLETO: ReportesSummary = {
   ...resumenVacio(),
   totalVentas: 20000,
-  totalCosto: 12000,
-  resultado: 8000,
+  totalCobrado: 20000,
   cantVentas: 40,
+  ventasPorDia: [{ fecha: '2026-03-02', ventas: 40, abonos: 0, unidades: 100, total: 20000 }],
   movimientos: {
     cantidad: 25,
     unidades: 310,
@@ -44,23 +43,15 @@ const COMPLETO: ReportesSummary = {
   },
   perdidas: { cantidadMermas: 2, unidadesPerdidas: 13, plataPerdida: 3400, porProducto: [] },
   cortes: { cantidad: 7, diferenciaTotal: -125, conDescuadre: 3, cortes: [] },
-  devoluciones: {
-    cantidad: 3,
-    unidades: 7,
-    total: 4200,
-    costo: 2800,
-    gananciaRevertida: 1400,
-  },
 }
 
 describe('PESTANAS_REPORTES', () => {
-  it('incluye devoluciones junto a las pestañas actuales', () => {
+  it('incluye las vistas activas de reportes', () => {
     expect(PESTANAS_REPORTES.map((p) => p.valor)).toEqual([
       'ventas',
       'movimientos',
       'perdidas',
       'cortes',
-      'devoluciones',
     ])
   })
 
@@ -80,11 +71,11 @@ describe('metricasDePestana', () => {
   })
 
   it('cada pestaña muestra un juego distinto de títulos', () => {
-    const juegos = (['ventas', 'movimientos', 'perdidas', 'cortes', 'devoluciones'] as const).map((p) =>
-      metricasDePestana(p, COMPLETO).map((m) => m.titulo),
+    const juegos = PESTANAS_REPORTES.map(({ valor }) =>
+      metricasDePestana(valor, COMPLETO).map((m) => m.titulo),
     )
 
-    expect(new Set(juegos).size).toBe(5)
+    expect(new Set(juegos).size).toBe(4)
   })
 
   it('ninguna métrica se repite dentro de la misma pestaña', () => {
@@ -95,15 +86,16 @@ describe('metricasDePestana', () => {
     }
   })
 
-  it('ventas: neto, ganancia bruta, mermas y ticket promedio', () => {
-    const [ventasNetas, ganancia, perdidas, ticket] = metricasDePestana('ventas', COMPLETO)
+  it('ventas: ingresos, resultado tras mermas, pérdidas y ticket promedio', () => {
+    const [ventasNetas, resultado, perdidas, ticket] = metricasDePestana('ventas', COMPLETO)
 
-    expect(ventasNetas?.titulo).toBe('Ventas netas')
+    expect(ventasNetas?.titulo).toBe('Ingresos cobrados')
     expect(ventasNetas?.valor).toBe('$20000.00')
-    expect(ventasNetas?.subtitulo).toBe('40 ventas completadas')
-    expect(ganancia?.titulo).toBe('Ganancia bruta')
-    expect(ganancia?.valor).toBe('$8000.00')
-    expect(ganancia?.subtitulo).toBe('40.0% luego del costo vendido')
+    expect(ventasNetas?.subtitulo).toContain('abonos recibidos')
+    expect(resultado?.titulo).toBe('Resultado después de mermas')
+    expect(resultado?.valor).toBe('$16600.00')
+    expect(resultado?.subtitulo).toBe('Ganaste en el período')
+    expect(resultado?.tono).toBe('emerald')
     expect(perdidas?.titulo).toBe('Pérdidas por mermas')
     expect(perdidas?.valor).toBe('$3400.00')
     expect(ticket?.titulo).toBe('Ticket promedio')
@@ -116,16 +108,10 @@ describe('metricasDePestana', () => {
     expect(ticket?.valor).toBe('$0.00')
   })
 
-  it('ventas: singulariza la cantidad de ventas', () => {
+  it('ventas: mantiene clara la semántica del ingreso cobrado', () => {
     const [ventasNetas] = metricasDePestana('ventas', { ...COMPLETO, cantVentas: 1 })
 
-    expect(ventasNetas?.subtitulo).toBe('1 venta completada')
-  })
-
-  it('ventas: resultado negativo se marca en rojo', () => {
-    const [, ganancia] = metricasDePestana('ventas', { ...COMPLETO, resultado: -500 })
-
-    expect(ganancia?.tono).toBe('rose')
+    expect(ventasNetas?.titulo).toBe('Ingresos cobrados')
   })
 
   it('movimientos: cantidad, unidades y el desglose entradas/salidas', () => {
@@ -142,7 +128,7 @@ describe('metricasDePestana', () => {
     expect(salidas?.tono).toBe('amber')
   })
 
-  it('perdidas: usa la plata perdida del backend', () => {
+  it('perdidas: resume registros, unidades e importe', () => {
     const [mermas, unidades, plata, afectados] = metricasDePestana('perdidas', COMPLETO)
 
     expect(mermas?.valor).toBe(2)
@@ -154,7 +140,7 @@ describe('metricasDePestana', () => {
   })
 
   it('perdidas: sin mermas queda en verde, no en rojo', () => {
-    const [mermas, plata] = metricasDePestana('perdidas', resumenVacio())
+    const [mermas, , plata] = metricasDePestana('perdidas', resumenVacio())
 
     expect(mermas?.tono).toBe('emerald')
     expect(plata?.tono).toBe('emerald')

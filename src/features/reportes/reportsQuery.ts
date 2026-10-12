@@ -30,15 +30,6 @@ export function porcentaje(parte: number, total: number): number {
   return (parte / total) * 100
 }
 
-/** Ventas ya netas de devoluciones, menos el costo vendido y las mermas estimadas. */
-export function calcularResultadoNeto(
-  ventasNetas: number,
-  costoVendido: number,
-  perdidasMermas: number,
-): number {
-  return Math.round((ventasNetas - costoVendido - perdidasMermas) * 100) / 100
-}
-
 // ── Rango de fechas ──────────────────────────────────────────────────────────
 
 export type RangoFechas = { desde: string | null; hasta: string | null }
@@ -102,10 +93,9 @@ export type PuntoDia = {
   fecha: string
   etiqueta: string
   ventas: number
+  abonos: number
   unidades: number
   total: number
-  costo: number
-  resultado: number
 }
 
 export function formatearDia(fechaISO: string): string {
@@ -154,9 +144,9 @@ function sumarUnDia(fechaISO: string): string {
 }
 
 /**
- * Los días sin venta NO vienen de la base. La consulta agrupa solo los días con
- * filas, así que el lunes sin ventas falta en la serie y el gráfico conecta en
- * diagonal del domingo al martes: se lee como una caída que no ocurrió.
+ * Los días sin actividad NO vienen de la base. La consulta agrupa solo los días
+ * con ventas, cobros, abonos o devoluciones, así que el gráfico necesita
+ * completar los huecos para no conectar en diagonal días separados.
  *
  * Cuando no hay filtro de fechas (`desde` es null) no hay contra qué rellenar y
  * se devuelve la serie tal cual, sin inventar un eje de miles de días hacia
@@ -174,10 +164,9 @@ export function construirEjeDias(
       fecha: fila.fecha,
       etiqueta: formatearDia(fila.fecha),
       ventas: fila.ventas,
+      abonos: fila.abonos,
       unidades: fila.unidades,
       total: fila.total,
-      costo: fila.costo,
-      resultado: fila.total - fila.costo,
     }))
   }
 
@@ -198,10 +187,9 @@ export function construirEjeDias(
       fecha: cursor,
       etiqueta: formatearDia(cursor),
       ventas: fila?.ventas ?? 0,
+      abonos: fila?.abonos ?? 0,
       unidades: fila?.unidades ?? 0,
       total: fila?.total ?? 0,
-      costo: fila?.costo ?? 0,
-      resultado: (fila?.total ?? 0) - (fila?.costo ?? 0),
     })
   }
 
@@ -237,7 +225,7 @@ export const METODOS_AGRUPADOS: { metodo: MetodoPago; etiqueta: string }[] = [
   { metodo: 'transferencia', etiqueta: 'Transferencia' },
   { metodo: 'qr', etiqueta: 'QR' },
   { metodo: 'debito', etiqueta: 'Tarjeta' },
-  { metodo: 'cuenta_corriente', etiqueta: 'Tarjeta de crédito y cuenta corriente' },
+  { metodo: 'cuenta_corriente', etiqueta: 'Tarjeta de crédito' },
 ]
 
 export type FilaMetodo = { metodo: MetodoPago; etiqueta: string; monto: number; porcentaje: number }
@@ -275,6 +263,57 @@ export function totalTarjetaCuentaCorriente(filas: FilaMetodo[]): number {
     .reduce((acc, fila) => acc + fila.monto, 0)
 }
 
+export type MetodosPagoHabilitadosReporte = {
+  tarjetaHabilitada: boolean
+  transferenciaHabilitada: boolean
+  qrHabilitado: boolean
+  cuentaCorrienteHabilitada: boolean
+}
+
+const METODOS_PAGO_DETALLADOS: { metodo: MetodoPago; etiqueta: string }[] = [
+  { metodo: 'efectivo', etiqueta: 'Efectivo' },
+  { metodo: 'transferencia', etiqueta: 'Transferencia' },
+  { metodo: 'qr', etiqueta: 'QR' },
+  { metodo: 'debito', etiqueta: 'Tarjeta de débito' },
+  { metodo: 'credito', etiqueta: 'Tarjeta de crédito' },
+  { metodo: 'cuenta_corriente', etiqueta: 'Cuenta corriente' },
+]
+
+/** Agrupa los medios individualmente para que el gráfico respete los ajustes actuales. */
+export function agruparMetodosHabilitados(
+  ventasPorMetodo: readonly { metodo: MetodoPago; monto: number }[],
+  habilitados: MetodosPagoHabilitadosReporte,
+): FilaMetodo[] {
+  const disponible: Record<MetodoPago, boolean> = {
+    efectivo: true,
+    transferencia: habilitados.transferenciaHabilitada,
+    qr: habilitados.qrHabilitado,
+    debito: habilitados.tarjetaHabilitada,
+    credito: habilitados.tarjetaHabilitada,
+    cuenta_corriente: habilitados.cuentaCorrienteHabilitada,
+  }
+  const acumulado = new Map<MetodoPago, number>()
+
+  for (const fila of ventasPorMetodo) {
+    if (!disponible[fila.metodo]) continue
+    acumulado.set(fila.metodo, (acumulado.get(fila.metodo) ?? 0) + fila.monto)
+  }
+
+  const total = [...acumulado.values()].reduce((acc, monto) => acc + monto, 0)
+
+  return METODOS_PAGO_DETALLADOS
+    .filter((opcion) => acumulado.has(opcion.metodo))
+    .map((opcion) => {
+      const monto = acumulado.get(opcion.metodo) ?? 0
+      return {
+        ...opcion,
+        monto,
+        porcentaje: porcentaje(monto, total),
+      }
+    })
+    .sort((a, b) => b.monto - a.monto)
+}
+
 // ── Ranking de productos ─────────────────────────────────────────────────────
 
 export type FilaRanking = ProductoRanking & { porcentajeVenta: number }
@@ -286,29 +325,18 @@ export function construirRanking(filas: ProductoRanking[], totalVendido: number)
   }))
 }
 
-/** Un margen negativo se muestra en rojo: se vendió por debajo del costo. */
-export function margenEsNegativo(margen: number): boolean {
-  return margen < 0
-}
-
 // ── Totales de la pantalla ───────────────────────────────────────────────────
 
 export type Totales = {
   totalVentas: number
-  totalCosto: number
-  resultado: number
   cantVentas: number
   unidades: number
   ticketPromedio: number
-  margenPorcentaje: number
-  margenNegativo: boolean
 }
 
 export function calcularTotales(
   resumen: {
     totalVentas: number
-    totalCosto: number
-    resultado: number
     cantVentas: number
     ventasPorDia: VentaDiaria[]
   },
@@ -316,12 +344,8 @@ export function calcularTotales(
   const unidades = resumen.ventasPorDia.reduce((acc, dia) => acc + dia.unidades, 0)
   return {
     totalVentas: resumen.totalVentas,
-    totalCosto: resumen.totalCosto,
-    resultado: resumen.resultado,
     cantVentas: resumen.cantVentas,
     unidades,
     ticketPromedio: resumen.cantVentas === 0 ? 0 : resumen.totalVentas / resumen.cantVentas,
-    margenPorcentaje: porcentaje(resumen.resultado, resumen.totalVentas),
-    margenNegativo: resumen.resultado < 0,
   }
 }

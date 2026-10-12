@@ -196,6 +196,7 @@ export function ProductQuickActionsModal({
         {vistaActual === "ajustar-stock" && loteActivo && (
           <AjustarStockLoteForm
             lote={loteActivo}
+            stockActualProducto={product.stockActual}
             formId={FORM_ID["ajustar-stock"]}
             esLoteActivo
             onOpenLotes={onOpenLotes}

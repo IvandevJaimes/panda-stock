@@ -9,6 +9,7 @@ import { cn } from "../../../lib/cn";
 import type { Lote } from "../../../../electron/db/types";
 import { HeaderLote } from "./HeaderLote";
 import { BotonGestionarLotes } from "../quick-actions/BotonGestionarLotes";
+import { formatearPrecio } from "../quick-actions/formatters";
 import { noSpinnersClass } from "../quick-actions/types";
 import { ACCION_LABEL_LOTE, FORM_ID_LOTE } from "./types";
 
@@ -24,6 +25,7 @@ const VALORES_INICIALES_AJUSTAR = {
 
 interface AjustarStockLoteFormProps {
   lote: Lote;
+  stockActualProducto?: number;
   formId?: string;
   esLoteActivo?: boolean;
   onOpenLotes?: () => void;
@@ -35,6 +37,7 @@ interface AjustarStockLoteFormProps {
 
 export function AjustarStockLoteForm({
   lote,
+  stockActualProducto,
   formId,
   esLoteActivo = false,
   onOpenLotes,
@@ -56,8 +59,15 @@ export function AjustarStockLoteForm({
   const nuevoStock = useWatch({ control, name: "nuevoStock" }) ?? "";
   const motivo = useWatch({ control, name: "motivo" }) ?? "";
   const nuevoStockNum = nuevoStock !== "" ? Number(nuevoStock) : NaN;
-  const diferenciaValida = !Number.isNaN(nuevoStockNum);
-  const diferencia = nuevoStockNum - lote.cantidadActual;
+  const diferenciaValida = Number.isFinite(nuevoStockNum) && nuevoStockNum >= 0;
+  const diferencia = diferenciaValida ? nuevoStockNum - lote.cantidadActual : 0;
+  const valorAjuste = diferencia * lote.costoUnitario;
+  const stockFinalProducto = stockActualProducto === undefined
+    ? null
+    : stockActualProducto + diferencia;
+
+  const formatearUnidades = (valor: number) =>
+    new Intl.NumberFormat("es-AR", { maximumFractionDigits: 2 }).format(valor);
 
   useEffect(() => onDirtyChange?.(isDirty), [isDirty, onDirtyChange]);
 
@@ -110,7 +120,7 @@ export function AjustarStockLoteForm({
               required: "El nuevo stock es obligatorio",
               validate: {
                 numeroValido: (val) =>
-                  !Number.isNaN(Number(val)) || "Debe ser un número válido",
+                  Number.isFinite(Number(val)) || "Debe ser un número válido",
                 noNegativo: (val) => Number(val) >= 0 || "No puede ser negativo",
               },
             })}
@@ -127,6 +137,51 @@ export function AjustarStockLoteForm({
               Diferencia: {diferencia > 0 ? "+" : ""}
               {diferencia}
             </p>
+          )}
+          {diferenciaValida && (
+            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-800 dark:bg-slate-900/50">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                <div>
+                  <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                    Stock final del lote
+                  </p>
+                  <p className="mt-0.5 font-display text-sm font-bold tabular-nums text-slate-900 dark:text-white">
+                    {formatearUnidades(nuevoStockNum)} unidades
+                  </p>
+                </div>
+                {stockFinalProducto !== null && (
+                  <div>
+                    <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                      Stock final del producto
+                    </p>
+                    <p className="mt-0.5 font-display text-sm font-bold tabular-nums text-slate-900 dark:text-white">
+                      {formatearUnidades(stockFinalProducto)} unidades
+                    </p>
+                  </div>
+                )}
+                <div>
+                  <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                    Valor del ajuste
+                  </p>
+                  <p
+                    className={cn(
+                      "mt-0.5 font-display text-sm font-bold tabular-nums",
+                      diferencia > 0
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : diferencia < 0
+                          ? "text-rose-600 dark:text-rose-400"
+                          : "text-slate-700 dark:text-slate-300",
+                    )}
+                  >
+                    {diferencia > 0 ? "+" : diferencia < 0 ? "−" : ""}
+                    {formatearPrecio(Math.abs(valorAjuste))}
+                  </p>
+                </div>
+              </div>
+              <p className="mt-2 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+                Valorizado con el costo del lote ({formatearPrecio(lote.costoUnitario)} por unidad).
+              </p>
+            </div>
           )}
         </div>
         <div className="flex flex-col gap-1.5">

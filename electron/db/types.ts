@@ -1,6 +1,6 @@
 export type TipoVenta = 'unidad' | 'caja' | 'combo'
 export type UnidadMedida = 'unidad' | 'ml' | 'g'
-export type EstadoVenta = 'completada' | 'anulada'
+export type EstadoVenta = 'pendiente' | 'completada' | 'anulada'
 export type EstadoCaja = 'abierta' | 'cerrada'
 export type ClaveProteccion =
   | 'reportes'
@@ -349,81 +349,9 @@ export type FiltrosVentas = {
   limit?: number
 }
 
-export type FiltrosDevoluciones = {
-  desde?: string
-  hasta?: string
-  buscar?: string
-  limit?: number
-  offset?: number
-}
-
-export type Pagina<T> = {
-  items: T[]
-  total: number
-}
-
-export type VentaDevolucionResumen = {
-  venta: Venta
-  clienteNombre: string | null
-  metodos: MetodoPago[]
-  unidades: number
-}
-
-export type VentaDevolucionDetalle = {
-  venta: Venta
-  clienteNombre: string | null
-  items: DetalleVenta[]
-  pagos: Pago[]
-}
-
-export type ProcesarDevolucionInput = {
-  pin?: string
-  ventaId: number
-}
-
 export type CambiarProteccionesInput = {
   protecciones: ProteccionesSeguridad
   pin?: string
-}
-
-export type Devolucion = {
-  id: number
-  ventaId: number
-  cajaId: number | null
-  fechaHora: string
-  total: number
-  costo: number
-  gananciaRevertida: number
-}
-
-export type LineaDevolucion = {
-  id: number
-  devolucionId: number
-  detalleVentaId: number
-  cantidad: number
-  importe: number
-  costo: number
-  gananciaRevertida: number
-  descripcionItem: string
-}
-
-export type ReintegroDevolucion = {
-  metodo: Exclude<MetodoPago, 'cuenta_corriente'>
-  monto: number
-}
-
-export type DevolucionCompleta = Devolucion & {
-  clienteNombre: string | null
-  deudaReducida: number
-  items: LineaDevolucion[]
-  reintegros: ReintegroDevolucion[]
-}
-
-export type ResultadoDevolucion = {
-  devolucionId: number
-  ventaId: number
-  total: number
-  gananciaRevertida: number
 }
 
 /**
@@ -467,8 +395,14 @@ export type VentaHistorial = Venta & {
 
 export type VentaDetalle = {
   venta: Venta
-  items: DetalleVenta[]
+  items: Array<DetalleVenta & { imgPath: string | null }>
   pagos: Pago[]
+  clienteNombre: string | null
+  clienteNotas: string | null
+  empleadoNombre: string | null
+  totalCuentaCorriente: number
+  abonosCuentaCorriente: number
+  saldoCuentaCorriente: number
 }
 
 export type MovimientoStock = {
@@ -520,19 +454,15 @@ export type FiltrosMovimientos = {
   limit?: number
 }
 
-/**
- * Costo de mercadería vendida: `costo_unitario` congelado en la línea al vender,
- * no el costo actual del producto. Editar `productos.costo` después no
- * reescribe la historia, y no debe: un resultado histórico que cambia cuando
- * tocás el precio de compra no es un resultado.
- */
 export type VentaDiaria = {
   /** `YYYY-MM-DD` en hora local, que es como el usuario lee el calendario. */
   fecha: string
   ventas: number
+  /** Cantidad de abonos de cuenta corriente recibidos ese día. */
+  abonos: number
   unidades: number
+  /** Cobros y abonos netos de devoluciones y reintegros. */
   total: number
-  costo: number
 }
 
 export type ProductoRanking = {
@@ -541,8 +471,6 @@ export type ProductoRanking = {
   /** Unidades vendidas. No es la cantidad de ventas. */
   cantidad: number
   monto: number
-  costo: number
-  margen: number
 }
 
 /** Un tipo de movimiento con su conteo y las unidades que movió en el período. */
@@ -567,18 +495,11 @@ export type ResumenMovimientos = {
   porTipo: MovimientoPorTipo[]
 }
 
-/** Pérdida de un producto: cuántas unidades se perdieron y a qué costo. */
+/** Merma de un producto: unidades perdidas y su importe estimado. */
 export type ProductoPerdida = {
   productoId: number | null
   nombre: string
   unidades: number
-  /**
-   * `productos.costo` actual, NO el costo histórico. `movimientos_stock` no
-   * congela el costo al momento de la merma, así que es el único dato disponible
-   * y hay que leerlo como "a lo que hoy cuesta", no como lo que se perdió en
-   * plata el día de la merma.
-   */
-  costoUnitario: number
   perdido: number
 }
 
@@ -632,36 +553,30 @@ export type ReportesSummary = {
     diferencia: number | null
     ventas: number
   }
+  /** Importe vendido neto de devoluciones; incluye los tickets a cuenta corriente. */
   totalVentas: number
+  /** Dinero cobrado en el período: pagos y abonos, menos devoluciones y reintegros. */
+  totalCobrado: number
   cantVentas: number
-  totalCosto: number
-  /** Margen bruto: `totalVentas - totalCosto`. No incluye gastos, que no se registran. */
-  resultado: number
   ventasPorMetodo: { metodo: MetodoPago; monto: number }[]
   productosMasVendidos: ProductoRanking[]
+  /** Productos ordenados por monto neto vendido. */
+  productosMayorIngreso: ProductoRanking[]
   /**
- * Solo los días que tuvieron ventas: el `GROUP BY` de la consulta no puede
- * inventar los huecos de un rango, porque el rango vive en el renderer. Quien
- * grafica tiene que densificar contra los `desde`/`hasta` del filtro.
+ * Solo los días que tuvieron ventas o movimientos de cobro: el `GROUP BY` de la
+ * consulta no puede inventar los huecos de un rango, porque el rango vive en el
+ * renderer. Quien grafica tiene que densificar contra los `desde`/`hasta`.
  */
   ventasPorDia: VentaDiaria[]
   movimientos: ResumenMovimientos
   perdidas: ResumenPerdidas
   cortes: ResumenCortes
-  devoluciones?: {
-    cantidad: number
-    unidades: number
-    total: number
-    costo: number
-    gananciaRevertida: number
-  }
-  ventasAnuladas?: { cantidad: number; monto: number }
 }
 
 export type FiltrosReportes = {
   desde?: string
   hasta?: string
-  /** Cuántos productos traer en el ranking. Por omisión, 5. */
+  /** Cuántos productos traer en cada ranking. Por omisión, 5. */
   topProductos?: number
 }
 

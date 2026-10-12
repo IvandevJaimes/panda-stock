@@ -7,6 +7,7 @@ type ReporteKpiCardProps = {
   iconBgClass: string
   title: string
   value: string | number
+  valueClassName?: string
   subtitle: string
   className?: string
 }
@@ -16,6 +17,7 @@ export function ReporteKpiCard({
   iconBgClass,
   title,
   value,
+  valueClassName,
   subtitle,
   className,
 }: ReporteKpiCardProps) {
@@ -34,7 +36,10 @@ export function ReporteKpiCard({
         </span>
       </div>
       <div className="mt-3 min-w-0">
-        <p className="truncate font-display text-2xl font-bold leading-tight tabular-nums text-slate-900 dark:text-white sm:text-[1.75rem]">
+        <p className={cn(
+          'truncate font-display text-2xl font-bold leading-tight tabular-nums text-slate-900 dark:text-white sm:text-[1.75rem]',
+          valueClassName,
+        )}>
           {value}
         </p>
         <p className="mt-1 text-[11px] leading-snug text-slate-500 dark:text-slate-400">

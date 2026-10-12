@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { ArrowDownRight, ArrowUpRight, PackageX, Trash2 } from 'lucide-react'
 import { CustomSelect } from '../../components/ui/CustomSelect'
+import { EmptySearch } from '../../components/ui/EmptySearch'
 import { ProgressBar } from '../../components/ui/ProgressBar'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/Table'
 import type { ReportesSummary, TipoMovimientoStock } from '../../../electron/db/types'
@@ -11,7 +12,7 @@ import { MovimientosRecientes } from './MovimientosRecientes'
 import { formatearMoneda, formatearUnidades } from './reportsQuery'
 import { BarraFiltrosReporte, PaginacionReporte } from './TablaReporteUI'
 
-const POR_PAGINA = 8
+const POR_PAGINA = 30
 
 const ICONO_TIPO: Record<TipoMovimientoStock, typeof ArrowUpRight> = {
   entrada: ArrowDownRight,
@@ -127,7 +128,7 @@ export function PerdidasPanel({ resumen }: { resumen: ReportesSummary | null }) 
         <div className="min-w-0">
           <h3 className="font-display text-sm font-semibold text-slate-900 dark:text-white">Mermas por producto</h3>
           <p className="mt-1 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
-            Solo mermas reales; el importe se estima con el costo actual del producto.
+            Importe estimado de las unidades descartadas por producto.
           </p>
         </div>
       </header>
@@ -137,21 +138,22 @@ export function PerdidasPanel({ resumen }: { resumen: ReportesSummary | null }) 
         placeholder="Buscar producto"
         total={filtradas.length}
       />
-      {filtradas.length === 0 ? (
+      {filtradas.length === 0 ? filas.length === 0 ? (
         <p className="px-4 py-8 text-center text-xs text-slate-500 dark:text-slate-400">
-          {filas.length === 0 ? 'No se registraron mermas en el período.' : 'No hay productos que coincidan con la búsqueda.'}
+          No se registraron mermas en el período.
         </p>
+      ) : (
+        <EmptySearch onClear={() => { setBuscar(''); setPagina(1) }} />
       ) : (
         <>
           <div className="hidden lg:block">
             <Table>
-              <TableHeader><TableRow><TableHead>Producto</TableHead><TableHead className="text-right">Unidades</TableHead><TableHead className="text-right">Costo unitario</TableHead><TableHead className="text-right">Pérdida estimada</TableHead></TableRow></TableHeader>
+              <TableHeader><TableRow><TableHead>Producto</TableHead><TableHead className="text-right">Unidades</TableHead><TableHead className="text-right">Pérdida estimada</TableHead></TableRow></TableHeader>
               <TableBody>
                 {visibles.map((fila) => (
                   <TableRow key={fila.productoId ?? fila.nombre}>
                     <TableCell className="font-medium text-slate-900 dark:text-white">{fila.nombre}</TableCell>
                     <TableCell className="text-right tabular-nums">{formatearUnidades(fila.unidades)}</TableCell>
-                    <TableCell className="text-right tabular-nums text-slate-500 dark:text-slate-400">{formatearMoneda(fila.costoUnitario)}</TableCell>
                     <TableCell className="text-right font-display font-bold tabular-nums text-rose-600 dark:text-rose-400">{formatearMoneda(fila.perdido)}</TableCell>
                   </TableRow>
                 ))}
@@ -164,7 +166,7 @@ export function PerdidasPanel({ resumen }: { resumen: ReportesSummary | null }) 
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">{fila.nombre}</p>
                   <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                    {formatearUnidades(fila.unidades)} u. · {formatearMoneda(fila.costoUnitario)} por unidad
+                    {formatearUnidades(fila.unidades)} unidades descartadas
                   </p>
                 </div>
                 <p className="shrink-0 font-display text-sm font-bold tabular-nums text-rose-600 dark:text-rose-400">{formatearMoneda(fila.perdido)}</p>
@@ -172,7 +174,7 @@ export function PerdidasPanel({ resumen }: { resumen: ReportesSummary | null }) 
             ))}
           </ul>
           <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-4 py-3 dark:border-slate-800/60">
-            <span className="text-[11px] text-slate-500 dark:text-slate-400">Total del período · {formatearUnidades(perdidas?.unidadesPerdidas ?? 0)} unidades</span>
+            <span className="text-[11px] text-slate-500 dark:text-slate-400">Pérdidas estimadas · {formatearUnidades(perdidas?.unidadesPerdidas ?? 0)} unidades</span>
             <span className="font-display text-sm font-bold tabular-nums text-rose-600 dark:text-rose-400">{formatearMoneda(perdidas?.plataPerdida ?? 0)}</span>
           </div>
           <PaginacionReporte pagina={pagina} tamanoPagina={POR_PAGINA} total={filtradas.length} onCambiarPagina={setPagina} />
@@ -238,10 +240,18 @@ export function CortesPanel({ resumen }: { resumen: ReportesSummary | null }) {
           />
         </div>
       </BarraFiltrosReporte>
-      {filtradas.length === 0 ? (
+      {filtradas.length === 0 ? filas.length === 0 ? (
         <p className="px-4 py-8 text-center text-xs text-slate-500 dark:text-slate-400">
-          {filas.length === 0 ? 'No se cerró ninguna caja en el período.' : 'No hay cierres que coincidan con los filtros.'}
+          No se cerró ninguna caja en el período.
         </p>
+      ) : (
+        <EmptySearch
+          onClear={() => {
+            setBuscar('')
+            setFiltroDiferencia('todos')
+            setPagina(1)
+          }}
+        />
       ) : (
         <>
           <div className="hidden lg:block">

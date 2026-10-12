@@ -14,6 +14,7 @@ import type { MetodoPago, VentaHistorial } from '../../../electron/db/types'
 const MOTIVOS_PREDEFINIDOS = [
   'Error de cobro / equivocación de cajero',
   'Cliente canceló la compra',
+  'Devolución',
   'Producto defectuoso o rechazado',
   'Cobro duplicado',
   'Otro motivo',

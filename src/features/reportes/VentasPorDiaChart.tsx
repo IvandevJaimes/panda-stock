@@ -1,9 +1,8 @@
 import { useMemo } from 'react'
 import {
   Area,
+  AreaChart,
   CartesianGrid,
-  ComposedChart,
-  Line,
   ResponsiveContainer,
   Tooltip as RechartsTooltip,
   XAxis,
@@ -12,7 +11,6 @@ import {
 import { BarChart3 } from 'lucide-react'
 import { ChartCard } from '../../components/ui/ChartCard'
 import { EmptyState } from '../../components/ui/EmptyState'
-import { cn } from '../../lib/cn'
 import { useUIStore } from '../../stores/ui.store'
 import { SOMBRA_CARD } from './estilos'
 import {
@@ -27,18 +25,12 @@ type VentasPorDiaChartProps = {
   puntos: PuntoDia[]
 }
 
-/**
- * Ingresos, costo de mercadería vendida y resultado, por día.
- *
- * Ingresos y costo van como áreas y el resultado como línea encima: leer tres
- * áreas superpuestas es peor que ilegible, y lo que el dueño mira primero es si
- * el resultado cruza cero.
- */
+/** Dinero cobrado por día, con ventas y abonos recibidos en el detalle. */
 export function VentasPorDiaChart({ puntos }: VentasPorDiaChartProps) {
   const isDark = useUIStore((state) => state.theme === 'dark')
 
   const paso = pasoEje(puntos.length)
-  const hayDatos = puntos.some((punto) => punto.total > 0)
+  const hayDatos = puntos.some((punto) => punto.ventas > 0 || punto.abonos > 0 || punto.total !== 0)
 
   const ejes = useMemo(
     () => ({
@@ -52,29 +44,23 @@ export function VentasPorDiaChart({ puntos }: VentasPorDiaChartProps) {
 
   return (
     <ChartCard
-      title="Ventas, costo y ganancia bruta"
-      description="El costo usa el valor registrado al vender. Las mermas se descuentan en el neto estimado."
+      title="Ingresos cobrados por día"
+      description="Pagos de ventas y abonos recibidos, menos devoluciones y reintegros."
       icon={<BarChart3 size={15} />}
       acciones={(
         <div className="flex flex-wrap justify-end gap-x-3 gap-y-1 text-[10px] font-medium text-slate-500 dark:text-slate-400">
-          <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500" />Ventas</span>
-          <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-amber-500" />Costo</span>
-          <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-sky-500" />Ganancia bruta</span>
+          <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500" />Cobros</span>
         </div>
       )}
       className={SOMBRA_CARD}
     >
       {hayDatos ? (
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={puntos} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+          <AreaChart data={puntos} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
             <defs>
               <linearGradient id="gradIngresos" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="#10b981" stopOpacity={0.35} />
                 <stop offset="100%" stopColor="#10b981" stopOpacity={0.02} />
-              </linearGradient>
-              <linearGradient id="gradCosto" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#f59e0b" stopOpacity={0.3} />
-                <stop offset="100%" stopColor="#f59e0b" stopOpacity={0.02} />
               </linearGradient>
             </defs>
 
@@ -113,17 +99,15 @@ export function VentasPorDiaChart({ puntos }: VentasPorDiaChartProps) {
                       {label}
                     </p>
                     <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                      {punto.ventas} {punto.ventas === 1 ? 'venta' : 'ventas'} ·{' '}
-                      {punto.unidades} unidades
+                      {punto.ventas} {punto.ventas === 1 ? 'venta' : 'ventas'} · {punto.unidades} unidades
                     </p>
+                    {punto.abonos > 0 && (
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        {punto.abonos} {punto.abonos === 1 ? 'abono recibido' : 'abonos recibidos'}
+                      </p>
+                    )}
                     <dl className="mt-1.5 space-y-0.5 text-[11px]">
-                      <FilaTooltip etiqueta="Ventas" valor={formatearMoneda(punto.total)} tono="emerald" />
-                      <FilaTooltip etiqueta="Costo" valor={formatearMoneda(punto.costo)} tono="amber" />
-                      <FilaTooltip
-                        etiqueta="Ganancia bruta"
-                        valor={formatearMoneda(punto.resultado)}
-                        tono="sky"
-                      />
+                      <FilaTooltip etiqueta="Cobrado" valor={formatearMoneda(punto.total)} />
                     </dl>
                   </div>
                 )
@@ -133,37 +117,19 @@ export function VentasPorDiaChart({ puntos }: VentasPorDiaChartProps) {
             <Area
               type="monotone"
               dataKey="total"
-              name="Ventas"
+              name="Cobros"
               stroke="#10b981"
               strokeWidth={2}
               fill="url(#gradIngresos)"
               isAnimationActive={false}
             />
-            <Area
-              type="monotone"
-              dataKey="costo"
-              name="Costo"
-              stroke="#f59e0b"
-              strokeWidth={1.5}
-              fill="url(#gradCosto)"
-              isAnimationActive={false}
-            />
-            <Line
-              type="monotone"
-              dataKey="resultado"
-              name="Ganancia bruta"
-              stroke="#0ea5e9"
-              strokeWidth={2}
-              dot={false}
-              isAnimationActive={false}
-            />
-          </ComposedChart>
+          </AreaChart>
         </ResponsiveContainer>
       ) : (
         <div className="flex h-full items-center justify-center">
           <EmptyState
-            title="Sin ventas en el período"
-            description="No hay nada que graficar todavía. Ampliá el rango de fechas o registrá una venta."
+            title="Sin cobros en el período"
+            description="No se registraron pagos ni abonos en este período."
             icon={<BarChart3 size={22} />}
           />
         </div>
@@ -172,17 +138,11 @@ export function VentasPorDiaChart({ puntos }: VentasPorDiaChartProps) {
   )
 }
 
-function FilaTooltip({ etiqueta, valor, tono }: { etiqueta: string; valor: string; tono: 'emerald' | 'amber' | 'sky' }) {
-  const color = {
-    emerald: 'bg-emerald-500',
-    amber: 'bg-amber-500',
-    sky: 'bg-sky-500',
-  }[tono]
-
+function FilaTooltip({ etiqueta, valor }: { etiqueta: string; valor: string }) {
   return (
     <div className="flex items-center justify-between gap-4">
       <dt className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
-        <span className={cn('h-2 w-2 rounded-full', color)} aria-hidden="true" />
+        <span className="h-2 w-2 rounded-full bg-emerald-500" aria-hidden="true" />
         {etiqueta}
       </dt>
       <dd className="font-display font-semibold tabular-nums text-slate-900 dark:text-white">

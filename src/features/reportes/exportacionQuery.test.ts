@@ -8,8 +8,7 @@ import type { RangoFechas } from './reportsQuery'
 function resumenVacio(): ReportesSummary {
   return {
     totalVentas: 0,
-    totalCosto: 0,
-    resultado: 0,
+    totalCobrado: 0,
     cantVentas: 0,
     caja: null,
     movimientos: { cantidad: 0, unidades: 0, entradas: 0, salidas: 0, porTipo: [] },
@@ -24,12 +23,11 @@ function resumenVacio(): ReportesSummary {
 const COMPLETO: ReportesSummary = {
   ...resumenVacio(),
   totalVentas: 20000,
-  totalCosto: 12000,
-  resultado: 8000,
+  totalCobrado: 20000,
   cantVentas: 40,
   ventasPorDia: [
-    { fecha: '2026-03-02', ventas: 3, unidades: 5, total: 5000, costo: 3000 },
-    { fecha: '2026-03-04', ventas: 2, unidades: 2, total: 2000, costo: 1200 },
+    { fecha: '2026-03-02', ventas: 3, abonos: 1, unidades: 5, total: 5000 },
+    { fecha: '2026-03-04', ventas: 2, abonos: 0, unidades: 2, total: 2000 },
   ],
   ventasPorMetodo: [
     { metodo: 'efectivo', monto: 12000 },
@@ -37,7 +35,7 @@ const COMPLETO: ReportesSummary = {
     { metodo: 'debito', monto: 3000 },
   ],
   productosMasVendidos: [
-    { productoId: 1, nombre: 'Gaseosa Cola', cantidad: 30, monto: 6000, costo: 3600, margen: 2400 },
+    { productoId: 1, nombre: 'Gaseosa Cola', cantidad: 30, monto: 6000 },
   ],
   movimientos: {
     cantidad: 25,
@@ -54,7 +52,7 @@ const COMPLETO: ReportesSummary = {
     unidadesPerdidas: 13,
     plataPerdida: 3400,
     porProducto: [
-      { productoId: 1, nombre: 'Yogur', unidades: 13, costoUnitario: 261.5, perdido: 3400 },
+      { productoId: 1, nombre: 'Yogur', unidades: 13, perdido: 3400 },
     ],
   },
   cortes: {
@@ -87,13 +85,6 @@ const COMPLETO: ReportesSummary = {
         observaciones: null,
       },
     ],
-  },
-  devoluciones: {
-    cantidad: 2,
-    unidades: 4,
-    total: 500,
-    costo: 300,
-    gananciaRevertida: 200,
   },
 }
 
@@ -159,14 +150,6 @@ describe('construirExportacion', () => {
     expect(filas[2]![0]!.value).toBe('Exportado: 06/03/2026 14:30')
   })
 
-  it('exporta el resumen de devoluciones, sin sustituirlo por ventas', () => {
-    const filas = filasDe('devoluciones', COMPLETO)
-
-    expect(tieneSeccion(filas, 'Resumen')).toBe(true)
-    expect(filas.some((fila) => fila.some((celda) => celda.value === 'Devoluciones completadas'))).toBe(true)
-    expect(filas.some((fila) => fila.some((celda) => celda.value === 'Ventas por día'))).toBe(false)
-  })
-
   it('el resultado es JSON-subeable: solo números, strings y booleanos', () => {
     const input = exportar('cortes')
 
@@ -179,16 +162,16 @@ describe('exportación de la pestaña Ventas', () => {
 
   it('apila las secciones que se leen en pantalla', () => {
     expect(tieneSeccion(filas, 'Resumen')).toBe(true)
-    expect(tieneSeccion(filas, 'Ventas por día')).toBe(true)
+    expect(tieneSeccion(filas, 'Ingresos cobrados por día')).toBe(true)
     expect(tieneSeccion(filas, 'Medios de pago')).toBe(true)
     expect(tieneSeccion(filas, 'Productos más vendidos')).toBe(true)
   })
 
   it('los montos van como números para que Excel pueda sumarlos', () => {
-    expect(valorDe(filas, 'Ingresos')).toBe(20000)
-    expect(valorDe(filas, 'Ganancia estimada')).toBe(8000)
+    expect(valorDe(filas, 'Ingresos cobrados')).toBe(20000)
+    expect(valorDe(filas, 'Resultado después de mermas')).toBe(16600)
+    expect(valorDe(filas, 'Pérdidas por mermas')).toBe(3400)
     expect(valorDe(filas, 'Ticket promedio')).toBe(500)
-    expect(valorDe(filas, 'Margen')).toBe(40)
   })
 
   it('densifica el eje: los días sin venta del período salen con ceros', () => {
@@ -199,7 +182,7 @@ describe('exportación de la pestaña Ventas', () => {
     expect(fechas).toEqual(['01/03', '02/03', '03/03', '04/03', '05/03'])
   })
 
-  it('agrupa tarjeta de crédito y cuenta corriente en un solo medio', () => {
+  it('exporta con el nombre del medio que recibió el dinero', () => {
     const conTarjetaYCuenta = exportar('ventas', {
       ...COMPLETO,
       ventasPorMetodo: [
@@ -208,7 +191,7 @@ describe('exportación de la pestaña Ventas', () => {
       ],
     }).hojas[0]!.filas
 
-    const filaCombinada = conTarjetaYCuenta.find((fila) => fila[0]?.value === 'Tarjeta de crédito y cuenta corriente')
+    const filaCombinada = conTarjetaYCuenta.find((fila) => fila[0]?.value === 'Tarjeta de crédito')
     expect(filaCombinada?.[1]?.value).toBe(3000)
   })
 
@@ -242,17 +225,17 @@ describe('exportación de la pestaña Movimientos', () => {
 describe('exportación de la pestaña Pérdidas', () => {
   const filas = filasDe('perdidas')
 
-  it('detalla cada producto y cierra con el total del período', () => {
+  it('detalla las pérdidas estimadas por producto y cierra con el total', () => {
     expect(tieneSeccion(filas, 'Mermas por producto')).toBe(true)
     expect(valorDe(filas, 'Plata perdida')).toBe(3400)
 
     const producto = filas.find((fila) => fila[0]?.value === 'Yogur')
     expect(producto?.[1]?.value).toBe(13)
-    expect(producto?.[3]?.value).toBe(3400)
+    expect(producto?.[2]?.value).toBe(3400)
 
     const total = filas.find((fila) => fila[0]?.value === 'Total')
     expect(total?.[1]?.value).toBe(13)
-    expect(total?.[3]?.value).toBe(3400)
+    expect(total?.[2]?.value).toBe(3400)
   })
 })
 

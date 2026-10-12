@@ -61,14 +61,10 @@ import {
   getReportesSummary,
   getVentaDetalle,
   getVentas,
-  getVentasDevolucion,
-  getVentaDevolucionDetalle,
-  getHistorialDevoluciones,
   getVentasRecientes,
   openCaja,
   processSale,
   anularVenta,
-  processDevolucion,
   scanProductByCode,
   toggleEmpleado,
   toggleProducto,
@@ -113,8 +109,6 @@ import type {
   FiltrosProducto,
   FiltrosReportes,
   FiltrosVentas,
-  FiltrosDevoluciones,
-  ProcesarDevolucionInput,
   NegocioInput,
   NegocioSetupInput,
   NuevoEmpleado,
@@ -993,28 +987,6 @@ function registerIpcHandlers() {
   );
   ipcMain.handle("ventas:anular", (_event, input: AnularVentaInput) =>
     resultadoSeguro(() => anularVenta(input)),
-  );
-
-  ipcMain.handle("devoluciones:get-ventas", (event, filtros?: FiltrosDevoluciones) =>
-    resultadoSeguro(() => {
-      requerirAccesoVerificado(event.sender.id, 'reportes');
-      return getVentasDevolucion(filtros);
-    }),
-  );
-  ipcMain.handle("devoluciones:get-venta-detail", (event, ventaId: number) =>
-    resultadoSeguro(() => {
-      requerirAccesoVerificado(event.sender.id, 'reportes');
-      return getVentaDevolucionDetalle(ventaId);
-    }),
-  );
-  ipcMain.handle("devoluciones:get-historial", (event, filtros?: FiltrosDevoluciones) =>
-    resultadoSeguro(() => {
-      requerirAccesoVerificado(event.sender.id, 'reportes');
-      return getHistorialDevoluciones(filtros);
-    }),
-  );
-  ipcMain.handle("devoluciones:process", (_event, input: ProcesarDevolucionInput) =>
-    resultadoSeguro(() => processDevolucion(input)),
   );
 
   ipcMain.handle(

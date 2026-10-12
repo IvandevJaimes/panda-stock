@@ -16,7 +16,6 @@ import type {
   CrearMovimientoInput,
   Empleado,
   FiltrosCuentaCorriente,
-  FiltrosDevoluciones,
   FiltrosMovimientos,
   FiltrosProducto,
   FiltrosReportes,
@@ -40,12 +39,7 @@ import type {
   VentaDetalle,
   VentaHistorial,
   VentaResult,
-  ProcesarDevolucionInput,
   ResultadoAnulacion,
-  ResultadoDevolucion,
-  VentaDevolucionDetalle,
-  VentaDevolucionResumen,
-  DevolucionCompleta,
   ClaveProteccion,
   ProteccionesSeguridad,
   ResultadoSeguro,
@@ -134,12 +128,6 @@ declare global {
         getDetail: (idVenta: number) => Promise<VentaDetalle | null>
         getRecientes: (limite: number) => Promise<VentaHistorial[]>
         anular: (input: AnularVentaInput) => Promise<ResultadoSeguro<ResultadoAnulacion>>
-      }
-      devoluciones: {
-        getVentas: (filtros?: FiltrosDevoluciones) => Promise<ResultadoSeguro<{ items: VentaDevolucionResumen[]; total: number }>>
-        getVentaDetail: (ventaId: number) => Promise<ResultadoSeguro<VentaDevolucionDetalle | null>>
-        getHistorial: (filtros?: FiltrosDevoluciones) => Promise<ResultadoSeguro<{ items: DevolucionCompleta[]; total: number }>>
-        process: (input: ProcesarDevolucionInput) => Promise<ResultadoSeguro<ResultadoDevolucion>>
       }
       movimientos: {
         getAll: (filtros?: FiltrosMovimientos) => Promise<MovimientoStock[]>

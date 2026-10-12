@@ -103,6 +103,7 @@ export const PeriodNav = ({
   const [open, setOpen] = useState(false);
   const popRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const inicioDecada = Math.floor(cursor.getFullYear() / 10) * 10;
 
   const today = new Date();
   const isCurrent = (() => {
@@ -143,6 +144,14 @@ export const PeriodNav = ({
     [onCursorChange],
   );
 
+  const handleYearSelect = useCallback(
+    (year: number) => {
+      onCursorChange(new Date(year, 0, 1));
+      setOpen(false);
+    },
+    [onCursorChange],
+  );
+
   const labelHoy = todayLabel(period);
   const TodayIcon =
     period === "day"
@@ -154,7 +163,7 @@ export const PeriodNav = ({
   return (
     <div className="flex flex-wrap items-center gap-4">
       {/* ── Period tabs (md+) ── */}
-      <div className="hidden gap-1.5 rounded-xl bg-slate-100 p-1 dark:bg-slate-800/70 md:inline-flex">
+      <div className="hidden gap-1.5 rounded-full border border-slate-200 bg-white p-1 shadow-sm dark:border-transparent dark:bg-slate-800/70 dark:shadow-none md:inline-flex">
         {(["day", "month", "year"] as const)
           .filter((p) => !hideDay || p !== "day")
           .map((p) => (
@@ -162,10 +171,10 @@ export const PeriodNav = ({
               key={p}
               onClick={() => onPeriodChange(p)}
               className={cn(
-                "flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-xl border-none px-3 py-1.5 text-sm font-semibold transition-all duration-150 active:scale-95",
+                "flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-full border-none px-3 py-1.5 text-sm font-semibold transition-all duration-150 active:scale-95",
                 period === p
-                  ? "bg-white text-emerald-600 shadow-sm dark:bg-slate-700 dark:text-emerald-400"
-                  : "bg-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100",
+                  ? "bg-emerald-600 text-white shadow-sm dark:bg-slate-700 dark:text-emerald-400"
+                  : "bg-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100",
               )}
             >
               {p === "day" ? "Día" : p === "month" ? "Mes" : "Año"}
@@ -275,6 +284,48 @@ export const PeriodNav = ({
                           )}
                         >
                           {name.slice(0, 3)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : period === "year" ? (
+                  <div className="p-1">
+                    <div className="mb-3 flex items-center justify-between">
+                      <button
+                        type="button"
+                        aria-label="Década anterior"
+                        onClick={() => onCursorChange(new Date(inicioDecada - 10, 0, 1))}
+                        className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition-all hover:bg-slate-50 active:scale-95 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </button>
+                      <span className="font-display text-sm font-bold text-slate-700 dark:text-slate-200">
+                        {inicioDecada}–{inicioDecada + 9}
+                      </span>
+                      <button
+                        type="button"
+                        aria-label="Década siguiente"
+                        onClick={() => onCursorChange(new Date(inicioDecada + 10, 0, 1))}
+                        className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition-all hover:bg-slate-50 active:scale-95 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700"
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {Array.from({ length: 12 }, (_, indice) => inicioDecada - 1 + indice).map((year) => (
+                        <button
+                          key={year}
+                          type="button"
+                          aria-pressed={year === cursor.getFullYear()}
+                          onClick={() => handleYearSelect(year)}
+                          className={cn(
+                            "cursor-pointer rounded-xl border-none px-3 py-2.5 text-sm font-semibold transition-all duration-150 active:scale-95",
+                            year === cursor.getFullYear()
+                              ? "bg-emerald-600 text-white shadow-sm dark:bg-emerald-500"
+                              : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700",
+                          )}
+                        >
+                          {year}
                         </button>
                       ))}
                     </div>

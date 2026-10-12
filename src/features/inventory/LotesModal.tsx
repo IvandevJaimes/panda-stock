@@ -440,6 +440,7 @@ export function LotesModal({
         <LotQuickActionsModal
           isOpen={!!quickActionsLote}
           lote={quickActionsLote}
+          stockActualProducto={product.stockActual}
           productoId={product.id}
           onClose={() => setQuickActionsLote(null)}
           onMutated={refreshData}

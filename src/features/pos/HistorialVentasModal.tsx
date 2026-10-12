@@ -1,90 +1,22 @@
 import { useEffect, useRef, useState } from 'react'
-import { Ban, BookUser, ChevronDown, History, Receipt } from 'lucide-react'
+import { Ban, ChevronDown, History } from 'lucide-react'
 import { toast } from 'sonner'
 import { Modal } from '../../components/ui/Modal'
 import { Button } from '../../components/ui/Button'
-import { Tooltip } from '../../components/ui/Tooltip'
 import { LoadingState } from '../../components/ui/LoadingState'
 import { EmptyStateCompact } from '../../components/ui/EmptyStateCompact'
 import { ventasService, HISTORIAL_MINIMO } from '../../services/ventas.service'
-import { buildAssetUrl } from '../../lib/assets'
-import { getProductPlaceholder } from '../../lib/productPlaceholder'
-import { useSrcConFallback } from '../../hooks/useSrcConFallback'
 import { formatearMoneda } from './posQuery'
 import { AnularVentaModal } from './AnularVentaModal'
+import { VentaHistorialCard } from './VentaHistorialCard'
+import { ETIQUETAS_METODO } from './ventaHistorialUtils'
 import { ModalContrasena } from '../seguridad/ModalContrasena'
 import { useSettingsStore } from '../../stores/settings.store'
-import type { MetodoPago, ResultadoAnulacion, VentaHistorial } from '../../../electron/db/types'
-
-/**
- * `cantidad` es `real` en la base (el POS también vende por peso), así que un
- * flotante puede aparecer como `1.5000000001`. Se redondea y se limpian los ceros
- * sueltos: en un ticket el `2` tiene que leerse `2`, no `2.000`.
- */
-function cantidadEnTexto(cantidad: number): string {
-  return String(Number(cantidad.toFixed(3)))
-}
-
-/**
- * `debito` se rotula "Tarjeta" y no "Débito": es como el selector del ticket lo
- * nombra (`F4` rota Efectivo / Transferencia / Tarjeta) y como `processSale` lo
- * guarda. Ver la etiqueta de la base obligaría al cajero a traducir entre dos
- * nombres del mismo botón.
- */
-const ETIQUETAS_METODO: Record<MetodoPago, string> = {
-  efectivo: 'Efectivo',
-  transferencia: 'Transferencia',
-  qr: 'QR',
-  debito: 'Tarjeta',
-  credito: 'Crédito',
-  cuenta_corriente: 'Cuenta corriente',
-}
-
-/**
- * Sale "—" y no una fecha inventada si el valor no parsea: preferible un hueco
- * visible a un "Invalid Date" colgando en el ticket.
- */
-function formatearMomento(iso: string): string {
-  const fecha = new Date(iso)
-  if (Number.isNaN(fecha.getTime())) return '—'
-  return fecha.toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })
-}
-
-/**
- * Un pago mixto se lee como "Efectivo + Débito" y no como dos íconos: el cajero
- * necesita verificar el reparto leyendo, no reconociendo glifos.
- */
-function etiquetaMetodos(metodos: MetodoPago[]): string {
-  if (metodos.length === 0) return '—'
-  return metodos.map((metodo) => ETIQUETAS_METODO[metodo]).join(' + ')
-}
+import type { ResultadoAnulacion, VentaHistorial } from '../../../electron/db/types'
 
 type HistorialVentasModalProps = {
   isOpen: boolean
   onClose: () => void
-}
-
-/**
- * Imagen del ítem dentro de una venta del historial. Vive en su propio
- * componente a propósito: la lista se arma con `.map`, y un hook no se puede
- * llamar dentro del callback. Cada fila necesita su propio estado de "el
- * archivo no cargó": si el hook viviera en el padre, caería el preview de una
- * fila y arrastraría a todas.
- */
-function ItemHistorialImagen({ item }: { item: VentaHistorial['items'][number] }) {
-  const preview = getProductPlaceholder(item.productoId ?? item.id)
-  const imagen = useSrcConFallback(buildAssetUrl(item.imgPath) ?? preview, preview)
-
-  return (
-    <img
-      src={imagen.src}
-      onError={imagen.onError}
-      alt={item.descripcionItem}
-      loading="lazy"
-      draggable={false}
-      className="h-9 w-9 shrink-0 rounded-md object-cover"
-    />
-  )
 }
 
 /**
@@ -207,125 +139,8 @@ export function HistorialVentasModal({ isOpen, onClose }: HistorialVentasModalPr
           <>
             <ul className="flex flex-col gap-3">
               {ventas.map((venta) => (
-                <li
-                  key={venta.id}
-                  className={[
-                    'rounded-xl border px-4 py-3',
-                    venta.estado === 'anulada'
-                      ? 'border-rose-200 bg-rose-50/40 dark:border-rose-900/40 dark:bg-rose-950/15'
-                      : venta.metodos.includes('cuenta_corriente')
-                        ? 'border-amber-200 bg-amber-50/40 dark:border-amber-900/40 dark:bg-amber-950/15'
-                      : 'border-slate-200 bg-slate-50/70 dark:border-slate-800 dark:bg-secondary/25',
-                  ].join(' ')}
-                >
-                  {/* Cabecera del ticket: número de venta a la izquierda, momento y
-                      acción a la derecha. La anulada cambia el número por un badge,
-                      para que el cajero la distinga de un vistazo sin abrirla. */}
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <span className="font-display text-sm font-bold tabular-nums tracking-tight text-slate-900 dark:text-slate-100">
-                        N.º {venta.id}
-                      </span>
-                      {venta.metodos.includes('cuenta_corriente') && (
-                        <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[11px] font-semibold text-amber-700 dark:bg-amber-400/10 dark:text-amber-300">
-                          <BookUser size={12} aria-hidden="true" />
-                          <span className="truncate">
-                            Cuenta corriente{venta.clienteNombre ? ` · ${venta.clienteNombre}` : ''}
-                          </span>
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      {venta.estado === 'anulada' ? (
-                        <Tooltip content={venta.motivoAnulacion || 'Venta anulada'} placement="top">
-                          <span className="inline-flex items-center gap-1 rounded-md bg-rose-500/10 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-rose-600 dark:bg-rose-950/40 dark:text-rose-400">
-                            <Ban size={12} aria-hidden="true" />
-                            Anulada
-                          </span>
-                        </Tooltip>
-                      ) : (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          icon={<Ban size={13} aria-hidden="true" />}
-                          onClick={() => setVentaAAnular(venta)}
-                          className="text-rose-600 hover:border-rose-200 hover:bg-rose-50 dark:text-rose-400 dark:hover:border-rose-800 dark:hover:bg-rose-950/30"
-                        >
-                          Anular
-                        </Button>
-                      )}
-                      <span className="text-xs tabular-nums text-slate-500 dark:text-slate-400">
-                        {formatearMomento(venta.fechaHora)}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div
-                    aria-hidden="true"
-                    className="mt-2.5 border-t border-dashed border-slate-300 dark:border-slate-700"
-                  />
-
-                  {/* Los ítems van en su propia caja scrolleable con `max-h`: sin el
-                      techo, una venta de 40 líneas convertiría la card en un muro y
-                      empujaría las otras 19 ventas fuera de vista. Con el techo la
-                      card queda acotada y el cajero ve el ticket entero de un
-                      vistazo; si hay más, scrollea adentro. */}
-                  <div className="custom-scrollbar px-1 mt-2 max-h-40 overflow-y-auto overscroll-contain">
-                    {venta.items.map((item) => (
-                      <div
-                        key={item.id}
-                        className="flex items-center gap-2.5 py-1.5  first:pt-0 last:pb-0"
-                      >
-                        <ItemHistorialImagen item={item} />
-
-                        <span className="flex min-w-0 flex-1 flex-col">
-                          <span className="truncate text-[13px] font-medium text-slate-700 dark:text-slate-300">
-                            {item.descripcionItem}
-                          </span>
-                          <span className="text-[11px] tabular-nums text-slate-400 dark:text-slate-500">
-                            {cantidadEnTexto(item.cantidad)} × {formatearMoneda(item.precioUnitario)}
-                          </span>
-                        </span>
-
-                        <span className="shrink-0 text-[13px] tabular-nums text-slate-600 dark:text-slate-400">
-                          {formatearMoneda(item.subtotal)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div
-                    aria-hidden="true"
-                    className="mt-2.5 border-t border-dashed border-slate-300 dark:border-slate-700"
-                  />
-
-                  {/* Pie del ticket: el método de pago en texto y el total. La unidad
-                      queda como dato secundario al lado del método y no como
-                      protagonista: el cajero verifica cuánto entró, no cuántas cajas
-                      salieron. */}
-                  <div className="mt-2.5 flex items-end justify-between gap-3">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <Receipt size={15} className="shrink-0 text-slate-400 dark:text-slate-500" aria-hidden="true" />
-                      <span className="min-w-0 truncate text-sm font-medium text-slate-700 dark:text-slate-300">
-                        {etiquetaMetodos(venta.metodos)}
-                      </span>
-                      <span className="shrink-0 text-xs tabular-nums text-slate-400 dark:text-slate-500">
-                        · {cantidadEnTexto(venta.unidades)} u.
-                      </span>
-                    </div>
-
-                    <span
-                      className={[
-                        'shrink-0 font-display text-base font-extrabold tabular-nums',
-                        venta.estado === 'anulada'
-                          ? 'text-slate-400 line-through decoration-rose-400/70 dark:text-slate-500'
-                          : 'text-emerald-700 dark:text-emerald-400',
-                      ].join(' ')}
-                    >
-                      {formatearMoneda(venta.total)}
-                    </span>
-                  </div>
+                <li key={venta.id}>
+                  <VentaHistorialCard venta={venta} onAnular={setVentaAAnular} />
                 </li>
               ))}
             </ul>

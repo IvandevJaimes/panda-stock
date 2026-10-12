@@ -1,9 +1,20 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  createContext,
+  memo,
+  useCallback,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import {
   AlertTriangle,
   ArrowDownRight,
   BarChart3,
   FileSpreadsheet,
+  Info,
   Loader2,
   PackageX,
   Receipt,
@@ -12,21 +23,20 @@ import {
   TrendingUp,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import type { Dispatch, SetStateAction } from 'react'
 import { toast } from 'sonner'
 import { Button } from '../../components/ui/Button'
+import { EmptyState } from '../../components/ui/EmptyState'
 import { LoadingState } from '../../components/ui/LoadingState'
 import { PeriodNav } from '../../components/ui/periodNav/PeriodNav'
 import { cn } from '../../lib/cn'
-import { cajasService } from '../../services/cajas.service'
 import { reportesService } from '../../services/reportes.service'
-import { CajaResumen } from './CajaResumen'
-import { DevolucionesPanel } from './DevolucionesPanel'
 import { HistorialVentas } from './HistorialVentas'
 import { MetodosPagoChart } from './MetodosPagoChart'
+import { MetodosPagoResumen } from './MetodosPagoResumen'
 import { CortesPanel, MovimientosPanel, PerdidasPanel } from './PanelesPestana'
 import { RankingProductos } from './RankingProductos'
 import { ReporteKpiCard } from './ReporteKpiCard'
-import { ResultadoNetoVentas } from './ResultadoNetoVentas'
 import { VentasPorDiaChart } from './VentasPorDiaChart'
 import { SOMBRA_CARD } from './estilos'
 import {
@@ -36,15 +46,13 @@ import {
   type TonoMetrica,
 } from './metricasPestana'
 import {
-  agruparMetodos,
   construirEjeDias,
   construirRanking,
   rangoDesdePeriodo,
-  totalTarjetaCuentaCorriente,
   type PeriodoReporte,
 } from './reportsQuery'
 import { construirExportacion } from './exportacionQuery'
-import type { CajaConResponsable, CajaSummary, ReportesSummary } from '../../../electron/db/types'
+import type { ReportesSummary } from '../../../electron/db/types'
 
 const ICONO_TONO: Record<TonoMetrica, LucideIcon> = {
   emerald: TrendingUp,
@@ -55,6 +63,7 @@ const ICONO_TONO: Record<TonoMetrica, LucideIcon> = {
 }
 
 const RETRASOS_METRICAS = ['stagger-1', 'stagger-2', 'stagger-3', 'stagger-4'] as const
+const CLASE_NOTA = 'flex items-start gap-2 rounded-xl border border-slate-200/80 bg-white/75 px-3 py-2.5 text-xs leading-relaxed text-slate-600 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-300'
 
 const COLOR_TONO: Record<TonoMetrica, string> = {
   emerald: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400',
@@ -63,6 +72,29 @@ const COLOR_TONO: Record<TonoMetrica, string> = {
   violet: 'bg-violet-100 text-violet-600 dark:bg-violet-950/40 dark:text-violet-400',
   rose: 'bg-rose-100 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400',
 }
+
+type ReportesPestanaContextValue = {
+  pestana: PestanaReportes
+  setPestana: Dispatch<SetStateAction<PestanaReportes>>
+}
+
+type ReportesPeriodoContextValue = {
+  periodo: PeriodoReporte
+  setPeriodo: Dispatch<SetStateAction<PeriodoReporte>>
+  cursor: Date
+  setCursor: Dispatch<SetStateAction<Date>>
+  onToday: () => void
+}
+
+type ReportesExportacionContextValue = {
+  pestana: PestanaReportes
+  resumen: ReportesSummary | null
+  rango: ReturnType<typeof rangoDesdePeriodo>
+  cargando: boolean
+}
+
+const ReportesPestanaContext = createContext<ReportesPestanaContextValue | null>(null)
+const ReportesPeriodoContext = createContext<ReportesPeriodoContextValue | null>(null)
 
 export function ReportesPage() {
   return <ContenidoReportes />
@@ -73,8 +105,6 @@ function ContenidoReportes() {
   const [periodo, setPeriodo] = useState<PeriodoReporte>('month')
   const [cursor, setCursor] = useState(() => new Date())
   const [resumen, setResumen] = useState<ReportesSummary | null>(null)
-  const [caja, setCaja] = useState<CajaConResponsable | null>(null)
-  const [resumenCaja, setResumenCaja] = useState<CajaSummary | null>(null)
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [recarga, setRecarga] = useState(0)
@@ -83,6 +113,7 @@ function ContenidoReportes() {
     () => rangoDesdePeriodo(periodo, cursor),
     [periodo, cursor],
   )
+  const [rangoDatosCargados, setRangoDatosCargados] = useState(rango)
 
   /*
     Reset durante el render (mismo patrón que `HistorialVentasModal`): el effect
@@ -94,34 +125,43 @@ function ContenidoReportes() {
 
   if (filtroAplicado !== claveFiltro) {
     setFiltroAplicado(claveFiltro)
-    setResumen(null)
-    setResumenCaja(null)
     setCargando(true)
     setError(null)
   }
 
   const recargar = useCallback(() => setRecarga((valor) => valor + 1), [])
+  const irAHoy = useCallback(() => setCursor(new Date()), [])
+  const contextoPestana = useMemo(
+    () => ({ pestana, setPestana }),
+    [pestana],
+  )
+  const contextoPeriodo = useMemo(
+    () => ({ periodo, setPeriodo, cursor, setCursor, onToday: irAHoy }),
+    [periodo, cursor, irAHoy],
+  )
+  const exportacionRef = useRef<ReportesExportacionContextValue>({
+    pestana,
+    resumen,
+    rango: rangoDatosCargados,
+    cargando,
+  })
+
+  useLayoutEffect(() => {
+    exportacionRef.current = { pestana, resumen, rango: rangoDatosCargados, cargando }
+  }, [pestana, resumen, rangoDatosCargados, cargando])
 
   useEffect(() => {
     let vigente = true
 
-    Promise.all([
-      reportesService.getSummary({
-        desde: rango.desde ?? undefined,
-        hasta: rango.hasta ?? undefined,
-        topProductos: 100,
-      }),
-      cajasService.getActive(),
-    ])
-      .then(async ([datos, cajaActiva]) => {
-        const resumenCajaActual = cajaActiva
-          ? await cajasService.getSummary(cajaActiva.id)
-          : null
-
+    reportesService.getSummary({
+      desde: rango.desde ?? undefined,
+      hasta: rango.hasta ?? undefined,
+      topProductos: 10,
+    })
+      .then((datos) => {
         if (!vigente) return
+        setRangoDatosCargados(rango)
         setResumen(datos)
-        setCaja(cajaActiva)
-        setResumenCaja(resumenCajaActual)
       })
       .catch((fallo: unknown) => {
         if (!vigente) return
@@ -134,11 +174,14 @@ function ContenidoReportes() {
     return () => {
       vigente = false
     }
-  }, [rango.desde, rango.hasta, recarga])
+  }, [rango, recarga])
 
-  const metodos = useMemo(() => agruparMetodos(resumen?.ventasPorMetodo ?? []), [resumen])
   const ranking = useMemo(
     () => construirRanking(resumen?.productosMasVendidos ?? [], resumen?.totalVentas ?? 0),
+    [resumen],
+  )
+  const rankingIngresos = useMemo(
+    () => construirRanking(resumen?.productosMayorIngreso ?? [], resumen?.totalVentas ?? 0),
     [resumen],
   )
   const ejeDias = useMemo(
@@ -147,15 +190,218 @@ function ContenidoReportes() {
   )
 
   const metricas = useMemo(() => metricasDePestana(pestana, resumen), [pestana, resumen])
+  const periodoSinDatos = resumen !== null
+    && resumen.cantVentas === 0
+    && resumen.totalCobrado === 0
+    && resumen.movimientos.cantidad === 0
+    && resumen.perdidas.cantidadMermas === 0
+    && resumen.cortes.cantidad === 0
 
+  if (cargando && resumen === null) {
+    return (
+      <LoadingState
+        title="Cargando reportes..."
+        description="Consultando ventas del período."
+        fullPage
+      />
+    )
+  }
+
+  return (
+    <div className="w-full space-y-4 py-4">
+      <EncabezadoReportes
+        exportacionRef={exportacionRef}
+        habilitado={resumen !== null}
+      />
+
+      <ReportesPestanaContext.Provider value={contextoPestana}>
+        <ReportesPeriodoContext.Provider value={contextoPeriodo}>
+          <ReportesToolbar />
+        </ReportesPeriodoContext.Provider>
+      </ReportesPestanaContext.Provider>
+
+      {cargando ? (
+        <LoadingState
+          title="Cargando reportes..."
+          description="Consultando ventas del período."
+          fullPage
+        />
+      ) : error !== null ? (
+        <div className="flex min-h-[60vh] items-center justify-center py-6">
+          <div className="max-w-md text-center">
+            <span className="mx-auto grid h-11 w-11 place-items-center rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400">
+              <AlertTriangle size={20} />
+            </span>
+            <p className="mt-3 font-display text-sm font-semibold text-slate-900 dark:text-white">
+              No se pudieron cargar los reportes
+            </p>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{error}</p>
+            <Button variant="outline" onClick={recargar} className="mt-4">
+              <RotateCw size={14} />
+              Reintentar
+            </Button>
+          </div>
+        </div>
+      ) : periodoSinDatos ? (
+        <EmptyState
+          className="min-h-[55vh]"
+          icon={<PackageX size={22} />}
+          title="Sin datos en este período"
+          description="No hay ventas, movimientos, pérdidas ni cortes registrados en el período seleccionado."
+        />
+      ) : (
+        <div className="px-1 flex flex-col gap-4">
+          {/* Métricas de la pestaña activa */}
+          <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+            {metricas.map((metrica, index) => {
+              const Icono = ICONO_TONO[metrica.tono]
+
+              return (
+                <ReporteKpiCard
+                  key={metrica.titulo}
+                  icon={<Icono size={17} />}
+                  iconBgClass={COLOR_TONO[metrica.tono]}
+                  title={metrica.titulo}
+                  value={metrica.valor}
+                  valueClassName={metrica.valorClassName}
+                  subtitle={metrica.subtitulo}
+                  className={cn(
+                    SOMBRA_CARD,
+                    'animate-entry-up',
+                    RETRASOS_METRICAS[index] ?? 'stagger-4',
+                  )}
+                />
+              )
+            })}
+          </div>
+
+          {pestana === 'ventas' && (
+            <p className={cn(CLASE_NOTA, '-mt-1')}>
+              <Info size={15} className="mt-0.5 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+              <span>El resultado descuenta las pérdidas estimadas por mermas. Las ventas netas ya descuentan las devoluciones.</span>
+            </p>
+          )}
+
+          {/* Contenido de la pestaña */}
+          {pestana === 'ventas' && (
+            <>
+              <div className="grid gap-4 xl:grid-cols-3 animate-entry-up stagger-1">
+                <div className="xl:col-span-2">
+                  <VentasPorDiaChart puntos={ejeDias} />
+                </div>
+                <MetodosPagoChart pagosPorMetodo={resumen?.ventasPorMetodo ?? []} />
+              </div>
+
+              <div className="animate-entry-up stagger-2">
+                <MetodosPagoResumen pagosPorMetodo={resumen?.ventasPorMetodo ?? []} />
+              </div>
+
+              <div className="grid gap-4 xl:grid-cols-2 animate-entry-up stagger-3">
+                <RankingProductos filas={ranking} criterio="unidades" />
+                <RankingProductos filas={rankingIngresos} criterio="ingresos" />
+              </div>
+
+              <div className="animate-entry-up stagger-4">
+                <HistorialVentas key={`${rango.desde}|${rango.hasta}`} desde={rango.desde} hasta={rango.hasta} />
+              </div>
+
+              <p className={cn(CLASE_NOTA, 'mx-auto max-w-2xl animate-entry-up stagger-4')}>
+                <ShoppingCart size={15} className="mt-0.5 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+                <span>Los movimientos de stock están en la pestaña Movimientos.</span>
+              </p>
+            </>
+          )}
+
+          {pestana === 'movimientos' && (
+            <div className="animate-entry-up stagger-1">
+              <MovimientosPanel key={`${rango.desde}|${rango.hasta}`} resumen={resumen} desde={rango.desde} hasta={rango.hasta} />
+            </div>
+          )}
+
+          {pestana === 'perdidas' && (
+            <div className="animate-entry-up stagger-1">
+              <PerdidasPanel key={`${rango.desde}|${rango.hasta}`} resumen={resumen} />
+            </div>
+          )}
+
+          {pestana === 'cortes' && (
+            <div className="animate-entry-up stagger-1">
+              <CortesPanel key={`${rango.desde}|${rango.hasta}`} resumen={resumen} />
+            </div>
+          )}
+
+          {pestana !== 'ventas' && (
+            <p className={cn(CLASE_NOTA, 'mx-auto max-w-2xl animate-entry-up stagger-2')}>
+              <PackageX size={15} className="mt-0.5 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+              <span>
+                {pestana === 'perdidas'
+                  ? 'Las mermas se muestran por cantidad de unidades descartadas.'
+                  : pestana === 'cortes'
+                    ? 'Los cortes cuentan por la fecha en que se cerró la caja.'
+                    : 'Las devoluciones históricas aparecen como entradas de mercadería.'}
+              </span>
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+type ReportesExportacionRef = { current: ReportesExportacionContextValue }
+
+type EncabezadoReportesProps = {
+  exportacionRef: ReportesExportacionRef
+  habilitado: boolean
+}
+
+const EncabezadoReportes = memo(function EncabezadoReportes({
+  exportacionRef,
+  habilitado,
+}: EncabezadoReportesProps) {
+  return (
+    <div className="flex items-center justify-between gap-3 animate-entry-up">
+      <h1 className="min-w-0 font-display text-xl font-bold text-slate-900 dark:text-white sm:text-2xl">
+        Reportes
+      </h1>
+      <BotonExportarReporte
+        exportacionRef={exportacionRef}
+        habilitado={habilitado}
+      />
+    </div>
+  )
+})
+
+type BotonExportarReporteProps = {
+  exportacionRef: { current: ReportesExportacionContextValue }
+  habilitado: boolean
+}
+
+const BotonExportarReporte = memo(function BotonExportarReporte({
+  exportacionRef,
+  habilitado,
+}: BotonExportarReporteProps) {
   const [exportando, setExportando] = useState(false)
+  const exportandoRef = useRef(false)
 
-  const exportarReporte = useCallback(async () => {
-    if (exportando || resumen === null) return
+  const iniciarExportacion = useCallback(async () => {
+    if (exportandoRef.current) return
 
+    const actual = exportacionRef.current
+    if (actual.cargando) {
+      toast.info('Esperá a que termine de cargar el período')
+      return
+    }
+    if (actual.resumen === null) return
+
+    exportandoRef.current = true
     setExportando(true)
     try {
-      const input = construirExportacion({ pestana, resumen, rango })
+      const input = construirExportacion({
+        pestana: actual.pestana,
+        resumen: actual.resumen,
+        rango: actual.rango,
+      })
       const ruta = await reportesService.exportarExcel({
         ...input,
         elegirCarpeta: true,
@@ -170,211 +416,90 @@ function ContenidoReportes() {
         description: fallo instanceof Error ? fallo.message : undefined,
       })
     } finally {
+      exportandoRef.current = false
       setExportando(false)
     }
-  }, [exportando, pestana, resumen, rango])
-
-  if (error !== null) {
-    return (
-      <div className="flex min-h-[60vh] items-center justify-center py-6">
-        <div className="max-w-md text-center">
-          <span className="mx-auto grid h-11 w-11 place-items-center rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400">
-            <AlertTriangle size={20} />
-          </span>
-          <p className="mt-3 font-display text-sm font-semibold text-slate-900 dark:text-white">
-            No se pudieron cargar los reportes
-          </p>
-          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{error}</p>
-          <Button variant="outline" onClick={recargar} className="mt-4">
-            <RotateCw size={14} />
-            Reintentar
-          </Button>
-        </div>
-      </div>
-    )
-  }
-
-  if (cargando && resumen === null) {
-    return (
-      <div className="flex h-full w-full items-center justify-center">
-        <LoadingState
-          title="Cargando reportes..."
-          description="Consultando ventas del período."
-          fullPage
-        />
-      </div>
-    )
-  }
+  }, [exportacionRef])
 
   return (
-    <div className="w-full space-y-4 py-4">
-      <div className="flex items-center justify-between gap-3 animate-entry-up">
-        <div className="flex min-w-0 items-center gap-2">
-          <h1 className="font-display text-xl font-bold text-slate-900 dark:text-white sm:text-2xl">
-            Reportes
-          </h1>
-        </div>
-        <Button
-          onClick={exportarReporte}
-          disabled={exportando || cargando}
-          aria-label={exportando ? 'Exportando reporte' : 'Exportar reporte'}
-          title="Elige la carpeta donde guardar la pestaña activa como .xlsx"
-          variant="primary"
-          className="h-10 shrink-0 gap-2 rounded-2xl px-4 text-sm font-bold shadow-xs sm:h-12 sm:px-6 sm:text-base"
-        >
-          {exportando ? (
-            <Loader2 className="h-5 w-5 shrink-0 animate-spin" />
-          ) : (
-            <FileSpreadsheet className="h-5 w-5 shrink-0" />
-          )}
-          {exportando ? 'Exportando…' : 'Exportar'}
-        </Button>
-      </div>
+    <Button
+      onClick={() => void iniciarExportacion()}
+      disabled={!habilitado || exportando}
+      aria-label={exportando ? 'Exportando reporte' : 'Exportar reporte'}
+      title="Elige la carpeta donde guardar la pestaña activa como .xlsx"
+      variant="primary"
+      className="h-10 shrink-0 gap-2 rounded-2xl px-4 text-sm font-bold shadow-xs sm:h-12 sm:px-6 sm:text-base"
+    >
+      {exportando ? (
+        <Loader2 className="h-5 w-5 shrink-0 animate-spin" />
+      ) : (
+        <FileSpreadsheet className="h-5 w-5 shrink-0" />
+      )}
+      {exportando ? 'Exportando…' : 'Exportar'}
+    </Button>
+  )
+})
 
-      <div className="sticky top-0 z-30 w-full bg-[#f4f6f8] dark:bg-[#0b0f17]">
-        <div className="relative flex w-full min-w-0 flex-col gap-3 pt-3 pb-3 xl:flex-row xl:items-center xl:justify-between">
-          <div className="order-2 flex flex-wrap items-center gap-1.5 xl:order-1">
-            {PESTANAS_REPORTES.map((opcion) => {
-              const activa = opcion.valor === pestana
-
-              return (
-                <button
-                  key={opcion.valor}
-                  type="button"
-                  onClick={() => setPestana(opcion.valor)}
-                  aria-pressed={activa}
-                  className={cn(
-                    'shrink-0 cursor-pointer whitespace-nowrap rounded-full border px-4 py-2.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500',
-                    activa
-                      ? 'border-emerald-500 bg-emerald-500 text-white shadow-xs'
-                      : 'border-slate-200 bg-white text-slate-600 hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-emerald-700 dark:hover:bg-emerald-950/30 dark:hover:text-emerald-300',
-                  )}
-                >
-                  {opcion.etiqueta}
-                </button>
-              )
-            })}
-          </div>
-
-          <div className="order-1 flex w-full min-w-0 justify-start overflow-visible xl:order-2 xl:w-auto">
-            <div className="min-w-0 max-w-full">
-              <PeriodNav
-                period={periodo}
-                onPeriodChange={setPeriodo}
-                cursor={cursor}
-                onCursorChange={setCursor}
-                onToday={() => setCursor(new Date())}
-              />
-            </div>
-          </div>
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-x-0 top-full h-3 bg-gradient-to-b from-slate-900/10 to-transparent dark:from-black/45"
-          />
-        </div>
-      </div>
-
-      {pestana === 'ventas' && resumen !== null && (
-        <ResultadoNetoVentas
-          ventasNetas={resumen.totalVentas}
-          costoVendido={resumen.totalCosto}
-          perdidasMermas={resumen.perdidas.plataPerdida}
+const ReportesToolbar = memo(function ReportesToolbar() {
+  return (
+    <div className="sticky top-0 z-30 w-full bg-[#f4f6f8] dark:bg-[#0b0f17] will-change-transform">
+      <div className="relative flex w-full min-w-0 flex-col gap-3 pt-3 pb-3 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between">
+        <ReportesPestanas />
+        <ReportesPeriodo />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 top-full h-3 bg-gradient-to-b from-slate-900/10 to-transparent dark:from-black/45"
         />
-      )}
-
-      {/* Métricas de la pestaña activa */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {metricas.map((metrica, index) => {
-          const Icono = ICONO_TONO[metrica.tono]
-
-          return (
-            <ReporteKpiCard
-              key={metrica.titulo}
-              icon={<Icono size={17} />}
-              iconBgClass={COLOR_TONO[metrica.tono]}
-              title={metrica.titulo}
-              value={metrica.valor}
-              subtitle={metrica.subtitulo}
-              className={cn(
-                SOMBRA_CARD,
-                'animate-entry-up',
-                RETRASOS_METRICAS[index] ?? 'stagger-4',
-              )}
-            />
-          )
-        })}
       </div>
-
-      {/* Contenido de la pestaña */}
-      {pestana === 'ventas' && (
-        <>
-          <div className="grid gap-4 xl:grid-cols-3 animate-entry-up stagger-1">
-            <div className="xl:col-span-2">
-              <VentasPorDiaChart puntos={ejeDias} />
-            </div>
-            <MetodosPagoChart filas={metodos} totalTarjetaCuentaCorriente={totalTarjetaCuentaCorriente(metodos)} />
-          </div>
-
-          <div className="grid gap-4 xl:grid-cols-3 animate-entry-up stagger-2">
-            <div className="xl:col-span-2">
-              <RankingProductos key={`${rango.desde}|${rango.hasta}`} filas={ranking} />
-            </div>
-            <div className="space-y-4">
-              <CajaResumen caja={caja} resumen={resumenCaja} />
-            </div>
-          </div>
-
-          <div className="animate-entry-up stagger-3">
-            <HistorialVentas key={`${rango.desde}|${rango.hasta}`} desde={rango.desde} hasta={rango.hasta} />
-          </div>
-
-          <p className="flex items-center justify-center gap-1.5 pb-2 text-[11px] text-slate-400 dark:text-slate-500 animate-entry-up stagger-4">
-            <ShoppingCart size={12} />
-            Los movimientos de stock están en la pestaña Movimientos.
-          </p>
-        </>
-      )}
-
-      {pestana === 'movimientos' && (
-        <div className="animate-entry-up stagger-1">
-          <MovimientosPanel key={`${rango.desde}|${rango.hasta}`} resumen={resumen} desde={rango.desde} hasta={rango.hasta} />
-        </div>
-      )}
-
-      {pestana === 'perdidas' && (
-        <div className="animate-entry-up stagger-1">
-          <PerdidasPanel key={`${rango.desde}|${rango.hasta}`} resumen={resumen} />
-        </div>
-      )}
-
-      {pestana === 'cortes' && (
-        <div className="animate-entry-up stagger-1">
-          <CortesPanel key={`${rango.desde}|${rango.hasta}`} resumen={resumen} />
-        </div>
-      )}
-
-      {pestana === 'devoluciones' && (
-        <div className="animate-entry-up stagger-1">
-          <DevolucionesPanel
-            desde={rango.desde}
-            hasta={rango.hasta}
-            onSuccess={recargar}
-          />
-        </div>
-      )}
-
-      {pestana !== 'ventas' && pestana !== 'devoluciones' && (
-        <p className="flex items-center justify-center gap-1.5 pb-2 text-[11px] text-slate-400 dark:text-slate-500 animate-entry-up stagger-2">
-          <PackageX size={12} />
-          {pestana === 'perdidas'
-            ? 'Las mermas se valoran al costo actual del producto, no al del día de la merma.'
-            : pestana === 'cortes'
-              ? 'Los cortes cuentan por la fecha en que se cerró la caja.'
-              : pestana === 'movimientos'
-                ? 'Las devoluciones aparecen como entradas de mercadería.'
-                : 'Los tickets anulados no afectan el stock ni los ingresos.'}
-        </p>
-      )}
     </div>
   )
-}
+})
+
+const ReportesPestanas = memo(function ReportesPestanas() {
+  const contexto = useContext(ReportesPestanaContext)
+  if (contexto === null) throw new Error('ReportesPestanas requiere ReportesPestanaContext')
+
+  return (
+    <div className="order-2 flex flex-wrap items-center gap-1.5 lg:order-1">
+      {PESTANAS_REPORTES.map((opcion) => {
+        const activa = opcion.valor === contexto.pestana
+
+        return (
+          <button
+            key={opcion.valor}
+            type="button"
+            onClick={() => contexto.setPestana(opcion.valor)}
+            aria-pressed={activa}
+            className={cn(
+              'shrink-0 cursor-pointer whitespace-nowrap rounded-full border px-4 py-2.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500',
+              activa
+                ? 'border-emerald-500 bg-emerald-500 text-white shadow-xs'
+                : 'border-slate-200 bg-white text-slate-600 hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-emerald-700 dark:hover:bg-emerald-950/30 dark:hover:text-emerald-300',
+            )}
+          >
+            {opcion.etiqueta}
+          </button>
+        )
+      })}
+    </div>
+  )
+})
+
+const ReportesPeriodo = memo(function ReportesPeriodo() {
+  const contexto = useContext(ReportesPeriodoContext)
+  if (contexto === null) throw new Error('ReportesPeriodo requiere ReportesPeriodoContext')
+
+  return (
+    <div className="order-1 flex w-full min-w-0 justify-start overflow-visible lg:order-2 lg:w-auto lg:justify-end">
+      <div className="min-w-0 max-w-full">
+        <PeriodNav
+          period={contexto.periodo}
+          onPeriodChange={contexto.setPeriodo}
+          cursor={contexto.cursor}
+          onCursorChange={contexto.setCursor}
+          onToday={contexto.onToday}
+        />
+      </div>
+    </div>
+  )
+})

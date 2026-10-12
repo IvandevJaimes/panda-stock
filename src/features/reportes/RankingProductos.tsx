@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { Package } from 'lucide-react'
+import { useMemo } from 'react'
+import { Package, TrendingUp } from 'lucide-react'
 import {
   Table,
   TableBody,
@@ -9,167 +9,106 @@ import {
   TableRow,
 } from '../../components/ui/Table'
 import { EmptyState } from '../../components/ui/EmptyState'
-import { ProgressBar } from '../../components/ui/ProgressBar'
 import { SOMBRA_CARD } from './estilos'
-import { cn } from '../../lib/cn'
-import { BarraFiltrosReporte, PaginacionReporte } from './TablaReporteUI'
-import { formatearMoneda, formatearUnidades, margenEsNegativo, type FilaRanking } from './reportsQuery'
+import { formatearMoneda, formatearUnidades, type FilaRanking } from './reportsQuery'
 
 type RankingProductosProps = {
   filas: FilaRanking[]
+  criterio: 'unidades' | 'ingresos'
 }
 
-const POR_PAGINA = 8
+const TOPE_RANKING = 10
 
-/**
- * Ranking por unidades, con el margen al lado.
- *
- * Ordenar por margen y no por unidades es lo que sirve para decidir qué
- * reponer: el producto que más se vendió puede ser el que menos plata deja.
- */
-export function RankingProductos({ filas }: RankingProductosProps) {
-  const [buscar, setBuscar] = useState('')
-  const [pagina, setPagina] = useState(1)
-  const filtradas = useMemo(() => {
-    const consulta = buscar.trim().toLocaleLowerCase('es-AR')
-    return consulta
-      ? filas.filter((fila) => fila.nombre.toLocaleLowerCase('es-AR').includes(consulta))
-      : filas
-  }, [filas, buscar])
-  const visibles = useMemo(() => {
-    const inicio = (pagina - 1) * POR_PAGINA
-    return filtradas.slice(inicio, inicio + POR_PAGINA)
-  }, [filtradas, pagina])
+/** Muestra los diez productos destacados según unidades o venta neta. */
+export function RankingProductos({ filas, criterio }: RankingProductosProps) {
+  const porIngresos = criterio === 'ingresos'
+  const Icono = porIngresos ? TrendingUp : Package
+  const visibles = useMemo(
+    () => [...filas]
+      .sort((a, b) => porIngresos
+        ? b.monto - a.monto || a.nombre.localeCompare(b.nombre)
+        : b.cantidad - a.cantidad || a.nombre.localeCompare(b.nombre))
+      .slice(0, TOPE_RANKING),
+    [filas, porIngresos],
+  )
 
-  if (filas.length === 0) {
-    return (
-      <section className={`w-full rounded-2xl border border-slate-200 bg-white dark:border-slate-800/80 dark:bg-[#111827] ${SOMBRA_CARD}`}>
+  return (
+    <section className={`w-full overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800/80 dark:bg-[#111827] ${SOMBRA_CARD}`}>
+      <header className="flex items-start gap-2.5 px-4 py-3.5">
+        <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${porIngresos ? 'bg-violet-500/10 text-violet-600 dark:text-violet-400' : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'}`}>
+          <Icono size={15} />
+        </span>
+        <div className="min-w-0">
+          <h3 className="font-display text-sm font-semibold text-slate-900 dark:text-white">
+            {porIngresos ? 'Top 10 · Más ingresos' : 'Top 10 · Más vendidos'}
+          </h3>
+          <p className="mt-0.5 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+            {porIngresos ? 'Ordenados por venta neta.' : 'Ordenados por unidades vendidas.'}
+          </p>
+        </div>
+      </header>
+
+      {visibles.length === 0 ? (
         <EmptyState
           title="Sin productos vendidos"
           description="No hay ventas en el período seleccionado."
           icon={<Package size={22} />}
         />
-      </section>
-    )
-  }
-
-  return (
-    <section className={`w-full overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800/80 dark:bg-[#111827] ${SOMBRA_CARD}`}>
-      <header className="flex items-start gap-2.5 px-4 py-3.5">
-        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-          <Package size={15} />
-        </span>
-        <div className="min-w-0">
-          <h3 className="font-display text-sm font-semibold text-slate-900 dark:text-white">
-            Productos más vendidos
-          </h3>
-          <p className="mt-0.5 text-[11px] leading-snug text-slate-500 dark:text-slate-400">
-            Buscá entre los 100 productos con más unidades vendidas. El costo es el registrado al vender.
-          </p>
-        </div>
-      </header>
-
-      <BarraFiltrosReporte
-        buscar={buscar}
-        onBuscarChange={(valor) => {
-          setBuscar(valor)
-          setPagina(1)
-        }}
-        placeholder="Buscar producto"
-        total={filtradas.length}
-      />
-
-      {filtradas.length === 0 ? (
-        <p className="px-4 py-8 text-center text-xs text-slate-500 dark:text-slate-400">
-          No hay productos que coincidan con la búsqueda.
-        </p>
       ) : (
         <>
-      <div className="hidden lg:block">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead className="w-10">#</TableHead>
-            <TableHead>Producto</TableHead>
-            <TableHead className="text-right">Unidades</TableHead>
-            <TableHead className="text-right">Ingresos</TableHead>
-            <TableHead className="text-right">Costo</TableHead>
-            <TableHead className="text-right">Margen</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {visibles.map((fila, indice) => {
-            const negativo = margenEsNegativo(fila.margen)
-            return (
-              <TableRow key={fila.productoId ?? fila.nombre}>
-                <TableCell className="tabular-nums text-slate-400">{(pagina - 1) * POR_PAGINA + indice + 1}</TableCell>
-                <TableCell>
-                  <div className="min-w-0">
-                    <p className="truncate font-medium text-slate-900 dark:text-white">{fila.nombre}</p>
-                    <ProgressBar value={fila.porcentajeVenta} className="mt-1 h-1 w-24" />
-                  </div>
-                </TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {formatearUnidades(fila.cantidad)}
-                </TableCell>
-                <TableCell className="text-right tabular-nums text-slate-900 dark:text-white">
-                  {formatearMoneda(fila.monto)}
-                </TableCell>
-                <TableCell className="text-right tabular-nums text-slate-500 dark:text-slate-400">
-                  {formatearMoneda(fila.costo)}
-                </TableCell>
-                <TableCell
-                  className={cn(
-                    'text-right font-display font-semibold tabular-nums',
-                    negativo
-                      ? 'text-red-600 dark:text-red-400'
-                      : 'text-emerald-600 dark:text-emerald-400',
-                  )}
-                >
-                  {formatearMoneda(fila.margen)}
-                </TableCell>
-              </TableRow>
-            )
-          })}
-        </TableBody>
-      </Table>
-      </div>
+          <div className="hidden lg:block">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-10">#</TableHead>
+                  <TableHead>Producto</TableHead>
+                  <TableHead className="text-right">{porIngresos ? 'Venta neta' : 'Unidades'}</TableHead>
+                  <TableHead className="text-right">{porIngresos ? 'Unidades' : 'Venta neta'}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {visibles.map((fila, indice) => (
+                  <TableRow
+                    key={fila.productoId ?? fila.nombre}
+                    className="odd:bg-white even:bg-slate-50/70 dark:odd:bg-[#111827] dark:even:bg-slate-900/35"
+                  >
+                    <TableCell className="tabular-nums text-slate-400">{indice + 1}</TableCell>
+                    <TableCell className="font-medium text-slate-900 dark:text-white">
+                      <span className="block max-w-[18rem] truncate">{fila.nombre}</span>
+                    </TableCell>
+                    <TableCell className="text-right font-display font-semibold tabular-nums text-slate-900 dark:text-white">
+                      {porIngresos ? formatearMoneda(fila.monto) : formatearUnidades(fila.cantidad)}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums text-slate-500 dark:text-slate-400">
+                      {porIngresos ? formatearUnidades(fila.cantidad) : formatearMoneda(fila.monto)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
 
-      <ul className="divide-y divide-slate-100 px-4 dark:divide-slate-800/60 lg:hidden">
-        {visibles.map((fila, indice) => {
-          const negativo = margenEsNegativo(fila.margen)
-          return (
-            <li key={fila.productoId ?? fila.nombre} className="py-3">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">
-                    <span className="mr-1.5 text-xs text-slate-400">#{(pagina - 1) * POR_PAGINA + indice + 1}</span>
-                    {fila.nombre}
+          <ul className="divide-y divide-slate-100 px-4 dark:divide-slate-800/60 lg:hidden">
+            {visibles.map((fila, indice) => (
+              <li
+                key={fila.productoId ?? fila.nombre}
+                className="flex items-center gap-3 border-b border-slate-100 px-2 py-2.5 odd:bg-slate-50/70 even:bg-white last:border-b-0 dark:border-slate-800/60 dark:odd:bg-slate-900/35 dark:even:bg-transparent"
+              >
+                <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-slate-100 text-xs font-bold tabular-nums text-slate-500 dark:bg-slate-800 dark:text-slate-300">
+                  {indice + 1}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">{fila.nombre}</p>
+                  <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+                    {porIngresos ? `${formatearUnidades(fila.cantidad)} unidades` : formatearMoneda(fila.monto)}
                   </p>
-                  <ProgressBar value={fila.porcentajeVenta} className="mt-1.5 h-1.5 max-w-40" />
                 </div>
                 <span className="shrink-0 font-display text-sm font-bold tabular-nums text-slate-900 dark:text-white">
-                  {formatearMoneda(fila.monto)}
+                  {porIngresos ? formatearMoneda(fila.monto) : `${formatearUnidades(fila.cantidad)} u.`}
                 </span>
-              </div>
-              <div className="mt-2 grid grid-cols-3 gap-2 text-[10px] text-slate-500 dark:text-slate-400">
-                <span>{formatearUnidades(fila.cantidad)} unidades</span>
-                <span className="text-center">Costo {formatearMoneda(fila.costo)}</span>
-                <span className={cn('text-right font-semibold', negativo ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400')}>
-                  Margen {formatearMoneda(fila.margen)}
-                </span>
-              </div>
-            </li>
-          )
-        })}
-      </ul>
-
-      <PaginacionReporte
-        pagina={pagina}
-        tamanoPagina={POR_PAGINA}
-        total={filtradas.length}
-        onCambiarPagina={setPagina}
-      />
+              </li>
+            ))}
+          </ul>
         </>
       )}
     </section>

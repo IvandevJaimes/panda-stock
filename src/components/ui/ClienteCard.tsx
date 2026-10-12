@@ -52,10 +52,10 @@ export function ClienteCard({
         onContextMenu(event)
       }}
       className={cn(
-        'grid h-16 w-full min-w-0 cursor-pointer grid-cols-[auto_minmax(0,1fr)_auto] items-stretch gap-2.5 overflow-hidden rounded-2xl border shadow-xs transition-colors duration-150 animate-entry-up sm:gap-4',
+        'grid h-16 w-full min-w-0 cursor-pointer grid-cols-[auto_minmax(0,1fr)_auto] items-stretch gap-2.5 overflow-hidden rounded-2xl border bg-white shadow-xs transition-colors duration-150 animate-entry-up hover:bg-slate-50 sm:gap-4 dark:bg-[#111827] dark:hover:bg-slate-900/70',
         conDeuda
-          ? 'border-amber-300/80 bg-transparent hover:border-amber-400 dark:border-amber-800/70 dark:bg-transparent dark:hover:border-amber-700'
-          : 'border-slate-300 bg-transparent hover:border-slate-400 dark:border-slate-700 dark:bg-transparent dark:hover:border-slate-600',
+          ? 'border-amber-300/80 hover:border-amber-400 dark:border-amber-800/70 dark:hover:border-amber-700'
+          : 'border-slate-300 hover:border-slate-400 dark:border-slate-700 dark:hover:border-slate-600',
       )}
     >
       <div className={cn(

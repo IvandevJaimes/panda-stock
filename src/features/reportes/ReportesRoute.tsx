@@ -23,7 +23,7 @@ export function ReportesRoute() {
   const navigate = useNavigate()
 
   if (estado === 'chequeando') {
-    return <LoadingState title="Verificando..." />
+    return <LoadingState title="Verificando..." fullPage />
   }
 
   if (estado === 'bloqueado') {
@@ -39,7 +39,7 @@ export function ReportesRoute() {
   }
 
   return (
-    <Suspense fallback={<LoadingState title="Cargando reportes..." />}>
+    <Suspense fallback={<LoadingState title="Cargando reportes..." fullPage />}>
       <ReportesPage />
     </Suspense>
   )

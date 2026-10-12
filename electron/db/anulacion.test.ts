@@ -7,7 +7,8 @@ import { PROTECCIONES_INICIALES } from './types.ts'
 const carpeta = mkdtempSync(path.join(tmpdir(), 'panda-anulacion-test-'))
 process.env.PANDA_STOCK_DB = path.join(carpeta, 'test.db')
 
-const { initDatabase } = await import('./index.ts')
+const { getDb, initDatabase } = await import('./index.ts')
+const { devoluciones } = await import('./schema.ts')
 const repo = await import('./repository.ts')
 
 let cajaId = 0
@@ -102,8 +103,6 @@ describe('anulación de ventas', () => {
 
     const reportes = repo.getReportesSummary()
     expect(reportes.totalVentas).toBe(0)
-    expect(reportes.totalCosto).toBe(0)
-    expect(reportes.resultado).toBe(0)
   })
 
   it('no permite anular dos veces ni un ticket inexistente', () => {
@@ -127,19 +126,26 @@ describe('anulación de ventas', () => {
     })).toThrow(/no existe/i)
   })
 
-  it('no anula un ticket que ya tiene una devolución completada', () => {
+  it('no anula un ticket con un reintegro histórico registrado', () => {
     const producto = crearProducto('Artículo con devolución previa')
     const venta = vender(producto.id, { cantidad: 1, precio: 70, metodo: 'efectivo' })
 
-    repo.processDevolucion({ pin: '8877', ventaId: venta.ventaId })
-    expect(repo.getProductoById(producto.id)?.stockActual).toBe(20)
+    getDb().insert(devoluciones).values({
+      ventaId: venta.ventaId,
+      cajaId,
+      fechaHora: new Date().toISOString(),
+      total: 70,
+      costo: 42,
+      gananciaRevertida: 28,
+    }).run()
+    expect(repo.getProductoById(producto.id)?.stockActual).toBe(19)
 
     expect(() => repo.anularVenta({
       pin: '8877',
       ventaId: venta.ventaId,
       motivo: 'Error',
     })).toThrow(/devolución completada/i)
-    expect(repo.getProductoById(producto.id)?.stockActual).toBe(20)
+    expect(repo.getProductoById(producto.id)?.stockActual).toBe(19)
   })
 
   it('cancela la deuda de una venta en cuenta corriente al anularla', () => {

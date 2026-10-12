@@ -13,13 +13,11 @@ import type {
   FiltrosProducto,
   FiltrosReportes,
   FiltrosVentas,
-  FiltrosDevoluciones,
   NuevoEmpleado,
   NuevoLote,
   NegocioInput,
   NegocioSetupInput,
   VentaCompletaInput,
-  ProcesarDevolucionInput,
   ClaveProteccion,
   ProteccionesSeguridad,
   ResultadoSeguro,
@@ -27,15 +25,11 @@ import type {
   EstadoDestinoCopias,
   TipoDestinoCopias,
   ResultadoAnulacion,
-  ResultadoDevolucion,
   ReportesSummary,
   Cliente,
   ClienteConSaldo,
   MovimientoCuentaCorriente,
   ResumenCuentasCorrientes,
-  VentaDevolucionResumen,
-  VentaDevolucionDetalle,
-  DevolucionCompleta,
 } from "./db/types.ts";
 import type { ExportarExcelInput } from "./exportaciones.types.ts";
 import type { EstadoLicencia, ResultadoLicencia } from "./licencia/tipos.ts";
@@ -153,16 +147,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.invoke("ventas:get-recientes", limite),
     anular: (input: AnularVentaInput): Promise<ResultadoSeguro<ResultadoAnulacion>> =>
       ipcRenderer.invoke("ventas:anular", input),
-  },
-  devoluciones: {
-    getVentas: (filtros?: FiltrosDevoluciones): Promise<ResultadoSeguro<{ items: VentaDevolucionResumen[]; total: number }>> =>
-      ipcRenderer.invoke("devoluciones:get-ventas", filtros),
-    getVentaDetail: (ventaId: number): Promise<ResultadoSeguro<VentaDevolucionDetalle | null>> =>
-      ipcRenderer.invoke("devoluciones:get-venta-detail", ventaId),
-    getHistorial: (filtros?: FiltrosDevoluciones): Promise<ResultadoSeguro<{ items: DevolucionCompleta[]; total: number }>> =>
-      ipcRenderer.invoke("devoluciones:get-historial", filtros),
-    process: (input: ProcesarDevolucionInput): Promise<ResultadoSeguro<ResultadoDevolucion>> =>
-      ipcRenderer.invoke("devoluciones:process", input),
   },
   movimientos: {
     getAll: (filtros?: FiltrosMovimientos) =>

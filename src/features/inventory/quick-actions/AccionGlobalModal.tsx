@@ -482,6 +482,7 @@ export function AccionGlobalModal({
       ) : productoSeleccionado && loteActivo && accion === "ajustar-stock" ? (
         <AjustarStockLoteForm
           lote={loteActivo}
+          stockActualProducto={productoSeleccionado.stockActual}
           formId={formId}
           esLoteActivo
           onCancel={handleVolver}

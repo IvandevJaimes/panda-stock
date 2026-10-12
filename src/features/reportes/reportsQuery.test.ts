@@ -3,14 +3,12 @@ import {
   agruparMetodos,
   construirEjeDias,
   construirRanking,
-  calcularResultadoNeto,
   calcularTotales,
   etiquetaVisible,
   formatearDia,
   formatearMoneda,
   formatearMonedaCompacta,
   formatearRangoLegible,
-  margenEsNegativo,
   pasoEje,
   porcentaje,
   rangoDesdePeriodo,
@@ -19,8 +17,8 @@ import {
 } from './reportsQuery'
 import type { ProductoRanking, VentaDiaria } from '../../../electron/db/types'
 
-function dia(fecha: string, total: number, costo = total / 2, unidades = 1, ventas = 1): VentaDiaria {
-  return { fecha, ventas, unidades, total, costo }
+function dia(fecha: string, total: number, unidades = 1, ventas = 1, abonos = 0): VentaDiaria {
+  return { fecha, ventas, abonos, unidades, total }
 }
 
 function rango(desde: string | null, hasta: string | null): RangoFechas {
@@ -41,16 +39,6 @@ describe('formateo', () => {
 
   it('compacta negativos conservando el signo', () => {
     expect(formatearMonedaCompacta(-2_500)).toBe('$-2.5K')
-  })
-})
-
-describe('calcularResultadoNeto', () => {
-  it('resta el costo vendido y las mermas a las ventas netas', () => {
-    expect(calcularResultadoNeto(1000, 600, 50)).toBe(350)
-  })
-
-  it('conserva dos decimales y permite un resultado negativo', () => {
-    expect(calcularResultadoNeto(100, 80.25, 30)).toBe(-10.25)
   })
 })
 
@@ -168,13 +156,13 @@ describe('construirEjeDias', () => {
       '2026-03-11',
       '2026-03-12',
     ])
-    expect(eje[1]).toMatchObject({ ventas: 0, total: 0, costo: 0, resultado: 0 })
+    expect(eje[1]).toMatchObject({ ventas: 0, unidades: 0, total: 0 })
     expect(eje[3]).toMatchObject({ total: 300 })
   })
 
-  it('deriva el resultado por día', () => {
-    const eje = construirEjeDias([dia('2026-03-09', 100, 60)], rango('2026-03-09T00:00:00.000-03:00', '2026-03-09T23:59:59.999-03:00'), hoy)
-    expect(eje[0].resultado).toBe(40)
+  it('conserva los ingresos netos en el día', () => {
+    const eje = construirEjeDias([dia('2026-03-09', 100)], rango('2026-03-09T00:00:00.000-03:00', '2026-03-09T23:59:59.999-03:00'), hoy)
+    expect(eje[0].total).toBe(100)
   })
 
   it('incluye un día del rango que no aparece en la serie', () => {
@@ -279,8 +267,8 @@ describe('totalTarjetaCuentaCorriente', () => {
 
 describe('construirRanking', () => {
   const filas: ProductoRanking[] = [
-    { productoId: 1, nombre: 'Coca', cantidad: 4, monto: 1000, costo: 400, margen: 600 },
-    { productoId: 2, nombre: 'Pan', cantidad: 2, monto: 300, costo: 250, margen: 50 },
+    { productoId: 1, nombre: 'Coca', cantidad: 4, monto: 1000 },
+    { productoId: 2, nombre: 'Pan', cantidad: 2, monto: 300 },
   ]
 
   it('calcula el porcentaje sobre el total vendido', () => {
@@ -289,52 +277,29 @@ describe('construirRanking', () => {
     expect(ranking[1].porcentajeVenta).toBeCloseTo(23.1, 1)
   })
 
-  it('marca el margen negativo', () => {
-    expect(margenEsNegativo(-1)).toBe(true)
-    expect(margenEsNegativo(0)).toBe(false)
-  })
-
   it('no rompe con total vendido cero', () => {
     expect(construirRanking([], 0)).toEqual([])
   })
 })
 
 describe('calcularTotales', () => {
-  it('deriva unidades, ticket promedio y margen porcentual', () => {
+  it('deriva unidades y ticket promedio', () => {
     const totales = calcularTotales({
       totalVentas: 1000,
-      totalCosto: 400,
-      resultado: 600,
       cantVentas: 4,
-      ventasPorDia: [dia('2026-03-09', 600, 200, 3), dia('2026-03-10', 400, 200, 2)],
+      ventasPorDia: [dia('2026-03-09', 600, 3), dia('2026-03-10', 400, 2)],
     })
     expect(totales.unidades).toBe(5)
     expect(totales.ticketPromedio).toBe(250)
-    expect(totales.margenPorcentaje).toBe(60)
-    expect(totales.margenNegativo).toBe(false)
   })
 
   it('no divide por cero sin ventas', () => {
     const totales = calcularTotales({
       totalVentas: 0,
-      totalCosto: 0,
-      resultado: 0,
       cantVentas: 0,
       ventasPorDia: [],
     })
     expect(totales.ticketPromedio).toBe(0)
     expect(Number.isNaN(totales.ticketPromedio)).toBe(false)
-    expect(totales.margenPorcentaje).toBe(0)
-  })
-
-  it('detecta el período que se vendió por debajo del costo', () => {
-    const totales = calcularTotales({
-      totalVentas: 100,
-      totalCosto: 150,
-      resultado: -50,
-      cantVentas: 1,
-      ventasPorDia: [],
-    })
-    expect(totales.margenNegativo).toBe(true)
   })
 })

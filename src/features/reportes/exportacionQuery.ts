@@ -11,7 +11,6 @@ import {
   construirEjeDias,
   construirRanking,
   formatearRangoLegible,
-  porcentaje,
   type RangoFechas,
 } from './reportsQuery'
 
@@ -141,8 +140,6 @@ export function construirExportacion({
         ? filasPerdidas(resumen)
       : pestana === 'cortes'
         ? filasCortes(resumen)
-        : pestana === 'devoluciones'
-          ? filasDevoluciones(resumen)
         : filasVentas(resumen, rango)
 
   const hoja: HojaExcel = {
@@ -166,24 +163,22 @@ function filasVentas(resumen: ReportesSummary, rango: RangoFechas): FilaExcel[] 
 
   return [
     seccion('Resumen'),
-    par('Ingresos', resumen.totalVentas),
+    par('Ingresos cobrados', resumen.totalCobrado),
     par('Ventas', resumen.cantVentas),
-    par('Ganancia estimada', resumen.resultado),
-    par('Costo de mercadería', resumen.totalCosto),
+    par('Pérdidas por mermas', resumen.perdidas.plataPerdida),
+    par('Resultado después de mermas', redondear(resumen.totalCobrado - resumen.perdidas.plataPerdida)),
     par('Ticket promedio', redondear(ticketPromedio)),
-    par('Margen', redondear(porcentaje(resumen.resultado, resumen.totalVentas))),
     vacia(),
 
-    seccion('Ventas por día'),
-    encabezado('Fecha', 'Ventas', 'Unidades', 'Total', 'Costo', 'Ganancia'),
+    seccion('Ingresos cobrados por día'),
+    encabezado('Fecha', 'Ventas', 'Abonos', 'Unidades', 'Cobrado'),
     ...(ejeDias.length > 0
       ? ejeDias.map((dia) => [
           texto(dia.etiqueta),
           numero(dia.ventas),
+          numero(dia.abonos),
           numero(dia.unidades),
           numero(redondear(dia.total)),
-          numero(redondear(dia.costo)),
-          numero(redondear(dia.resultado)),
         ])
       : [sinDatos()]),
     vacia(),
@@ -200,14 +195,12 @@ function filasVentas(resumen: ReportesSummary, rango: RangoFechas): FilaExcel[] 
     vacia(),
 
     seccion('Productos más vendidos'),
-    encabezado('Producto', 'Unidades', 'Monto', 'Costo', 'Margen', '% del total'),
+    encabezado('Producto', 'Unidades', 'Monto vendido', '% del total'),
     ...(ranking.length > 0
       ? ranking.map((producto) => [
           texto(producto.nombre),
           numero(producto.cantidad),
           numero(redondear(producto.monto)),
-          numero(redondear(producto.costo)),
-          numero(redondear(producto.margen)),
           numero(redondear(producto.porcentajeVenta)),
         ])
       : [sinDatos()]),
@@ -250,21 +243,19 @@ function filasPerdidas(resumen: ReportesSummary): FilaExcel[] {
     vacia(),
 
     seccion('Mermas por producto'),
-    encabezado('Producto', 'Unidades', 'Costo unitario', 'Perdido'),
+    encabezado('Producto', 'Unidades', 'Pérdida estimada'),
     ...(perdidas.porProducto.length > 0
       ? [
           ...perdidas.porProducto.map(
             (producto): FilaExcel => [
               texto(producto.nombre),
               numero(producto.unidades),
-              numero(redondear(producto.costoUnitario)),
               numero(redondear(producto.perdido)),
             ],
           ),
           [
             texto('Total', ENCABEZADO),
             numero(perdidas.unidadesPerdidas, ENCABEZADO),
-            texto('', ENCABEZADO),
             numero(redondear(perdidas.plataPerdida), ENCABEZADO),
           ] as FilaExcel,
         ]
@@ -301,15 +292,3 @@ function filasCortes(resumen: ReportesSummary): FilaExcel[] {
   ]
 }
 
-function filasDevoluciones(resumen: ReportesSummary): FilaExcel[] {
-  const devoluciones = resumen.devoluciones
-
-  return [
-    seccion('Resumen'),
-    par('Devoluciones completadas', devoluciones?.cantidad ?? 0),
-    par('Unidades reintegradas al stock', devoluciones?.unidades ?? 0),
-    par('Importe de devoluciones', redondear(devoluciones?.total ?? 0)),
-    par('Costo revertido', redondear(devoluciones?.costo ?? 0)),
-    par('Ganancia revertida', redondear(devoluciones?.gananciaRevertida ?? 0)),
-  ]
-}

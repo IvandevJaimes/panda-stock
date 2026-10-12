@@ -14,6 +14,7 @@ import { useUnsavedChangesGuard } from "../../../hooks/useUnsavedChangesGuard";
 export interface LotQuickActionsModalProps {
   isOpen: boolean;
   lote: Lote;
+  stockActualProducto?: number;
   productoId: number;
   onClose: () => void;
   onMutated: () => void;
@@ -24,6 +25,7 @@ export interface LotQuickActionsModalProps {
 export function LotQuickActionsModal({
   isOpen,
   lote,
+  stockActualProducto,
   productoId,
   onClose,
   onMutated,
@@ -91,6 +93,7 @@ export function LotQuickActionsModal({
         {vistaActual === "ajustar-stock" && (
           <AjustarStockLoteForm
             lote={lote}
+            stockActualProducto={stockActualProducto}
             onCancel={intentarVolver}
             onSuccess={handleActionComplete}
             onSubmittingChange={setSubmitting}
