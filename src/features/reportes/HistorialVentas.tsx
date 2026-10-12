@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Ban, BookUser, History, Receipt } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { CustomSelect } from '../../components/ui/CustomSelect'
 import { Button } from '../../components/ui/Button'
@@ -244,6 +245,8 @@ type HistorialVentasProps = {
 }
 
 export function HistorialVentas({ desde, hasta }: HistorialVentasProps) {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const scrollAtendido = useRef(false)
   const [ventas, setVentas] = useState<Venta[] | null>(null)
   const [pagina, setPagina] = useState(1)
   const [buscar, setBuscar] = useState('')
@@ -301,6 +304,18 @@ export function HistorialVentas({ desde, hasta }: HistorialVentasProps) {
       vigente = false
     }
   }, [desde, hasta, recarga])
+
+  useEffect(() => {
+    if (ventas === null || searchParams.get('scroll') !== 'ventas' || scrollAtendido.current) return
+    const tabla = document.getElementById('reporte-tabla-ventas')
+    if (!tabla) return
+
+    tabla.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    scrollAtendido.current = true
+    const parametros = new URLSearchParams(searchParams)
+    parametros.delete('scroll')
+    setSearchParams(parametros, { replace: true })
+  }, [ventas, searchParams, setSearchParams])
 
   const filtradas = useMemo(() => {
     if (!ventas) return []
@@ -412,7 +427,7 @@ export function HistorialVentas({ desde, hasta }: HistorialVentasProps) {
 
   return (
     <>
-    <section className={`w-full overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800/80 dark:bg-[#111827] ${SOMBRA_CARD}`}>
+    <section id="reporte-tabla-ventas" className={`scroll-mt-4 w-full overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800/80 dark:bg-[#111827] ${SOMBRA_CARD}`}>
       <header className="flex items-start justify-between gap-3 px-4 py-3.5">
         <div className="flex min-w-0 items-start gap-2.5">
           <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">

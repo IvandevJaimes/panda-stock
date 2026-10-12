@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { Ban, ChevronDown, History } from 'lucide-react'
+import { Ban, ArrowRight, History } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Modal } from '../../components/ui/Modal'
 import { Button } from '../../components/ui/Button'
@@ -28,6 +29,7 @@ type HistorialVentasModalProps = {
  * Se pide al abrir y se tira al cerrar.
  */
 export function HistorialVentasModal({ isOpen, onClose }: HistorialVentasModalProps) {
+  const navigate = useNavigate()
   const [ventas, setVentas] = useState<VentaHistorial[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [recarga, setRecarga] = useState(0)
@@ -145,10 +147,15 @@ export function HistorialVentasModal({ isOpen, onClose }: HistorialVentasModalPr
               ))}
             </ul>
 
-            {/* Botón puramente visual por ahora: el paginado real viene en un
-                cambio posterior. */}
-            <div className="mt-1 flex justify-center">
-              <Button variant="outline" icon={<ChevronDown className="h-4 w-4" aria-hidden="true" />}>
+            <div className="mt-4 flex justify-center">
+              <Button
+                variant="primary"
+                icon={<ArrowRight className="h-4 w-4" aria-hidden="true" />}
+                onClick={() => {
+                  onClose()
+                  navigate('/reports?tab=ventas&scroll=ventas')
+                }}
+              >
                 Ver más
               </Button>
             </div>

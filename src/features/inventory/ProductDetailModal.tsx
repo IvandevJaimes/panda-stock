@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   AlertTriangle,
+  ArrowRight,
   Barcode,
   Boxes,
   CalendarDays,
@@ -20,6 +21,7 @@ import {
   XCircle,
   type LucideIcon,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { TabsModal, type TabsModalTab } from "../../components/ui/TabsModal";
 import { Button } from "../../components/ui/Button";
 import { EmptyStateCompact } from "../../components/ui/EmptyStateCompact";
@@ -221,6 +223,7 @@ export function ProductDetailModal({
   onAgregarInventario,
   onMutated,
 }: ProductDetailModalProps) {
+  const navigate = useNavigate();
   const [lotes, setLotes] = useState<Lote[] | null>(null);
   const [perdidaSeleccion, setPerdidaSeleccion] = useState<Lote | null>(null);
   const [movimientos, setMovimientos] = useState<MovimientoStock[] | null>(
@@ -623,8 +626,9 @@ Lote activo
               description="Las entradas, salidas y ajustes manuales de stock de este producto se registrarán aquí automáticamente."
             />
           ) : (
-            <ul className="flex flex-col gap-2">
-              {movimientos.map((movimiento) => {
+            <>
+              <ul className="flex flex-col gap-2">
+              {movimientos.slice(0, 20).map((movimiento) => {
                 const config =
                   MOVIMIENTO_CONFIG[movimiento.tipo] ??
                   MOVIMIENTO_CONFIG.entrada;
@@ -699,7 +703,27 @@ Lote activo
                   </li>
                 );
               })}
-            </ul>
+              </ul>
+              {movimientos.length > 20 && (
+                <div className="mt-4 flex justify-center">
+                  <Button
+                    variant="primary"
+                    icon={<ArrowRight className="h-4 w-4" aria-hidden="true" />}
+                    onClick={() => {
+                      onClose();
+                      const params = new URLSearchParams({
+                        tab: "movimientos",
+                        producto: product.nombre,
+                        scroll: "movimientos",
+                      });
+                      navigate(`/reports?${params.toString()}`);
+                    }}
+                  >
+                    Ver más
+                  </Button>
+                </div>
+              )}
+            </>
           )}
         </>
       ),

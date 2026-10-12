@@ -1,24 +1,23 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { History, Loader2, Package } from 'lucide-react'
+import { History, Loader2 } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Button } from '../../components/ui/Button'
 import { CustomSelect } from '../../components/ui/CustomSelect'
 import { EmptySearch } from '../../components/ui/EmptySearch'
 import { Modal } from '../../components/ui/Modal'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/Table'
-import { buildAssetUrl } from '../../lib/assets'
 import { cn } from '../../lib/cn'
-import { getProductPlaceholderLarge } from '../../lib/productPlaceholder'
 import { useBarcodeScanner } from '../../hooks/useBarcodeScanner'
-import { useSrcConFallback } from '../../hooks/useSrcConFallback'
 import { ScanBadge } from '../inventory/ScanBadge'
 import { movimientosService } from '../../services/movimientos.service'
 import { productosService } from '../../services/productos.service'
 import { MOVIMIENTO_CONFIG } from '../inventory/movementVisuals'
 import { SOMBRA_CARD } from './estilos'
 import { BarraFiltrosReporte, PaginacionReporte } from './TablaReporteUI'
-import { formatearMoneda, formatearUnidades } from './reportsQuery'
+import { formatearUnidades } from './reportsQuery'
+import { ProductoDetalleBasico } from './ProductoDetalleBasico'
 import type { MovimientoPorTipo, MovimientoStock, ProductoConLoteActivo, TipoMovimientoStock } from '../../../electron/db/types'
 
 const POR_PAGINA = 30
@@ -42,6 +41,7 @@ type MovimientosRecientesProps = {
   desde: string | null
   hasta: string | null
   filasPorTipo: MovimientoPorTipo[]
+  buscarInicial?: string
 }
 
 function DatoMovimiento({ etiqueta, valor }: { etiqueta: string; valor: string }) {
@@ -57,72 +57,16 @@ function DatoMovimiento({ etiqueta, valor }: { etiqueta: string; valor: string }
   )
 }
 
-function ImagenProductoMovimiento({ producto }: { producto: ProductoConLoteActivo | null }) {
-  const fallback = getProductPlaceholderLarge(producto?.id ?? 'movimiento-sin-producto')
-  const imagen = useSrcConFallback(
-    producto ? buildAssetUrl(producto.imgPath) ?? fallback : fallback,
-    fallback,
-  )
-
-  return producto ? (
-    <img
-      src={imagen.src}
-      onError={imagen.onError}
-      alt={producto.imgPath ? producto.nombre : `${producto.nombre} sin foto`}
-      loading="lazy"
-      draggable={false}
-      className="h-20 w-20 shrink-0 rounded-xl border border-slate-200 object-cover dark:border-slate-700"
-    />
-  ) : (
-    <span className="grid h-20 w-20 shrink-0 place-items-center rounded-xl border border-dashed border-slate-300 bg-slate-100 text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-500">
-      <Package className="h-7 w-7" strokeWidth={1.75} aria-hidden />
-    </span>
-  )
-}
-
-function InformacionProductoMovimiento({ movimiento }: { movimiento: MovimientoConNombre }) {
-  const producto = movimiento.producto
-
-  return (
-    <section className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-800 dark:bg-secondary/25">
-      <div className="flex items-start gap-3">
-        <ImagenProductoMovimiento producto={producto} />
-        <div className="min-w-0 flex-1">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-            Producto asociado · información actual
-          </p>
-          <h3 className="mt-1 break-words font-display text-base font-bold text-slate-900 dark:text-white">
-            {producto?.nombre ?? movimiento.nombreProducto}
-            {producto?.variante && (
-              <span className="ml-1.5 text-sm font-medium text-slate-500 dark:text-slate-400">
-                · {producto.variante}
-              </span>
-            )}
-          </h3>
-          {producto ? (
-            <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2">
-              <DatoMovimiento etiqueta="Código" valor={producto.codigoInterno || '—'} />
-              <DatoMovimiento etiqueta="Precio actual" valor={formatearMoneda(producto.precioVenta)} />
-              <DatoMovimiento etiqueta="Stock actual" valor={`${formatearUnidades(producto.stockActual)} unidades`} />
-            </dl>
-          ) : (
-            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-              No hay más información disponible para este producto.
-            </p>
-          )}
-        </div>
-      </div>
-    </section>
-  )
-}
-
 function DetalleMovimiento({ movimiento }: { movimiento: MovimientoConNombre }) {
   const config = MOVIMIENTO_CONFIG[movimiento.tipo]
   const Icono = config.icon
 
   return (
     <div className="flex flex-col gap-4">
-      <InformacionProductoMovimiento movimiento={movimiento} />
+      <ProductoDetalleBasico
+        producto={movimiento.producto}
+        nombreProducto={movimiento.nombreProducto}
+      />
 
       <section className="flex min-w-0 items-center gap-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-800 dark:bg-secondary/25">
         <span className={cn('grid h-10 w-10 shrink-0 place-items-center rounded-xl', config.iconClases)}>
@@ -164,10 +108,12 @@ function DetalleMovimiento({ movimiento }: { movimiento: MovimientoConNombre }) 
   )
 }
 
-export function MovimientosRecientes({ desde, hasta, filasPorTipo }: MovimientosRecientesProps) {
+export function MovimientosRecientes({ desde, hasta, filasPorTipo, buscarInicial = '' }: MovimientosRecientesProps) {
+  const [searchParams, setSearchParams] = useSearchParams()
   const seccionRef = useRef<HTMLElement>(null)
+  const scrollAtendido = useRef(false)
   const [movimientos, setMovimientos] = useState<MovimientoConNombre[] | null>(null)
-  const [buscar, setBuscar] = useState('')
+  const [buscar, setBuscar] = useState(buscarInicial)
   const [tipo, setTipo] = useState<FiltroTipo>('todos')
   const [pagina, setPagina] = useState(1)
   const [barcodeEscaneado, setBarcodeEscaneado] = useState<string | null>(null)
@@ -196,6 +142,18 @@ export function MovimientosRecientes({ desde, hasta, filasPorTipo }: Movimientos
     })
     return () => { vigente = false }
   }, [desde, hasta])
+
+  useEffect(() => {
+    if (movimientos === null || searchParams.get('scroll') !== 'movimientos' || scrollAtendido.current) return
+    const seccion = seccionRef.current
+    if (!seccion) return
+
+    seccion.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    scrollAtendido.current = true
+    const parametros = new URLSearchParams(searchParams)
+    parametros.delete('scroll')
+    setSearchParams(parametros, { replace: true })
+  }, [movimientos, searchParams, setSearchParams])
 
   const resumenPorTipo = useMemo(() => {
     const porTipo = new Map(filasPorTipo.map((fila) => [fila.tipo, fila]))
@@ -333,7 +291,7 @@ export function MovimientosRecientes({ desde, hasta, filasPorTipo }: Movimientos
         </ul>
       </section>
 
-      <section ref={seccionRef} className={cn('w-full overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800/80 dark:bg-[#111827]', SOMBRA_CARD)}>
+      <section id="reporte-tabla-movimientos" ref={seccionRef} className={cn('scroll-mt-4 w-full overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800/80 dark:bg-[#111827]', SOMBRA_CARD)}>
         <header className="flex items-start gap-2.5 px-4 py-3.5">
           <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-sky-500/10 text-sky-600 dark:text-sky-400">
             <History size={15} />
@@ -380,6 +338,7 @@ export function MovimientosRecientes({ desde, hasta, filasPorTipo }: Movimientos
                   <TableRow>
                     <TableHead>Momento</TableHead>
                     <TableHead>Producto y motivo</TableHead>
+                    <TableHead>Lote afectado</TableHead>
                     <TableHead>Tipo</TableHead>
                     <TableHead className="text-right">Cambio</TableHead>
                     <TableHead className="text-right">Stock posterior</TableHead>
@@ -417,6 +376,9 @@ export function MovimientosRecientes({ desde, hasta, filasPorTipo }: Movimientos
                               {movimiento.motivo}
                             </p>
                           )}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap text-xs font-medium tabular-nums text-slate-600 dark:text-slate-300">
+                          {movimiento.loteId === null ? 'Sin lote' : `Lote #${movimiento.loteId}`}
                         </TableCell>
                         <TableCell>
                           <span className={cn('inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold', config.badgeClases)}>
@@ -480,6 +442,7 @@ export function MovimientosRecientes({ desde, hasta, filasPorTipo }: Movimientos
                           <p className="mt-1 text-[10px] text-slate-400 dark:text-slate-500">
                             {formatearMomento(movimiento.fechaHora)}
                             {movimiento.stockPosterior !== null && ` · Stock: ${formatearUnidades(movimiento.stockPosterior)}`}
+                            {` · ${movimiento.loteId === null ? 'Sin lote' : `Lote #${movimiento.loteId}`}`}
                           </p>
                         </div>
                       </div>

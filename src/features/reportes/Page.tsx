@@ -25,6 +25,7 @@ import {
 import type { LucideIcon } from 'lucide-react'
 import type { Dispatch, SetStateAction } from 'react'
 import { toast } from 'sonner'
+import { useSearchParams } from 'react-router-dom'
 import { Button } from '../../components/ui/Button'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { LoadingState } from '../../components/ui/LoadingState'
@@ -35,7 +36,9 @@ import { reportesService } from '../../services/reportes.service'
 import { HistorialVentas } from './HistorialVentas'
 import { MetodosPagoChart } from './MetodosPagoChart'
 import { MetodosPagoResumen } from './MetodosPagoResumen'
-import { CortesPanel, MovimientosPanel, PerdidasPanel } from './PanelesPestana'
+import { CortesPanel } from './CortesPanel'
+import { MovimientosPanel } from './PanelesPestana'
+import { PerdidasPanel } from './PerdidasPanel'
 import { RankingProductos } from './RankingProductos'
 import { ReporteKpiCard } from './ReporteKpiCard'
 import { VentasPorDiaChart } from './VentasPorDiaChart'
@@ -74,6 +77,22 @@ const COLOR_TONO: Record<TonoMetrica, string> = {
   rose: 'bg-rose-100 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400',
 }
 
+const FONDO_TONO: Record<TonoMetrica, string> = {
+  emerald: 'border-emerald-200/80 bg-emerald-50/80 dark:border-emerald-900/60 dark:bg-emerald-950/20',
+  amber: 'border-amber-200/80 bg-amber-50/80 dark:border-amber-900/60 dark:bg-amber-950/20',
+  sky: 'border-sky-200/80 bg-sky-50/80 dark:border-sky-900/60 dark:bg-sky-950/20',
+  violet: 'border-violet-200/80 bg-violet-50/80 dark:border-violet-900/60 dark:bg-violet-950/20',
+  rose: 'border-rose-200/80 bg-rose-50/80 dark:border-rose-900/60 dark:bg-rose-950/20',
+}
+
+const VALOR_TONO: Record<TonoMetrica, string> = {
+  emerald: 'text-emerald-700 dark:text-emerald-400',
+  amber: 'text-amber-700 dark:text-amber-300',
+  sky: 'text-sky-700 dark:text-sky-300',
+  violet: 'text-violet-700 dark:text-violet-300',
+  rose: 'text-rose-700 dark:text-rose-400',
+}
+
 type ReportesPestanaContextValue = {
   pestana: PestanaReportes
   setPestana: Dispatch<SetStateAction<PestanaReportes>>
@@ -102,7 +121,11 @@ export function ReportesPage() {
 }
 
 function ContenidoReportes() {
-  const [pestana, setPestana] = useState<PestanaReportes>('ventas')
+  const [searchParams] = useSearchParams()
+  const [pestana, setPestana] = useState<PestanaReportes>(() => {
+    const destino = searchParams.get('tab')
+    return destino === 'movimientos' ? 'movimientos' : 'ventas'
+  })
   const [periodo, setPeriodo] = useState<PeriodoReporte>('month')
   const [cursor, setCursor] = useState(() => new Date())
   const [resumen, setResumen] = useState<ReportesSummary | null>(null)
@@ -268,7 +291,9 @@ function ContenidoReportes() {
             </Button>
           </div>
         </div>
-      ) : periodoSinDatos && pestana !== 'movimientos' ? (
+      ) : periodoSinDatos
+        && pestana !== 'movimientos'
+        && !(pestana === 'ventas' && searchParams.get('tab') === 'ventas') ? (
         <EmptyState
           className="min-h-[55vh]"
           icon={<PackageX size={22} />}
@@ -289,10 +314,11 @@ function ContenidoReportes() {
                   iconBgClass={COLOR_TONO[metrica.tono]}
                   title={metrica.titulo}
                   value={metrica.valor}
-                  valueClassName={metrica.valorClassName}
+                  valueClassName={metrica.valorClassName ?? VALOR_TONO[metrica.tono]}
                   subtitle={metrica.subtitulo}
                   className={cn(
                     SOMBRA_CARD,
+                    FONDO_TONO[metrica.tono],
                     'animate-entry-up',
                     RETRASOS_METRICAS[index] ?? 'stagger-4',
                   )}
@@ -340,13 +366,23 @@ function ContenidoReportes() {
 
           {pestana === 'movimientos' && (
             <div className="animate-entry-up stagger-1">
-              <MovimientosPanel key={`${rango.desde}|${rango.hasta}`} resumen={resumen} desde={rango.desde} hasta={rango.hasta} />
+              <MovimientosPanel
+                key={`${rango.desde}|${rango.hasta}`}
+                resumen={resumen}
+                desde={rango.desde}
+                hasta={rango.hasta}
+                buscarInicial={searchParams.get('producto') ?? ''}
+              />
             </div>
           )}
 
           {pestana === 'perdidas' && (
             <div className="animate-entry-up stagger-1">
-              <PerdidasPanel key={`${rango.desde}|${rango.hasta}`} resumen={resumen} />
+              <PerdidasPanel
+                key={`${rango.desde}|${rango.hasta}`}
+                desde={rango.desde}
+                hasta={rango.hasta}
+              />
             </div>
           )}
 
