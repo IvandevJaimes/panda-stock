@@ -10,6 +10,7 @@ export type ClaveProteccion =
   | 'eliminarLotes'
   | 'eliminarCategorias'
   | 'eliminarMarcas'
+  | 'eliminarClientes'
 export type ProteccionesSeguridad = Record<ClaveProteccion, boolean>
 export const CLAVES_PROTECCION: readonly ClaveProteccion[] = [
   'reportes',
@@ -19,6 +20,7 @@ export const CLAVES_PROTECCION: readonly ClaveProteccion[] = [
   'eliminarLotes',
   'eliminarCategorias',
   'eliminarMarcas',
+  'eliminarClientes',
 ]
 export const PROTECCIONES_INICIALES: ProteccionesSeguridad = {
   reportes: false,
@@ -28,6 +30,7 @@ export const PROTECCIONES_INICIALES: ProteccionesSeguridad = {
   eliminarLotes: false,
   eliminarCategorias: false,
   eliminarMarcas: false,
+  eliminarClientes: false,
 }
 export type ErrorSeguridadCode = 'AUTHORIZATION_REQUIRED' | 'INVALID_PIN' | 'PIN_LOCKED'
 export type ResultadoSeguro<T> =
@@ -333,6 +336,9 @@ export type ResultadoAnulacion = {
   total: number
   unidadesRestituidas: number
   motivo: string
+  montoReintegrado: number
+  deudaCancelada: number
+  reintegros: Array<{ metodo: Exclude<MetodoPago, 'cuenta_corriente'>; monto: number }>
 }
 
 export type FiltrosVentas = {
@@ -454,6 +460,8 @@ export type VentaHistorial = Venta & {
   unidades: number
   /** Métodos usados, sin repetir. Una venta con pago mixto trae más de uno. */
   metodos: MetodoPago[]
+  /** Cliente asociado cuando el ticket incluye un cargo de cuenta corriente. */
+  clienteNombre: string | null
   items: VentaHistorialItem[]
 }
 
@@ -675,17 +683,20 @@ export type ClienteInput = {
 /**
  * Cliente con su saldo ya resuelto.
  *
- * El saldo viaja desglosado (cargos y abonos por separado) además de la suma:
- * la vista muestra las dos columnas y el total, y si solo mandáramos el saldo
- * no podría explicar de dónde sale.
+ * `totalAbonos` es neto: los reintegros revierten los abonos que se devolvieron.
+ * El saldo también descuenta las devoluciones aplicadas a cargos.
  */
 export type ClienteConSaldo = Cliente & {
   totalCargos: number
   totalAbonos: number
-  /** `totalCargos - totalAbonos`. Siempre >= 0: no se permiten sobrepagos. */
+  /** Saldo luego de aplicar abonos netos y devoluciones; nunca queda negativo. */
   saldo: number
   cantidadMovimientos: number
   ultimoMovimiento: string | null
+}
+
+export type MovimientoCuentaCorrienteItem = DetalleVenta & {
+  imgPath: string | null
 }
 
 export type MovimientoCuentaCorriente = {
@@ -702,6 +713,12 @@ export type MovimientoCuentaCorriente = {
   clienteNombre: string
   /** Total de la venta origen, cuando el cargo viene de una venta. */
   ventaTotal: number | null
+  /** Permite excluir anulaciones del listado de deudas cobrables sin ocultarlas del historial. */
+  ventaAnulada?: boolean
+  /** Saldo pendiente de este cargo después de aplicar abonos y devoluciones. */
+  saldoPendiente?: number
+  /** Productos congelados en el detalle de la venta que originó el cargo. */
+  items?: MovimientoCuentaCorrienteItem[]
   abonoOrigenId?: number | null
 }
 
@@ -728,7 +745,11 @@ export type AbonoInput = {
   clienteId: number
   monto: number
   metodo: MetodoPago
-  /** Gaveta donde entra la plata. El efectivo de un abono se suma al arqueo. */
+  /** Movimiento de deuda seleccionado; permite validar el tope en el main process. */
+  deudaId?: number | null
+  /** Ticket al que se imputa el cobro cuando se cobra una deuda de venta. */
+  ventaId?: number | null
+  /** Gaveta donde entra la plata cuando el control por turno está activo. */
   cajaId?: number | null
   nota?: string | null
 }

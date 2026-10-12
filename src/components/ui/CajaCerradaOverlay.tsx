@@ -5,9 +5,14 @@ import { Button } from './Button'
 interface CajaCerradaOverlayProps {
   className?: string
   onAbrirCaja: () => void
+  mostrarBoton?: boolean
 }
 
-export function CajaCerradaOverlay({ className, onAbrirCaja }: CajaCerradaOverlayProps) {
+export function CajaCerradaOverlay({
+  className,
+  onAbrirCaja,
+  mostrarBoton = true,
+}: CajaCerradaOverlayProps) {
   return (
     <div
       role="alertdialog"
@@ -27,16 +32,18 @@ export function CajaCerradaOverlay({ className, onAbrirCaja }: CajaCerradaOverla
       </h3>
 
       <p className="max-w-sm text-sm text-slate-500 dark:text-slate-400">
-        Para vender primero hay que abrir la caja del turno.
+        Para continuar, primero hay que abrir la caja del turno.
       </p>
 
-      <Button
-        variant="primary"
-        onClick={onAbrirCaja}
-        icon={<ShieldCheck size={18} aria-hidden="true" />}
-      >
-        Abrir caja
-      </Button>
+      {mostrarBoton && (
+        <Button
+          variant="primary"
+          onClick={onAbrirCaja}
+          icon={<ShieldCheck size={18} aria-hidden="true" />}
+        >
+          Abrir caja
+        </Button>
+      )}
     </div>
   )
 }

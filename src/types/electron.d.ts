@@ -159,7 +159,8 @@ declare global {
         }) => Promise<ResultadoSeguro<ClienteConSaldo[]>>
         crearCliente: (data: ClienteInput) => Promise<ResultadoSeguro<Cliente>>
         actualizarCliente: (id: number, data: ClienteInput) => Promise<ResultadoSeguro<void>>
-        archivarCliente: (id: number) => Promise<ResultadoSeguro<void>>
+        toggleCliente: (id: number, activo: boolean) => Promise<ResultadoSeguro<Cliente>>
+        eliminarCliente: (id: number, pin?: string) => Promise<ResultadoSeguro<void>>
         getResumen: () => Promise<ResultadoSeguro<ResumenCuentasCorrientes>>
         getMovimientos: (
           filtros?: FiltrosCuentaCorriente,

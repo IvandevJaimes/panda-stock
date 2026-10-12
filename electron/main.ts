@@ -91,7 +91,8 @@ import {
   getClientes,
   createCliente,
   updateCliente,
-  archivarCliente,
+  toggleCliente,
+  eliminarCliente,
   getMovimientosCuentaCorriente,
   getResumenCuentasCorrientes,
   registrarAbono,
@@ -349,7 +350,7 @@ function esSeedProtecciones(valor: unknown): valor is ProteccionesSeguridad {
   if (typeof valor !== 'object' || valor === null) return false;
   const claves: ClaveProteccion[] = [
     'reportes', 'cuentasCorrientes', 'anularVentas', 'eliminarProductos',
-    'eliminarLotes', 'eliminarCategorias', 'eliminarMarcas',
+    'eliminarLotes', 'eliminarCategorias', 'eliminarMarcas', 'eliminarClientes',
   ];
   const registro = valor as Record<string, unknown>;
   return claves.every((clave) => typeof registro[clave] === 'boolean');
@@ -358,7 +359,7 @@ function esSeedProtecciones(valor: unknown): valor is ProteccionesSeguridad {
 function esClaveProteccion(valor: unknown): valor is ClaveProteccion {
   return typeof valor === 'string' && [
     'reportes', 'cuentasCorrientes', 'anularVentas', 'eliminarProductos',
-    'eliminarLotes', 'eliminarCategorias', 'eliminarMarcas',
+    'eliminarLotes', 'eliminarCategorias', 'eliminarMarcas', 'eliminarClientes',
   ].includes(valor)
 }
 
@@ -1065,10 +1066,16 @@ function registerIpcHandlers() {
       return updateCliente(id, data);
     }),
   );
-  ipcMain.handle("cuentas-corrientes:cliente-archivar", (event, id: number) =>
+  ipcMain.handle("cuentas-corrientes:cliente-toggle", (event, id: number, activo: boolean) =>
     resultadoSeguro(() => {
       requerirAccesoVerificado(event.sender.id, 'cuentasCorrientes');
-      return archivarCliente(id);
+      return toggleCliente(id, activo);
+    }),
+  );
+  ipcMain.handle("cuentas-corrientes:cliente-eliminar", (event, id: number, pin?: string) =>
+    resultadoSeguro(() => {
+      requerirAccesoVerificado(event.sender.id, 'cuentasCorrientes');
+      return eliminarCliente(id, pin);
     }),
   );
   ipcMain.handle("cuentas-corrientes:movimientos", (event, filtros?: FiltrosCuentaCorriente) =>

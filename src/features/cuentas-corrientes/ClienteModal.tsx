@@ -9,11 +9,32 @@ import { Input } from '../../components/ui/Input'
 import { Modal } from '../../components/ui/Modal'
 import type { Cliente, ClienteInput } from '../../../electron/db/types'
 import { cuentasCorrientesService } from '../../services/cuentas-corrientes.service'
+import { ToggleActivoCliente } from './ToggleActivoCliente'
 
 type FormValues = {
   nombre: string
   telefono: string
   notas: string
+}
+
+function esTelefonoArgentinoValido(telefono: string): boolean {
+  const valor = telefono.trim()
+  if (!valor) return true
+  if (!/^\+?[\d\s().-]+$/.test(valor) || (valor.includes('+') && !valor.startsWith('+'))) {
+    return false
+  }
+
+  let digitos = valor.replace(/\D/g, '')
+  if (digitos.startsWith('0054')) {
+    digitos = digitos.slice(4)
+  } else if (digitos.startsWith('54') && digitos.length > 10) {
+    digitos = digitos.slice(2)
+  }
+
+  if (digitos.length === 11 && digitos.startsWith('9')) digitos = digitos.slice(1)
+  if (digitos.length === 11 && digitos.startsWith('0')) digitos = digitos.slice(1)
+
+  return /^[12368]\d{9}$/.test(digitos)
 }
 
 const VALORES_INICIALES: FormValues = { nombre: '', telefono: '', notas: '' }
@@ -83,6 +104,11 @@ export function ClienteModal({
     }
   }
 
+  const telefonoRegistro = register('telefono', {
+    validate: (valor) =>
+      esTelefonoArgentinoValido(valor) || 'Ingresá un número de teléfono válido',
+  })
+
   return (
     <Modal
       isOpen={isOpen}
@@ -91,6 +117,13 @@ export function ClienteModal({
       headerIcon={<User size={18} className="text-emerald-600 dark:text-emerald-400" />}
       maxWidth="md"
       closeable={!isSubmitting}
+      headerExtra={cliente ? (
+        <ToggleActivoCliente
+          cliente={cliente}
+          onChanged={() => onSuccess()}
+          onDesactivado={onClose}
+        />
+      ) : undefined}
       footer={
         <>
           <Button
@@ -124,6 +157,7 @@ export function ClienteModal({
             placeholder="Ana Gómez"
             autoFocus
             disabled={isSubmitting}
+            capitalizeWords
             onClear={() => setValue('nombre', '')}
             {...register('nombre', {
               required: 'El nombre y apellido es obligatorio',
@@ -140,12 +174,30 @@ export function ClienteModal({
           <FieldError error={errors.nombre?.message} />
         </div>
 
-        <Input
-          label="Teléfono"
-          placeholder="11 5555 6666"
-          disabled={isSubmitting}
-          {...register('telefono')}
-        />
+        <div className="flex flex-col gap-1.5">
+          <Input
+            label="Teléfono (opcional)"
+            placeholder="+54"
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            disabled={isSubmitting}
+            {...telefonoRegistro}
+            onChange={(event) => {
+              const input = event.currentTarget
+              const valor = input.value
+              const valorNumerico = valor.replace(/\D/g, '')
+              const posicion = input.selectionStart
+              input.value = valorNumerico
+              if (posicion !== null && valor !== valorNumerico) {
+                const eliminadosAntesDelCursor = valor.slice(0, posicion).replace(/\d/g, '').length
+                input.setSelectionRange(posicion - eliminadosAntesDelCursor, posicion - eliminadosAntesDelCursor)
+              }
+              void telefonoRegistro.onChange(event)
+            }}
+          />
+          <FieldError error={errors.telefono?.message} />
+        </div>
 
         <Input
           label="Notas"

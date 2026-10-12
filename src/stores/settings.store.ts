@@ -132,6 +132,7 @@ export const useSettingsStore = create<SettingsState>()(
             eliminarLotes: proteccionesGuardadas?.eliminarLotes ?? false,
             eliminarCategorias: proteccionesGuardadas?.eliminarCategorias ?? false,
             eliminarMarcas: proteccionesGuardadas?.eliminarMarcas ?? false,
+            eliminarClientes: proteccionesGuardadas?.eliminarClientes ?? false,
           },
           qrHabilitado:
             ajustes.qrHabilitado ??

@@ -95,7 +95,10 @@ describe('anulación de ventas', () => {
     expect(caja.totalVentas).toBe(0)
     expect(caja.cantidadVentas).toBe(0)
     expect(caja.totalEfectivo).toBe(0)
+    expect(caja.totalEgresosEfectivo).toBe(180)
     expect(caja.montoEsperado).toBe(100)
+    expect(resultado.reintegros).toEqual([{ metodo: 'efectivo', monto: 180 }])
+    expect(resultado.montoReintegrado).toBe(180)
 
     const reportes = repo.getReportesSummary()
     expect(reportes.totalVentas).toBe(0)
@@ -158,6 +161,43 @@ describe('anulación de ventas', () => {
     expect(movimientos.some((movimiento) =>
       movimiento.tipo === 'devolucion' && movimiento.ventaId === venta.ventaId,
     )).toBe(true)
+    expect(repo.getProductoById(producto.id)?.stockActual).toBe(20)
+  })
+
+  it('reintegra los abonos de una deuda anulada y la quita de la pestaña de cobro', () => {
+    const producto = crearProducto('Artículo cuenta corriente abonado')
+    const clienteId = repo.createCliente({ nombre: 'Cliente con abono anulado' }).id
+    const venta = vender(producto.id, {
+      cantidad: 1,
+      precio: 100,
+      metodo: 'cuenta_corriente',
+      clienteId,
+    })
+    repo.registrarAbono({
+      clienteId,
+      ventaId: venta.ventaId,
+      monto: 40,
+      metodo: 'transferencia',
+    })
+
+    const resultado = repo.anularVenta({
+      pin: '8877',
+      ventaId: venta.ventaId,
+      motivo: 'Venta cancelada después de un abono',
+    })!
+
+    expect(resultado.deudaCancelada).toBe(60)
+    expect(resultado.reintegros).toEqual([{ metodo: 'transferencia', monto: 40 }])
+    expect(resultado.montoReintegrado).toBe(40)
+    const cliente = repo.getClientes({ incluirInactivos: true }).find((fila) => fila.id === clienteId)
+    expect(cliente?.saldo).toBe(0)
+    expect(cliente?.totalAbonos).toBe(0)
+    expect(repo.getVentasRecientes(20).find((fila) => fila.id === venta.ventaId)?.clienteNombre)
+      .toBe('Cliente con abono anulado')
+    const movimientos = repo.getMovimientosCuentaCorriente({ clienteId, limit: 20 })
+    expect(movimientos.filter((movimiento) => movimiento.ventaId === venta.ventaId)
+      .every((movimiento) => movimiento.ventaAnulada)).toBe(true)
+    expect(movimientos.some((movimiento) => movimiento.tipo === 'reintegro' && movimiento.monto === 40)).toBe(true)
     expect(repo.getProductoById(producto.id)?.stockActual).toBe(20)
   })
 

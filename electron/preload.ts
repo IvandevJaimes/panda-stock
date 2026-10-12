@@ -185,8 +185,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.invoke("cuentas-corrientes:cliente-crear", data),
     actualizarCliente: (id: number, data: ClienteInput): Promise<ResultadoSeguro<void>> =>
       ipcRenderer.invoke("cuentas-corrientes:cliente-actualizar", id, data),
-    archivarCliente: (id: number): Promise<ResultadoSeguro<void>> =>
-      ipcRenderer.invoke("cuentas-corrientes:cliente-archivar", id),
+    toggleCliente: (id: number, activo: boolean): Promise<ResultadoSeguro<Cliente>> =>
+      ipcRenderer.invoke("cuentas-corrientes:cliente-toggle", id, activo),
+    eliminarCliente: (id: number, pin?: string): Promise<ResultadoSeguro<void>> =>
+      ipcRenderer.invoke("cuentas-corrientes:cliente-eliminar", id, pin),
     getMovimientos: (filtros?: FiltrosCuentaCorriente): Promise<ResultadoSeguro<MovimientoCuentaCorriente[]>> =>
       ipcRenderer.invoke("cuentas-corrientes:movimientos", filtros),
     getResumen: (): Promise<ResultadoSeguro<ResumenCuentasCorrientes>> => ipcRenderer.invoke("cuentas-corrientes:resumen"),

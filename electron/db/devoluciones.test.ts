@@ -175,7 +175,7 @@ describe('devoluciones de ticket completo', () => {
     expect(resumenCuentas.totalPorCobrar).toBe(0)
     expect(
       resumenCuentas.totalCargos - resumenCuentas.totalAbonos -
-        resumenCuentas.totalDevoluciones + resumenCuentas.totalReintegros,
+        resumenCuentas.totalDevoluciones,
     ).toBe(0)
   })
 

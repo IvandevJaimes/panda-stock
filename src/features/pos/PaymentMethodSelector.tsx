@@ -22,6 +22,7 @@ type PaymentMethodSelectorProps = {
   onChange: (metodo: MetodoPagoPOS) => void
   /** Los habilitados según ajustes, en el mismo orden que rota `F4`. */
   metodos: readonly MetodoPagoPOS[]
+  className?: string
 }
 
 // El orden sale de `posQuery` y no de acá: si `F4` rotara sobre otra lista, el
@@ -29,6 +30,7 @@ type PaymentMethodSelectorProps = {
 // La lista viene filtrada desde el ticket porque depende de los switches de
 // ajustes, que son estado de la app y no del selector.
 const COLUMNAS: Record<number, string> = {
+  1: 'grid-cols-1',
   2: 'grid-cols-2',
   3: 'grid-cols-3',
   4: 'grid-cols-4',
@@ -38,6 +40,7 @@ export function PaymentMethodSelector({
   valor,
   onChange,
   metodos,
+  className,
 }: PaymentMethodSelectorProps) {
   const opciones = metodos.map((opcion) => {
     const { etiqueta, icon } = PRESENTACION[opcion]
@@ -45,21 +48,21 @@ export function PaymentMethodSelector({
   })
 
   return (
-    <div className="shrink-0 border-t border-slate-200 bg-slate-50 px-[22px] py-2.5 dark:border-slate-800 dark:bg-secondary/30">
+    <div className={cn('w-full shrink-0 border-t border-slate-200 bg-slate-50 px-[22px] py-2.5 dark:border-slate-800 dark:bg-secondary/30', className)}>
       <h3 className="mb-1.5 text-[12.5px] font-semibold tracking-[0.02em] text-slate-600 dark:text-slate-400">
         Método de pago
       </h3>
 
       <div
         className={cn(
-          'grid gap-2 max-[600px]:gap-1.5',
+          'grid w-full gap-2 max-[600px]:gap-1.5',
           COLUMNAS[opciones.length] ?? 'grid-cols-3',
         )}
       >
         {opciones.map(({ valor: opcion, etiqueta, icon: Icon }) => {
           const activo = valor === opcion
           return (
-            <label key={opcion} className="group relative cursor-pointer">
+          <label key={opcion} className="group relative block min-w-0 cursor-pointer">
               <input
                 type="radio"
                 name="metodo-pago"
@@ -70,7 +73,7 @@ export function PaymentMethodSelector({
               />
               <span
                 className={cn(
-                  'flex flex-col items-center gap-0.5 rounded-xl border px-1.5 py-2 text-center font-display text-[12px] font-semibold leading-tight transition-[color,background-color,border-color,transform] duration-150',
+                  'flex w-full flex-col items-center gap-0.5 rounded-xl border px-1.5 py-2 text-center font-display text-[12px] font-semibold leading-tight transition-[color,background-color,border-color,transform] duration-150',
                   'peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-emerald-500',
                   // El hover vive en `group`, no en `peer`: el input es sr-only
                   // (1px, posicionado), así que `peer-hover:` no se dispararía

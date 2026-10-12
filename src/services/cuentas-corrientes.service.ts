@@ -37,9 +37,17 @@ export const cuentasCorrientesService = {
     }
   },
 
-  async archivarCliente(id: number): Promise<void> {
+  async toggleCliente(id: number, activo: boolean): Promise<Cliente> {
     try {
-      desenvolverResultadoSeguro(await window.electronAPI.cuentasCorrientes.archivarCliente(id))
+      return desenvolverResultadoSeguro(await window.electronAPI.cuentasCorrientes.toggleCliente(id, activo))
+    } catch (error) {
+      throw normalizarError(error)
+    }
+  },
+
+  async eliminarCliente(id: number, pin?: string): Promise<void> {
+    try {
+      desenvolverResultadoSeguro(await window.electronAPI.cuentasCorrientes.eliminarCliente(id, pin))
     } catch (error) {
       throw normalizarError(error)
     }

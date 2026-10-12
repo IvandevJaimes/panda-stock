@@ -47,6 +47,16 @@ describe('seguridad por contraseña', () => {
     expect(repo.deleteCategoria(categoriaVacia.id, '1234')).toBeUndefined()
   })
 
+  it('exige contraseña al eliminar clientes cuando la protección está activa', () => {
+    const cliente = repo.createCliente({ nombre: 'Cliente protegido' })
+    const protecciones = { ...PROTECCIONES_INICIALES, eliminarClientes: true }
+    repo.setProtecciones({ protecciones, pin: '1234' })
+
+    expect(() => repo.eliminarCliente(cliente.id)).toThrow(expect.objectContaining({ code: 'AUTHORIZATION_REQUIRED' }))
+    expect(() => repo.eliminarCliente(cliente.id, 'incorrecto')).toThrow(expect.objectContaining({ code: 'INVALID_PIN' }))
+    expect(() => repo.eliminarCliente(cliente.id, '1234')).not.toThrow()
+  })
+
   it('migra un SHA-256 válido a scrypt al verificarlo', () => {
     const legacy = createHash('sha256').update('7788').digest('hex')
     getDb().update(seguridad).set({ pinHash: legacy, passwordConfigured: true }).where(eq(seguridad.id, 1)).run()

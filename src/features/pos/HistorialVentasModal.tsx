@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Ban, ChevronDown, History, Receipt } from 'lucide-react'
+import { Ban, BookUser, ChevronDown, History, Receipt } from 'lucide-react'
 import { toast } from 'sonner'
 import { Modal } from '../../components/ui/Modal'
 import { Button } from '../../components/ui/Button'
@@ -158,8 +158,11 @@ export function HistorialVentasModal({ isOpen, onClose }: HistorialVentasModalPr
     cerrarAnulacion()
     setRecarga((valor) => valor + 1)
     if (resultado) {
+      const detalleReintegros = resultado.reintegros
+        .map(({ metodo, monto }) => `${ETIQUETAS_METODO[metodo]} ${formatearMoneda(monto)}`)
+        .join(' · ')
       toast.success(`Venta #${resultado.ventaId} anulada`, {
-        description: `${formatearMoneda(resultado.total)} · ${resultado.unidadesRestituidas} ${resultado.unidadesRestituidas === 1 ? 'unidad' : 'unidades'} reintegradas`,
+        description: `Reintegros registrados: ${detalleReintegros || 'ninguno'} · Deuda cancelada: ${formatearMoneda(resultado.deudaCancelada)} · ${resultado.unidadesRestituidas} ${resultado.unidadesRestituidas === 1 ? 'unidad' : 'unidades'} reintegradas`,
       })
     }
   }
@@ -210,16 +213,28 @@ export function HistorialVentasModal({ isOpen, onClose }: HistorialVentasModalPr
                     'rounded-xl border px-4 py-3',
                     venta.estado === 'anulada'
                       ? 'border-rose-200 bg-rose-50/40 dark:border-rose-900/40 dark:bg-rose-950/15'
+                      : venta.metodos.includes('cuenta_corriente')
+                        ? 'border-amber-200 bg-amber-50/40 dark:border-amber-900/40 dark:bg-amber-950/15'
                       : 'border-slate-200 bg-slate-50/70 dark:border-slate-800 dark:bg-secondary/25',
                   ].join(' ')}
                 >
                   {/* Cabecera del ticket: número de venta a la izquierda, momento y
                       acción a la derecha. La anulada cambia el número por un badge,
                       para que el cajero la distinga de un vistazo sin abrirla. */}
-                  <div className="flex items-baseline justify-between gap-3">
-                    <span className="font-display text-sm font-bold tabular-nums tracking-tight text-slate-900 dark:text-slate-100">
-                      N.º {venta.id}
-                    </span>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="font-display text-sm font-bold tabular-nums tracking-tight text-slate-900 dark:text-slate-100">
+                        N.º {venta.id}
+                      </span>
+                      {venta.metodos.includes('cuenta_corriente') && (
+                        <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[11px] font-semibold text-amber-700 dark:bg-amber-400/10 dark:text-amber-300">
+                          <BookUser size={12} aria-hidden="true" />
+                          <span className="truncate">
+                            Cuenta corriente{venta.clienteNombre ? ` · ${venta.clienteNombre}` : ''}
+                          </span>
+                        </span>
+                      )}
+                    </div>
 
                     <div className="flex items-center gap-2">
                       {venta.estado === 'anulada' ? (

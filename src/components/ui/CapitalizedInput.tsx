@@ -5,17 +5,21 @@ import { cn } from "../../lib/cn";
 export type CapitalizedInputProps = InputHTMLAttributes<HTMLInputElement> & {
   /** Muestra un botón de limpieza circular SOLO cuando el input tiene contenido */
   onClear?: () => void;
+  capitalizeWords?: boolean;
 };
 
 export const CapitalizedInput = forwardRef<
   HTMLInputElement,
   CapitalizedInputProps
->(({ className, onChange, onClear, ...props }, ref) => {
+>(({ className, onChange, onClear, capitalizeWords = false, ...props }, ref) => {
   const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
 
-    // Capitaliza solo la primera letra, respeta el resto
-    if (val.length > 0) {
+    if (capitalizeWords) {
+      e.target.value = val.replace(/(^|[\s'’-])(\p{L})/gu, (_, separador: string, letra: string) =>
+        separador + letra.toLocaleUpperCase('es-AR'),
+      );
+    } else if (val.length > 0) {
       e.target.value = val.charAt(0).toUpperCase() + val.slice(1);
     }
 

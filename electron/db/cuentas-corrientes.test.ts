@@ -120,6 +120,26 @@ describe('saldo y libro mayor', () => {
     expect(saldoDe(id)).toBe(0)
   })
 
+  it('elimina físicamente clientes sin deuda y sus movimientos de cuenta corriente', () => {
+    const id = repo.createCliente({ nombre: 'Sin deuda para eliminar' }).id
+    repo.registrarCargoManual({ clienteId: id, monto: 250 })
+    repo.registrarAbono({ clienteId: id, monto: 250, metodo: 'transferencia' })
+
+    repo.eliminarCliente(id)
+
+    expect(repo.getClientes().some((cliente) => cliente.id === id)).toBe(false)
+    expect(repo.getClientes({ incluirInactivos: true }).some((cliente) => cliente.id === id)).toBe(false)
+    expect(repo.getMovimientosCuentaCorriente({ clienteId: id })).toEqual([])
+  })
+
+  it('no permite eliminar clientes con deuda pendiente', () => {
+    const id = repo.createCliente({ nombre: 'Con deuda para eliminar' }).id
+    repo.registrarCargoManual({ clienteId: id, monto: 250 })
+
+    expect(() => repo.eliminarCliente(id)).toThrow(/deuda pendiente/i)
+    expect(repo.getClientes().some((cliente) => cliente.id === id)).toBe(true)
+  })
+
   it('ordena la lista de mayor a menor deuda', () => {
     const lista = repo.getClientes()
     const saldos = lista.map((c) => c.saldo)
@@ -135,7 +155,7 @@ describe('saldo y libro mayor', () => {
 
     expect(resumen.totalPorCobrar).toBe(suma)
     expect(
-      resumen.totalCargos - resumen.totalAbonos - resumen.totalDevoluciones + resumen.totalReintegros,
+      resumen.totalCargos - resumen.totalAbonos - resumen.totalDevoluciones,
     ).toBe(suma)
   })
 
@@ -152,6 +172,56 @@ describe('saldo y libro mayor', () => {
 })
 
 describe('reglas del abono', () => {
+  it('imputa abonos parciales al ticket elegido y expone su saldo restante', () => {
+    const id = repo.createCliente({ nombre: 'Pago por ticket' }).id
+    const primeraVenta = repo.processSale(venta(100, 'cuenta_corriente', id))
+    const segundaVenta = repo.processSale(venta(200, 'cuenta_corriente', id))
+
+    repo.registrarAbono({
+      clienteId: id,
+      ventaId: primeraVenta.ventaId,
+      monto: 40,
+      metodo: 'transferencia',
+    })
+
+    const deudas = repo.getMovimientosCuentaCorriente({ clienteId: id })
+      .filter((movimiento) => movimiento.tipo === 'cargo')
+    expect(deudas.find((deuda) => deuda.ventaId === primeraVenta.ventaId)?.saldoPendiente).toBe(60)
+    expect(deudas.find((deuda) => deuda.ventaId === segundaVenta.ventaId)?.saldoPendiente).toBe(200)
+    expect(() => repo.registrarAbono({
+      clienteId: id,
+      ventaId: primeraVenta.ventaId,
+      monto: 61,
+      metodo: 'transferencia',
+    })).toThrow(/supera la deuda del ticket/i)
+
+    repo.registrarAbono({
+      clienteId: id,
+      ventaId: primeraVenta.ventaId,
+      monto: 60,
+      metodo: 'transferencia',
+    })
+
+    const primeraDeuda = repo.getMovimientosCuentaCorriente({ clienteId: id })
+      .find((movimiento) => movimiento.tipo === 'cargo' && movimiento.ventaId === primeraVenta.ventaId)
+    expect(primeraDeuda?.saldoPendiente).toBe(0)
+    expect(saldoDe(id)).toBe(200)
+  })
+
+  it('rechaza cobrar más que el cargo seleccionado aunque el cliente deba más', () => {
+    const id = repo.createCliente({ nombre: 'Tope por cargo' }).id
+    const cargo = repo.registrarCargoManual({ clienteId: id, monto: 50 })
+    repo.registrarCargoManual({ clienteId: id, monto: 150 })
+
+    expect(() => repo.registrarAbono({
+      clienteId: id,
+      deudaId: cargo.id,
+      monto: 50.01,
+      metodo: 'transferencia',
+    })).toThrow(/supera la deuda seleccionada/i)
+    expect(saldoDe(id)).toBe(200)
+  })
+
   it('no permite pagar más que la deuda', () => {
     const id = repo.createCliente({ nombre: 'Sobrepago' }).id
     repo.registrarCargoManual({ clienteId: id, monto: 100 })
@@ -190,14 +260,13 @@ describe('reglas del abono', () => {
     expect(saldoDe(id)).toBe(100)
   })
 
-  it('exige caja abierta para el abono en efectivo, para que el arqueo lo vea', () => {
+  it('permite registrar un abono en efectivo sin asociarlo a una caja', () => {
     const id = repo.createCliente({ nombre: 'Sin caja' }).id
     repo.registrarCargoManual({ clienteId: id, monto: 100 })
 
-    expect(() => repo.registrarAbono({ clienteId: id, monto: 100, metodo: 'efectivo' })).toThrow(
-      /caja abierta/i,
-    )
-    expect(saldoDe(id)).toBe(100)
+    const abono = repo.registrarAbono({ clienteId: id, monto: 100, metodo: 'efectivo' })
+    expect(abono.cajaId).toBeNull()
+    expect(saldoDe(id)).toBe(0)
   })
 
   it('permite un abono sin caja si no es efectivo', () => {
@@ -247,6 +316,11 @@ describe('venta en cuenta corriente', () => {
     expect(cargo?.tipo).toBe('cargo')
     expect(cargo?.ventaTotal).toBe(300)
     expect(cargo?.metodo).toBeNull()
+    expect(cargo?.items?.map((item) => ({
+      descripcionItem: item.descripcionItem,
+      cantidad: item.cantidad,
+      subtotal: item.subtotal,
+    }))).toEqual([{ descripcionItem: 'Producto CC', cantidad: 1, subtotal: 300 }])
   })
 
   it('rechaza la venta si no tiene un cliente asociado, sin dejar nada a medias', () => {

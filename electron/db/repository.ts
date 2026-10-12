@@ -69,6 +69,7 @@ import type {
   Lote,
   Marca,
   MovimientoCuentaCorriente,
+  MovimientoCuentaCorrienteItem,
   MovimientoStock,
   Negocio,
   NegocioInput,
@@ -1070,7 +1071,6 @@ function montoEsperadoDeCaja(
     .where(
       and(
         eq(ventas.cajaId, cajaId),
-        eq(ventas.estado, 'completada'),
         eq(pagos.metodo, 'efectivo'),
       ),
     )
@@ -1128,7 +1128,7 @@ export function getCajaSummary(cajaId: number): CajaSummary {
     })
     .from(pagos)
     .innerJoin(ventas, eq(pagos.ventaId, ventas.id))
-    .where(and(eq(ventas.cajaId, cajaId), eq(ventas.estado, 'completada')))
+    .where(eq(ventas.cajaId, cajaId))
     .groupBy(pagos.metodo)
     .all()
 
@@ -1466,6 +1466,19 @@ export function getVentasRecientes(limite: number): VentaHistorial[] {
     }
   }
 
+  const clientePorVenta = new Map<number, string>()
+  for (const fila of db
+    .select({ ventaId: cuentasCorrientes.ventaId, nombre: clientes.nombre })
+    .from(cuentasCorrientes)
+    .innerJoin(clientes, eq(cuentasCorrientes.clienteId, clientes.id))
+    .where(and(
+      inArray(cuentasCorrientes.ventaId, ids),
+      eq(cuentasCorrientes.tipo, 'cargo'),
+    ))
+    .all()) {
+    if (fila.ventaId !== null) clientePorVenta.set(fila.ventaId, fila.nombre)
+  }
+
   return filas.map((fila) => ({
     ...fila,
     unidades: (itemsPorVenta.get(fila.id) ?? []).reduce(
@@ -1473,6 +1486,7 @@ export function getVentasRecientes(limite: number): VentaHistorial[] {
       0,
     ),
     metodos: metodosPorVenta.get(fila.id) ?? [],
+    clienteNombre: clientePorVenta.get(fila.id) ?? null,
     items: itemsPorVenta.get(fila.id) ?? [],
   }))
 }
@@ -1508,84 +1522,19 @@ export function anularVenta(input: AnularVentaInput): ResultadoAnulacion {
   const motivoLimpio = input.motivo.trim() || 'Anulación de venta'
 
   return db.transaction((tx) => {
-    const venta = tx.select().from(ventas).where(eq(ventas.id, input.ventaId)).get()
-    if (!venta) {
-      throw new Error('La venta no existe')
-    }
-    if (venta.estado === 'anulada') {
-      throw new Error('La venta ya se encuentra anulada')
-    }
-    if (tx.select({ id: devoluciones.id }).from(devoluciones).where(eq(devoluciones.ventaId, venta.id)).get()) {
-      throw new Error('El ticket ya tiene una devolución completada; no se puede anular')
-    }
-
-    const detalles = tx
-      .select()
-      .from(detalleVentas)
-      .where(eq(detalleVentas.ventaId, venta.id))
-      .orderBy(asc(detalleVentas.id))
-      .all()
-    if (detalles.length === 0) {
-      throw new Error('La venta no tiene artículos registrados')
-    }
-
-    let unidadesRestituidas = 0
-
-    for (const item of detalles) {
-      if (item.productoId === null) continue
-      unidadesRestituidas += item.cantidad
-
-      reintegrarStockAnulacion(tx, {
-        ventaId: venta.id,
-        productoId: item.productoId,
-        cantidad: item.cantidad,
-        costoUnitario: item.costoUnitario,
-        motivo: motivoLimpio,
-        ahora,
-      })
-    }
-
-    const cargosCuenta = tx
-      .select()
-      .from(cuentasCorrientes)
-      .where(
-        and(
-          eq(cuentasCorrientes.ventaId, venta.id),
-          eq(cuentasCorrientes.tipo, 'cargo'),
-        ),
-      )
-      .all()
-
-    for (const cargo of cargosCuenta) {
-      tx.insert(cuentasCorrientes)
-        .values({
-          clienteId: cargo.clienteId,
-          tipo: 'devolucion',
-          monto: cargo.monto,
-          ventaId: venta.id,
-          metodo: 'cuenta_corriente',
-          cajaId: null,
-          abonoOrigenId: null,
-          nota: `Anulación #${venta.id} · ${motivoLimpio}`,
-          fechaHora: ahora,
-        })
-        .run()
-    }
-
-    tx.update(ventas)
-      .set({
-        estado: 'anulada',
-        motivoAnulacion: motivoLimpio,
-        anuladoEn: ahora,
-      })
-      .where(eq(ventas.id, venta.id))
-      .run()
-
+    const resultado = procesarDevolucionEnTransaccion(
+      tx,
+      { ventaId: input.ventaId, motivoAnulacion: motivoLimpio },
+      ahora,
+    )
     return {
-      ventaId: venta.id,
-      total: venta.total,
-      unidadesRestituidas,
+      ventaId: resultado.ventaId,
+      total: resultado.total,
+      unidadesRestituidas: resultado.unidadesRestituidas,
       motivo: motivoLimpio,
+      montoReintegrado: resultado.montoReintegrado,
+      deudaCancelada: resultado.deudaCancelada,
+      reintegros: resultado.reintegros,
     }
   })
 }
@@ -2079,7 +2028,11 @@ type AbonoAplicado = {
 function aplicacionesFifoCuentaCorriente(
   db: Pick<ReturnType<typeof getDb>, 'select'>,
   clienteId: number,
-): { deudaPorVenta: Map<number, number>; abonosPorVenta: Map<number, AbonoAplicado[]> } {
+): {
+  deudaPorVenta: Map<number, number>
+  saldoPorCargo: Map<number, number>
+  abonosPorVenta: Map<number, AbonoAplicado[]>
+} {
   // Las devoluciones ajustan el cargo y los reintegros descuentan el abono de origen antes de imputar FIFO.
   const movimientos = db
     .select()
@@ -2141,7 +2094,11 @@ function aplicacionesFifoCuentaCorriente(
       throw new Error('El historial de abonos contiene un medio de pago inválido')
     }
 
-    for (const cargo of saldos) {
+    const cargosAplicables = abono.ventaId === null
+      ? saldos
+      : saldos.filter((cargo) => cargo.ventaId === abono.ventaId)
+
+    for (const cargo of cargosAplicables) {
       if (restante <= 0) break
       if (cargo.saldo <= 0) continue
       const aplicado = Math.min(cargo.saldo, restante)
@@ -2165,17 +2122,25 @@ function aplicacionesFifoCuentaCorriente(
     }
   }
 
-  return { deudaPorVenta, abonosPorVenta }
+  return {
+    deudaPorVenta,
+    saldoPorCargo: new Map(saldos.map((cargo) => [cargo.id, cargo.saldo])),
+    abonosPorVenta,
+  }
 }
 
-export function processDevolucion(input: ProcesarDevolucionInput): ResultadoDevolucion {
-  autorizarProteccion('anularVentas', input.pin)
-  if (!Number.isSafeInteger(input.ventaId) || input.ventaId < 1) throw new Error('Ticket inválido')
+type ResultadoDevolucionInterno = ResultadoDevolucion & {
+  unidadesRestituidas: number
+  montoReintegrado: number
+  deudaCancelada: number
+  reintegros: Array<{ metodo: Exclude<MetodoPago, 'cuenta_corriente'>; monto: number }>
+}
 
-  const db = getDb()
-  const ahora = new Date().toISOString()
-
-  return db.transaction((tx) => {
+function procesarDevolucionEnTransaccion(
+  tx: Pick<ReturnType<typeof getDb>, 'select' | 'insert' | 'update'>,
+  input: ProcesarDevolucionInput & { motivoAnulacion?: string },
+  ahora: string,
+): ResultadoDevolucionInterno {
     const venta = tx.select().from(ventas).where(eq(ventas.id, input.ventaId)).get()
     if (!venta || venta.estado !== 'completada') {
       throw new Error('El ticket no existe o no está completado')
@@ -2247,12 +2212,13 @@ export function processDevolucion(input: ProcesarDevolucionInput): ResultadoDevo
       .get()
 
     let clienteCuentaId: number | null = null
+    let deudaPendiente = 0
     let reintegrosCuenta: { abonoId: number; metodo: Exclude<MetodoPago, 'cuenta_corriente'>; monto: number }[] = []
     if (montoCuentaCorriente > 0) {
       if (!cargoCuenta) throw new Error('No se encontró el cargo de cuenta corriente del ticket')
       clienteCuentaId = cargoCuenta.clienteId
       const aplicaciones = aplicacionesFifoCuentaCorriente(tx, cargoCuenta.clienteId)
-      const deudaPendiente = aplicaciones.deudaPorVenta.get(venta.id) ?? 0
+      deudaPendiente = aplicaciones.deudaPorVenta.get(venta.id) ?? 0
       const deudaReducida = Math.min(montoCuentaCorriente, deudaPendiente)
       const importeYaCobrado = Math.round((montoCuentaCorriente - deudaReducida) * 100) / 100
       const pagosAplicados = aplicaciones.abonosPorVenta.get(venta.id) ?? []
@@ -2282,7 +2248,7 @@ export function processDevolucion(input: ProcesarDevolucionInput): ResultadoDevo
         .where(eq(cajas.estado, 'abierta'))
         .orderBy(desc(cajas.id))
         .get()
-      cajaId = caja?.id ?? null
+      cajaId = caja?.id ?? venta.cajaId
     }
 
     const devolucion = tx
@@ -2316,14 +2282,25 @@ export function processDevolucion(input: ProcesarDevolucionInput): ResultadoDevo
         .run()
 
       if (item.detalle.productoId !== null) {
-        reintegrarStockDevolucion(tx, {
-          ventaId: venta.id,
-          devolucionId,
-          productoId: item.detalle.productoId,
-          cantidad: item.cantidad,
-          costoUnitario: item.detalle.costoUnitario,
-          ahora,
-        })
+        if (input.motivoAnulacion !== undefined) {
+          reintegrarStockAnulacion(tx, {
+            ventaId: venta.id,
+            productoId: item.detalle.productoId,
+            cantidad: item.cantidad,
+            costoUnitario: item.detalle.costoUnitario,
+            motivo: input.motivoAnulacion,
+            ahora,
+          })
+        } else {
+          reintegrarStockDevolucion(tx, {
+            ventaId: venta.id,
+            devolucionId,
+            productoId: item.detalle.productoId,
+            cantidad: item.cantidad,
+            costoUnitario: item.detalle.costoUnitario,
+            ahora,
+          })
+        }
       }
     }
 
@@ -2382,7 +2359,56 @@ export function processDevolucion(input: ProcesarDevolucionInput): ResultadoDevo
         .run()
     }
 
-    return { devolucionId, ventaId: venta.id, total, gananciaRevertida }
+    if (input.motivoAnulacion !== undefined) {
+      tx.update(ventas)
+        .set({
+          estado: 'anulada',
+          motivoAnulacion: input.motivoAnulacion,
+          anuladoEn: ahora,
+        })
+        .where(eq(ventas.id, venta.id))
+        .run()
+    }
+
+    const reintegrosPorMetodo = new Map<Exclude<MetodoPago, 'cuenta_corriente'>, number>()
+    for (const reintegro of reintegros) {
+      reintegrosPorMetodo.set(
+        reintegro.metodo,
+        (reintegrosPorMetodo.get(reintegro.metodo) ?? 0) + reintegro.monto,
+      )
+    }
+    const reintegrosRegistrados = [...reintegrosPorMetodo].map(([metodo, monto]) => ({ metodo, monto }))
+    const unidadesRestituidas = lineasDevueltas
+      .filter((item) => item.detalle.productoId !== null)
+      .reduce((suma, item) => suma + item.cantidad, 0)
+
+    return {
+      devolucionId,
+      ventaId: venta.id,
+      total,
+      gananciaRevertida,
+      unidadesRestituidas,
+      montoReintegrado: reintegrosRegistrados.reduce((suma, item) => suma + item.monto, 0),
+      deudaCancelada: input.motivoAnulacion === undefined ? 0 : deudaPendiente,
+      reintegros: reintegrosRegistrados,
+    }
+}
+
+export function processDevolucion(input: ProcesarDevolucionInput): ResultadoDevolucion {
+  autorizarProteccion('anularVentas', input.pin)
+  if (!Number.isSafeInteger(input.ventaId) || input.ventaId < 1) throw new Error('Ticket inválido')
+
+  const db = getDb()
+  const ahora = new Date().toISOString()
+
+  return db.transaction((tx) => {
+    const resultado = procesarDevolucionEnTransaccion(tx, input, ahora)
+    return {
+      devolucionId: resultado.devolucionId,
+      ventaId: resultado.ventaId,
+      total: resultado.total,
+      gananciaRevertida: resultado.gananciaRevertida,
+    }
   })
 }
 
@@ -2776,7 +2802,7 @@ export function getReportesSummary(filtros?: FiltrosReportes): ReportesSummary {
   const condicionesDevoluciones: ReturnType<typeof and>[] = []
   if (filtros?.desde) condicionesDevoluciones.push(gte(devoluciones.fechaHora, filtros.desde))
   if (filtros?.hasta) condicionesDevoluciones.push(lte(devoluciones.fechaHora, filtros.hasta))
-  const condicionDevoluciones = and(...condicionesDevoluciones)
+  const condicionDevoluciones = and(...condicionesDevoluciones, eq(ventas.estado, 'completada'))
 
   const resumenDevoluciones = db
     .select({
@@ -2786,12 +2812,14 @@ export function getReportesSummary(filtros?: FiltrosReportes): ReportesSummary {
       gananciaRevertida: sql<number>`coalesce(sum(${devoluciones.gananciaRevertida}), 0)`,
     })
     .from(devoluciones)
+    .innerJoin(ventas, eq(ventas.id, devoluciones.ventaId))
     .where(condicionDevoluciones)
     .get()
   const unidadesDevueltas = db
     .select({ unidades: sql<number>`coalesce(sum(${detalleDevoluciones.cantidad}), 0)` })
     .from(detalleDevoluciones)
     .innerJoin(devoluciones, eq(detalleDevoluciones.devolucionId, devoluciones.id))
+    .innerJoin(ventas, eq(ventas.id, devoluciones.ventaId))
     .where(condicionDevoluciones)
     .get()?.unidades ?? 0
 
@@ -2829,6 +2857,7 @@ export function getReportesSummary(filtros?: FiltrosReportes): ReportesSummary {
     })
     .from(devolucionMedios)
     .innerJoin(devoluciones, eq(devolucionMedios.devolucionId, devoluciones.id))
+    .innerJoin(ventas, eq(ventas.id, devoluciones.ventaId))
     .where(condicionDevoluciones)
     .groupBy(devolucionMedios.metodo)
     .all()
@@ -2867,6 +2896,7 @@ export function getReportesSummary(filtros?: FiltrosReportes): ReportesSummary {
     .from(detalleDevoluciones)
     .innerJoin(devoluciones, eq(detalleDevoluciones.devolucionId, devoluciones.id))
     .innerJoin(detalleVentas, eq(detalleDevoluciones.detalleVentaId, detalleVentas.id))
+    .innerJoin(ventas, eq(ventas.id, devoluciones.ventaId))
     .innerJoin(productos, eq(detalleVentas.productoId, productos.id))
     .where(and(condicionDevoluciones, isNotNull(detalleVentas.productoId)))
     .groupBy(detalleVentas.productoId, productos.nombre)
@@ -2936,6 +2966,7 @@ export function getReportesSummary(filtros?: FiltrosReportes): ReportesSummary {
     })
     .from(detalleDevoluciones)
     .innerJoin(devoluciones, eq(detalleDevoluciones.devolucionId, devoluciones.id))
+    .innerJoin(ventas, eq(ventas.id, devoluciones.ventaId))
     .where(condicionDevoluciones)
     .groupBy(diaDevoluciones)
     .all()
@@ -3285,7 +3316,7 @@ function saldosPorCliente(db: SelectDb): Map<number, ResumenSaldos> {
     .select({
       clienteId: cuentasCorrientes.clienteId,
       totalCargos: sql<number>`coalesce(sum(case when ${cuentasCorrientes.tipo} = 'cargo' then ${cuentasCorrientes.monto} else 0 end), 0)`,
-      totalAbonos: sql<number>`coalesce(sum(case when ${cuentasCorrientes.tipo} = 'abono' then ${cuentasCorrientes.monto} else 0 end), 0)`,
+      totalAbonos: sql<number>`coalesce(sum(case when ${cuentasCorrientes.tipo} = 'abono' then ${cuentasCorrientes.monto} when ${cuentasCorrientes.tipo} = 'reintegro' then -${cuentasCorrientes.monto} else 0 end), 0)`,
       totalDevoluciones: sql<number>`coalesce(sum(case when ${cuentasCorrientes.tipo} = 'devolucion' then ${cuentasCorrientes.monto} else 0 end), 0)`,
       totalReintegros: sql<number>`coalesce(sum(case when ${cuentasCorrientes.tipo} = 'reintegro' then ${cuentasCorrientes.monto} else 0 end), 0)`,
       cantidadMovimientos: count(),
@@ -3322,8 +3353,7 @@ export function getClientes(opciones?: { incluirInactivos?: boolean }): ClienteC
         saldo:
           (saldo?.totalCargos ?? 0) -
           (saldo?.totalAbonos ?? 0) -
-          (saldo?.totalDevoluciones ?? 0) +
-          (saldo?.totalReintegros ?? 0),
+          (saldo?.totalDevoluciones ?? 0),
         cantidadMovimientos: saldo?.cantidadMovimientos ?? 0,
         ultimoMovimiento: saldo?.ultimoMovimiento ?? null,
       }
@@ -3391,10 +3421,49 @@ export function updateCliente(id: number, input: ClienteInput): void {
     .run()
 }
 
-/**
- * Se archiva en vez de borrarse: los movimientos del libro mayor son la prueba
- * de la deuda, y sin ellos el historial quedaría huérfano.
- */
+export function eliminarCliente(id: number, pin?: string): void {
+  autorizarProteccion('eliminarClientes', pin)
+  const db = getDb()
+
+  db.transaction((tx) => {
+    const cliente = tx.select({ id: clientes.id }).from(clientes).where(eq(clientes.id, id)).get()
+    if (!cliente) throw new Error('El cliente no existe')
+
+    const saldo = tx
+      .select({
+        saldo: sql<number>`coalesce(sum(case when ${cuentasCorrientes.tipo} = 'cargo' or ${cuentasCorrientes.tipo} = 'reintegro' then ${cuentasCorrientes.monto} when ${cuentasCorrientes.tipo} = 'abono' or ${cuentasCorrientes.tipo} = 'devolucion' then -${cuentasCorrientes.monto} else 0 end), 0)`,
+      })
+      .from(cuentasCorrientes)
+      .where(eq(cuentasCorrientes.clienteId, id))
+      .get()?.saldo ?? 0
+
+    if (Math.round(saldo * 100) / 100 > 0) {
+      throw new Error('No se puede eliminar un cliente con deuda pendiente')
+    }
+
+    const movimientos = tx
+      .select({ id: cuentasCorrientes.id })
+      .from(cuentasCorrientes)
+      .where(eq(cuentasCorrientes.clienteId, id))
+      .all()
+    const movimientoIds = movimientos.map((movimiento) => movimiento.id)
+
+    if (movimientoIds.length > 0) {
+      tx.update(cuentasCorrientes)
+        .set({ abonoOrigenId: null })
+        .where(inArray(cuentasCorrientes.abonoOrigenId, movimientoIds))
+        .run()
+      tx.update(devolucionReintegros)
+        .set({ cuentaMovimientoOrigenId: null })
+        .where(inArray(devolucionReintegros.cuentaMovimientoOrigenId, movimientoIds))
+        .run()
+      tx.delete(cuentasCorrientes).where(inArray(cuentasCorrientes.id, movimientoIds)).run()
+    }
+
+    tx.delete(clientes).where(eq(clientes.id, id)).run()
+  })
+}
+
 export function archivarCliente(id: number): void {
   getDb()
     .update(clientes)
@@ -3403,9 +3472,22 @@ export function archivarCliente(id: number): void {
     .run()
 }
 
+export function toggleCliente(id: number, activo: boolean): Cliente {
+  const cliente = getDb()
+    .update(clientes)
+    .set({ activo })
+    .where(eq(clientes.id, id))
+    .returning()
+    .get()
+
+  if (!cliente) throw new Error('El cliente no existe')
+  return cliente
+}
+
 export function getMovimientosCuentaCorriente(
   filtros?: FiltrosCuentaCorriente,
 ): MovimientoCuentaCorriente[] {
+  const db = getDb()
   const condiciones: SQL[] = []
 
   if (filtros?.clienteId !== undefined) {
@@ -3414,7 +3496,7 @@ export function getMovimientosCuentaCorriente(
   if (filtros?.desde) condiciones.push(gte(cuentasCorrientes.fechaHora, filtros.desde))
   if (filtros?.hasta) condiciones.push(lte(cuentasCorrientes.fechaHora, filtros.hasta))
 
-  return getDb()
+  const movimientos = db
     .select({
       id: cuentasCorrientes.id,
       clienteId: cuentasCorrientes.clienteId,
@@ -3428,6 +3510,7 @@ export function getMovimientosCuentaCorriente(
       fechaHora: cuentasCorrientes.fechaHora,
       clienteNombre: clientes.nombre,
       ventaTotal: ventas.total,
+      ventaEstado: ventas.estado,
     })
     .from(cuentasCorrientes)
     .innerJoin(clientes, eq(cuentasCorrientes.clienteId, clientes.id))
@@ -3436,6 +3519,50 @@ export function getMovimientosCuentaCorriente(
     .orderBy(desc(cuentasCorrientes.fechaHora), desc(cuentasCorrientes.id))
     .limit(filtros?.limit ?? 200)
     .all()
+
+  const ventaIds = [...new Set(
+    movimientos.flatMap((movimiento) =>
+      movimiento.tipo === 'cargo' && movimiento.ventaId !== null ? [movimiento.ventaId] : [],
+    ),
+  )]
+  const itemsPorVenta = new Map<number, MovimientoCuentaCorrienteItem[]>()
+  const saldosPorCargo = new Map<number, number>()
+
+  for (const clienteId of new Set(movimientos.map((movimiento) => movimiento.clienteId))) {
+    const aplicaciones = aplicacionesFifoCuentaCorriente(db, clienteId)
+    for (const [cargoId, saldo] of aplicaciones.saldoPorCargo) {
+      saldosPorCargo.set(cargoId, saldo)
+    }
+  }
+
+  if (ventaIds.length > 0) {
+    const items = db
+      .select({
+        ...getTableColumns(detalleVentas),
+        imgPath: productos.imgPath,
+      })
+      .from(detalleVentas)
+      .leftJoin(productos, eq(detalleVentas.productoId, productos.id))
+      .where(inArray(detalleVentas.ventaId, ventaIds))
+      .orderBy(asc(detalleVentas.id))
+      .all()
+
+    for (const item of items) {
+      const actuales = itemsPorVenta.get(item.ventaId) ?? []
+      itemsPorVenta.set(item.ventaId, [...actuales, item])
+    }
+  }
+
+  return movimientos.map(({ ventaEstado, ...movimiento }) => ({
+    ...movimiento,
+    ventaAnulada: movimiento.ventaId !== null && ventaEstado === 'anulada',
+    saldoPendiente: movimiento.tipo === 'cargo'
+      ? saldosPorCargo.get(movimiento.id) ?? movimiento.monto
+      : undefined,
+    items: movimiento.tipo === 'cargo' && movimiento.ventaId !== null
+      ? itemsPorVenta.get(movimiento.ventaId) ?? []
+      : [],
+  }))
 }
 
 export function getResumenCuentasCorrientes(): ResumenCuentasCorrientes {
@@ -3444,7 +3571,7 @@ export function getResumenCuentasCorrientes(): ResumenCuentasCorrientes {
   const totales = db
     .select({
       totalCargos: sql<number>`coalesce(sum(case when ${cuentasCorrientes.tipo} = 'cargo' then ${cuentasCorrientes.monto} else 0 end), 0)`,
-      totalAbonos: sql<number>`coalesce(sum(case when ${cuentasCorrientes.tipo} = 'abono' then ${cuentasCorrientes.monto} else 0 end), 0)`,
+      totalAbonos: sql<number>`coalesce(sum(case when ${cuentasCorrientes.tipo} = 'abono' then ${cuentasCorrientes.monto} when ${cuentasCorrientes.tipo} = 'reintegro' then -${cuentasCorrientes.monto} else 0 end), 0)`,
       totalDevoluciones: sql<number>`coalesce(sum(case when ${cuentasCorrientes.tipo} = 'devolucion' then ${cuentasCorrientes.monto} else 0 end), 0)`,
       totalReintegros: sql<number>`coalesce(sum(case when ${cuentasCorrientes.tipo} = 'reintegro' then ${cuentasCorrientes.monto} else 0 end), 0)`,
     })
@@ -3462,7 +3589,7 @@ export function getResumenCuentasCorrientes(): ResumenCuentasCorrientes {
   let clientesConDeuda = 0
 
   for (const fila of saldos.values()) {
-    const saldo = fila.totalCargos - fila.totalAbonos - fila.totalDevoluciones + fila.totalReintegros
+    const saldo = fila.totalCargos - fila.totalAbonos - fila.totalDevoluciones
     if (saldo > 0) {
       totalPorCobrar += saldo
       clientesConDeuda += 1
@@ -3530,15 +3657,62 @@ export function registrarAbono(input: AbonoInput): MovimientoCuentaCorriente {
       )
     }
 
-    /*
-      Va acá y no antes de abrir la transacción para que un cliente inexistente o
-      una deuda ya saldada reporten su propio error y no el de la caja. El
-      efectivo del abono entra a la gaveta, así que tiene que quedar atado a una
-      caja: sin `cajaId` el arqueo no lo contaría y el cierre mostraría un
-      faltante que sí tiene explicación.
-    */
-    if (input.metodo === 'efectivo' && input.cajaId == null) {
-      throw new Error('Un abono en efectivo necesita la caja abierta donde entra la plata')
+    if (input.ventaId != null || input.deudaId != null) {
+      const cargo = input.deudaId == null
+        ? null
+        : tx
+          .select({ id: cuentasCorrientes.id, tipo: cuentasCorrientes.tipo })
+          .from(cuentasCorrientes)
+          .where(and(
+            eq(cuentasCorrientes.id, input.deudaId),
+            eq(cuentasCorrientes.clienteId, input.clienteId),
+            eq(cuentasCorrientes.tipo, 'cargo'),
+          ))
+          .get()
+
+      if (input.deudaId != null && !cargo) {
+        throw new Error('La deuda seleccionada no pertenece a este cliente')
+      }
+
+      if (input.ventaId != null && cargo) {
+        const cargoDelTicket = tx
+          .select({ id: cuentasCorrientes.id })
+          .from(cuentasCorrientes)
+          .where(and(
+            eq(cuentasCorrientes.id, cargo.id),
+            eq(cuentasCorrientes.ventaId, input.ventaId),
+          ))
+          .get()
+        if (!cargoDelTicket) throw new Error('La deuda seleccionada no corresponde a ese ticket')
+      }
+
+      if (input.ventaId != null) {
+        const cargoTicket = tx
+          .select({ id: cuentasCorrientes.id })
+          .from(cuentasCorrientes)
+          .where(and(
+            eq(cuentasCorrientes.clienteId, input.clienteId),
+            eq(cuentasCorrientes.ventaId, input.ventaId),
+            eq(cuentasCorrientes.tipo, 'cargo'),
+          ))
+          .get()
+
+        if (!cargoTicket) throw new Error('El ticket no tiene una deuda asociada a este cliente')
+
+        const saldoTicket = aplicacionesFifoCuentaCorriente(tx, input.clienteId)
+          .deudaPorVenta.get(input.ventaId) ?? 0
+        if (saldoTicket <= 0) throw new Error('El ticket ya está saldado')
+        if (monto > saldoTicket + 0.001) {
+          throw new Error(`El abono supera la deuda del ticket, que es ${saldoTicket.toFixed(2)}`)
+        }
+      } else if (input.deudaId != null) {
+        const saldoDeuda = aplicacionesFifoCuentaCorriente(tx, input.clienteId)
+          .saldoPorCargo.get(input.deudaId) ?? 0
+        if (saldoDeuda <= 0) throw new Error('La deuda seleccionada ya está saldada')
+        if (monto > saldoDeuda + 0.001) {
+          throw new Error(`El abono supera la deuda seleccionada, que es ${saldoDeuda.toFixed(2)}`)
+        }
+      }
     }
 
     return tx
@@ -3547,7 +3721,7 @@ export function registrarAbono(input: AbonoInput): MovimientoCuentaCorriente {
         clienteId: input.clienteId,
         tipo: 'abono',
         monto,
-        ventaId: null,
+        ventaId: input.ventaId ?? null,
         metodo: input.metodo,
         cajaId: input.cajaId ?? null,
         nota: input.nota?.trim() || null,

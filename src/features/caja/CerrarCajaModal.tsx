@@ -172,10 +172,6 @@ export function CerrarCajaModal({ isOpen, caja, onClose, alCerrar }: CerrarCajaM
               <ResumenFila termino="Ventas" valor={resumen.cantidadVentas.toString()} />
               <ResumenFila termino="Efectivo neto" valor={formatearMoneda(resumen.totalEfectivo)} />
               <ResumenFila
-                termino="Egresos por devoluciones"
-                valor={formatearMoneda(resumen.totalEgresosEfectivo)}
-              />
-              <ResumenFila
                 termino="Tarjeta + transf. + QR"
                 valor={formatearMoneda(
                   resumen.totalTarjeta + resumen.totalTransferencia + (resumen.totalQr ?? 0),

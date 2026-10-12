@@ -131,7 +131,7 @@ export function AnularVentaModal({
           <div className="text-xs leading-relaxed">
             <p className="font-semibold">Esta acción anulará la venta de forma irreversible.</p>
             <p className="mt-0.5 opacity-90">
-              Se reincorporarán las unidades al inventario y se descontará el dinero de la caja correspondiente.
+              Se cancelará la deuda de cuenta corriente y se registrarán los reintegros según los medios originales. Los pagos externos deben devolverse manualmente.
             </p>
           </div>
         </div>
@@ -163,13 +163,13 @@ export function AnularVentaModal({
             </span>
             <div className="min-w-0">
               <span className="text-[11px] font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                Dinero a restar
+                Importe de la operación
               </span>
               <p className="font-display text-lg font-bold tabular-nums text-rose-600 dark:text-rose-400">
                 -{formatearMoneda(venta.total)}
               </p>
               <p className="text-[11px] text-slate-400 dark:text-slate-500 truncate">
-                Medio: {etiquetaMetodos(venta.metodos)}
+                Incluye reintegros y deuda · {etiquetaMetodos(venta.metodos)}
               </p>
             </div>
           </div>
@@ -236,7 +236,7 @@ export function AnularVentaModal({
         onClose={() => setConfirmacionAbierta(false)}
         onConfirm={() => onConfirmar(motivoFinal)}
         title={`¿Anular la venta #${venta.id}?`}
-        description="La anulación es irreversible. Se reincorporarán los artículos al inventario y se descontará el importe de la caja correspondiente."
+        description="La anulación es irreversible. Se reincorporarán los artículos, se cancelará la deuda y se registrarán los reintegros por sus medios originales."
         confirmText="Anular venta"
         cancelText="Volver"
       />

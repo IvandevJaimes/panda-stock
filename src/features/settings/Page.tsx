@@ -43,6 +43,7 @@ const OPCIONES_PROTECCION: {
   { key: 'eliminarLotes', title: 'Eliminar lotes', description: 'Lotes e historial de stock.' },
   { key: 'eliminarCategorias', title: 'Eliminar categorías', description: 'Organización del catálogo.' },
   { key: 'eliminarMarcas', title: 'Eliminar marcas', description: 'Marcas del catálogo.' },
+  { key: 'eliminarClientes', title: 'Eliminar clientes', description: 'Clientes sin deuda y sus datos de cuenta corriente.' },
 ]
 
 interface SettingRowProps {
