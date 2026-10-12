@@ -70,6 +70,7 @@ export function MetodosPagoChart({ pagosPorMetodo }: MetodosPagoChartProps) {
       description="Distribución de cobros registrados con los métodos habilitados."
       icon={<CreditCard size={15} />}
       className={SOMBRA_CARD}
+      contenidoClassName="overflow-visible"
     >
       {filas.length === 0 ? (
         <div className="flex h-full items-center justify-center">
@@ -86,17 +87,36 @@ export function MetodosPagoChart({ pagosPorMetodo }: MetodosPagoChartProps) {
               <PieChart>
                 <RechartsTooltip
                   isAnimationActive={false}
+                  allowEscapeViewBox={{ x: true, y: true }}
+                  wrapperStyle={{ zIndex: 30, pointerEvents: 'none' }}
                   content={({ active, payload }) => {
                     if (!active || !payload?.length) return null
                     const punto = payload[0].payload as FilaMetodo
                     return (
-                      <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-lg dark:border-slate-700 dark:bg-[#0f172a]">
-                        <p className="font-display text-xs font-bold text-slate-900 dark:text-white">
-                          {punto.etiqueta}
-                        </p>
-                        <p className="text-[11px] tabular-nums text-slate-500 dark:text-slate-400">
-                          {formatearMoneda(punto.monto)} · {punto.porcentaje.toFixed(1)}%
-                        </p>
+                      <div className="pointer-events-none min-w-40 rounded-xl border border-slate-200/90 bg-white/95 p-3 shadow-xl ring-1 ring-black/5 backdrop-blur-sm dark:border-slate-700 dark:bg-[#0f172a]/95">
+                        <div className="mb-2 flex items-center gap-2">
+                          <span
+                            className="h-2.5 w-2.5 shrink-0 rounded-full"
+                            style={{ backgroundColor: COLORES[punto.metodo] }}
+                            aria-hidden="true"
+                          />
+                          <p className="font-display text-sm font-bold text-slate-900 dark:text-white">
+                            {punto.etiqueta}
+                          </p>
+                        </div>
+                        <div className="flex items-end justify-between gap-4 border-t border-slate-100 pt-2 dark:border-slate-700/80">
+                          <div>
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                              Cobrado
+                            </p>
+                            <p className="mt-0.5 whitespace-nowrap font-display text-base font-bold tabular-nums text-slate-900 dark:text-white">
+                              {formatearMoneda(punto.monto)}
+                            </p>
+                          </div>
+                          <span className="shrink-0 rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold tabular-nums text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                            {punto.porcentaje.toFixed(1)}%
+                          </span>
+                        </div>
                       </div>
                     )
                   }}

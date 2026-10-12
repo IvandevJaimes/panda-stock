@@ -58,6 +58,14 @@ export function MetodosPagoResumen({ pagosPorMetodo }: MetodosPagoResumenProps) 
     qr: qrHabilitado,
     tarjeta: tarjetaHabilitada,
   }
+  const opcionesActivas = OPCIONES.filter((opcion) => habilitados[opcion.clave])
+  const columnasGrid = opcionesActivas.length === 1
+    ? 'grid-cols-1'
+    : opcionesActivas.length === 2
+      ? 'grid-cols-1 sm:grid-cols-2'
+      : opcionesActivas.length === 3
+        ? 'grid-cols-1 sm:grid-cols-3'
+        : 'grid-cols-1 sm:grid-cols-2 xl:grid-cols-4'
   const importes = {
     efectivo: pagosPorMetodo
       .filter((fila) => fila.metodo === 'efectivo')
@@ -84,19 +92,16 @@ export function MetodosPagoResumen({ pagosPorMetodo }: MetodosPagoResumenProps) 
         </p>
       </header>
 
-      <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
-        {OPCIONES.map((opcion) => {
+      <ul className={cn('grid w-full gap-2', columnasGrid)}>
+        {opcionesActivas.map((opcion) => {
           const Icono = opcion.icono
-          const activo = habilitados[opcion.clave]
 
           return (
             <li
               key={opcion.clave}
               className={cn(
-                'flex min-w-0 items-start gap-3 rounded-xl border p-3',
-                activo
-                  ? cn('bg-white dark:bg-slate-900/40', opcion.borde)
-                  : 'border-slate-200 bg-slate-50/70 opacity-70 dark:border-slate-800 dark:bg-slate-900/30',
+                'flex w-full min-w-0 items-start gap-3 rounded-xl border bg-white p-3 dark:bg-slate-900/40',
+                opcion.borde,
               )}
             >
               <span className={cn('grid h-9 w-9 shrink-0 place-items-center rounded-lg', opcion.color)}>
@@ -107,13 +112,8 @@ export function MetodosPagoResumen({ pagosPorMetodo }: MetodosPagoResumenProps) 
                   <p className="truncate text-xs font-semibold text-slate-700 dark:text-slate-200">
                     {opcion.etiqueta}
                   </p>
-                  <span className={cn(
-                    'shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide',
-                    activo
-                      ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
-                      : 'bg-slate-200 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
-                  )}>
-                    {activo ? 'Activo' : 'Inactivo'}
+                  <span className="shrink-0 rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">
+                    Activo
                   </span>
                 </div>
                 <p className="mt-1 truncate font-display text-base font-bold tabular-nums text-slate-900 dark:text-white">
@@ -124,9 +124,6 @@ export function MetodosPagoResumen({ pagosPorMetodo }: MetodosPagoResumenProps) 
           )
         })}
       </ul>
-      <p className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs leading-relaxed text-slate-600 dark:bg-slate-900/50 dark:text-slate-300">
-        Los métodos inactivos siguen mostrando operaciones registradas en el período.
-      </p>
     </section>
   )
 }

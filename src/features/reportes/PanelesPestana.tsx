@@ -1,36 +1,17 @@
 import { useMemo, useState } from 'react'
-import { ArrowDownRight, ArrowUpRight, PackageX, Trash2 } from 'lucide-react'
+import { PackageX } from 'lucide-react'
 import { CustomSelect } from '../../components/ui/CustomSelect'
 import { EmptySearch } from '../../components/ui/EmptySearch'
-import { ProgressBar } from '../../components/ui/ProgressBar'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/Table'
-import type { ReportesSummary, TipoMovimientoStock } from '../../../electron/db/types'
+import type { ReportesSummary } from '../../../electron/db/types'
 import { SOMBRA_CARD } from './estilos'
 import { cn } from '../../lib/cn'
-import { etiquetaMovimiento, filasMovimientos } from './metricasPestana'
+import { filasMovimientos } from './metricasPestana'
 import { MovimientosRecientes } from './MovimientosRecientes'
 import { formatearMoneda, formatearUnidades } from './reportsQuery'
 import { BarraFiltrosReporte, PaginacionReporte } from './TablaReporteUI'
 
 const POR_PAGINA = 30
-
-const ICONO_TIPO: Record<TipoMovimientoStock, typeof ArrowUpRight> = {
-  entrada: ArrowDownRight,
-  ajuste_positivo: ArrowDownRight,
-  devolucion: ArrowUpRight,
-  venta: ArrowUpRight,
-  ajuste_negativo: ArrowUpRight,
-  merma: Trash2,
-}
-
-const COLOR_TIPO: Record<TipoMovimientoStock, string> = {
-  entrada: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400',
-  ajuste_positivo: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400',
-  devolucion: 'bg-sky-100 text-sky-600 dark:bg-sky-950/40 dark:text-sky-400',
-  venta: 'bg-violet-100 text-violet-600 dark:bg-violet-950/40 dark:text-violet-400',
-  ajuste_negativo: 'bg-amber-100 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400',
-  merma: 'bg-rose-100 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400',
-}
 
 export function MovimientosPanel({
   resumen,
@@ -42,67 +23,8 @@ export function MovimientosPanel({
   hasta: string | null
 }) {
   const filas = filasMovimientos(resumen)
-  const totalUnidades = filas.reduce((acc, fila) => acc + fila.unidades, 0)
 
-  return (
-    <div className="grid gap-4 xl:grid-cols-[minmax(16rem,0.75fr)_minmax(0,1.5fr)]">
-      <div className={`h-fit rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800/80 dark:bg-[#111827] ${SOMBRA_CARD}`}>
-        <div className="flex items-start gap-2.5">
-          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-sky-500/10 text-sky-600 dark:text-sky-400">
-            <PackageX size={15} />
-          </span>
-          <div className="min-w-0">
-            <h3 className="font-display text-sm font-semibold text-slate-900 dark:text-white">
-              Movimientos por tipo
-            </h3>
-            <p className="mt-1 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
-              Todo movimiento de mercadería del período. Las ventas y las mermas se ven con más
-              detalle en sus pestañas, pero acá están contadas porque también mueven stock.
-            </p>
-          </div>
-        </div>
-
-        {filas.length === 0 ? (
-          <p className="mt-4 rounded-xl bg-slate-50 px-3 py-6 text-center text-xs text-slate-500 dark:bg-slate-900/50 dark:text-slate-400">
-            No hubo movimientos de mercadería en el período.
-          </p>
-        ) : (
-          <div className="mt-4 space-y-2">
-            {filas.map((fila) => {
-              const Icono = ICONO_TIPO[fila.tipo] ?? ArrowUpRight
-              const proporcion = totalUnidades > 0 ? (fila.unidades / totalUnidades) * 100 : 0
-
-              return (
-              <div key={fila.tipo} className="flex items-center gap-3">
-                  <span
-                    className={cn(
-                      'grid h-7 w-7 shrink-0 place-items-center rounded-lg',
-                      COLOR_TIPO[fila.tipo],
-                    )}
-                  >
-                    <Icono size={14} />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-baseline justify-between gap-2">
-                      <span className="truncate text-xs font-medium text-slate-700 dark:text-slate-200">
-                        {etiquetaMovimiento(fila.tipo)}
-                      </span>
-                      <span className="shrink-0 text-[11px] tabular-nums text-slate-500 dark:text-slate-400">
-                        {fila.cantidad} mov. · {formatearUnidades(fila.unidades)} u.
-                      </span>
-                    </div>
-                    <ProgressBar value={proporcion} variant="emerald" className="mt-1 bg-slate-100 dark:bg-slate-800" />
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </div>
-
-      <MovimientosRecientes desde={desde} hasta={hasta} />
-    </div>
-  )
+  return <MovimientosRecientes desde={desde} hasta={hasta} filasPorTipo={filas} />
 }
 
 export function PerdidasPanel({ resumen }: { resumen: ReportesSummary | null }) {
@@ -120,6 +42,7 @@ export function PerdidasPanel({ resumen }: { resumen: ReportesSummary | null }) 
     () => filtradas.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA),
     [filtradas, pagina],
   )
+  const limpiarFiltros = () => { setBuscar(''); setPagina(1) }
 
   return (
     <section className={`overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800/80 dark:bg-[#111827] ${SOMBRA_CARD}`}>
@@ -135,6 +58,8 @@ export function PerdidasPanel({ resumen }: { resumen: ReportesSummary | null }) 
       <BarraFiltrosReporte
         buscar={buscar}
         onBuscarChange={(valor) => { setBuscar(valor); setPagina(1) }}
+        onClearFilters={limpiarFiltros}
+        hayFiltrosActivos={buscar.trim() !== ''}
         placeholder="Buscar producto"
         total={filtradas.length}
       />
@@ -143,7 +68,7 @@ export function PerdidasPanel({ resumen }: { resumen: ReportesSummary | null }) 
           No se registraron mermas en el período.
         </p>
       ) : (
-        <EmptySearch onClear={() => { setBuscar(''); setPagina(1) }} />
+        <EmptySearch onClear={limpiarFiltros} />
       ) : (
         <>
           <div className="hidden lg:block">
@@ -160,7 +85,7 @@ export function PerdidasPanel({ resumen }: { resumen: ReportesSummary | null }) 
               </TableBody>
             </Table>
           </div>
-          <ul className="divide-y divide-slate-100 px-4 dark:divide-slate-800/60 lg:hidden">
+          <ul className="divide-y divide-slate-100 dark:divide-slate-800/60 lg:hidden">
             {visibles.map((fila) => (
               <li key={fila.productoId ?? fila.nombre} className="flex items-start justify-between gap-3 py-3">
                 <div className="min-w-0">
@@ -209,6 +134,11 @@ export function CortesPanel({ resumen }: { resumen: ReportesSummary | null }) {
     () => filtradas.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA),
     [filtradas, pagina],
   )
+  const limpiarFiltros = () => {
+    setBuscar('')
+    setFiltroDiferencia('todos')
+    setPagina(1)
+  }
 
   return (
     <section className={cn('overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800/80 dark:bg-[#111827]', SOMBRA_CARD)}>
@@ -224,6 +154,8 @@ export function CortesPanel({ resumen }: { resumen: ReportesSummary | null }) {
       <BarraFiltrosReporte
         buscar={buscar}
         onBuscarChange={(valor) => { setBuscar(valor); setPagina(1) }}
+        onClearFilters={limpiarFiltros}
+        hayFiltrosActivos={buscar.trim() !== '' || filtroDiferencia !== 'todos'}
         placeholder="Buscar por responsable, fecha o nota"
         total={filtradas.length}
       >
@@ -245,13 +177,7 @@ export function CortesPanel({ resumen }: { resumen: ReportesSummary | null }) {
           No se cerró ninguna caja en el período.
         </p>
       ) : (
-        <EmptySearch
-          onClear={() => {
-            setBuscar('')
-            setFiltroDiferencia('todos')
-            setPagina(1)
-          }}
-        />
+        <EmptySearch onClear={limpiarFiltros} />
       ) : (
         <>
           <div className="hidden lg:block">
@@ -276,7 +202,7 @@ export function CortesPanel({ resumen }: { resumen: ReportesSummary | null }) {
               </TableBody>
             </Table>
           </div>
-          <ul className="divide-y divide-slate-100 px-4 dark:divide-slate-800/60 lg:hidden">
+          <ul className="divide-y divide-slate-100 dark:divide-slate-800/60 lg:hidden">
             {visibles.map((fila) => {
               const diferencia = fila.diferencia ?? 0
               return (

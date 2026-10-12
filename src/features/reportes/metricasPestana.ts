@@ -49,6 +49,8 @@ export function etiquetaMovimiento(tipo: TipoMovimientoStock): string {
 export function metricasDePestana(
   pestana: PestanaReportes,
   resumen: ReportesSummary | null,
+  valorInventario: number | null = null,
+  inventarioDisponible = true,
 ): MetricaPestana[] {
   const totalVentas = resumen?.totalVentas ?? 0
   const totalCobrado = resumen?.totalCobrado ?? 0
@@ -61,33 +63,45 @@ export function metricasDePestana(
   const cortes = resumen?.cortes
 
   if (pestana === 'movimientos') {
-    const entradas = movimientos?.entradas ?? 0
-    const salidas = movimientos?.salidas ?? 0
+    const tiposEntrada: TipoMovimientoStock[] = ['entrada', 'ajuste_positivo', 'devolucion']
+    const tiposSalida: TipoMovimientoStock[] = ['venta', 'ajuste_negativo', 'merma']
+    const unidadesEntradas = (movimientos?.porTipo ?? [])
+      .filter((fila) => tiposEntrada.includes(fila.tipo))
+      .reduce((total, fila) => total + fila.unidades, 0)
+    const unidadesSalidas = (movimientos?.porTipo ?? [])
+      .filter((fila) => tiposSalida.includes(fila.tipo))
+      .reduce((total, fila) => total + fila.unidades, 0)
 
     return [
       {
-        titulo: 'Movimientos',
-        valor: movimientos?.cantidad ?? 0,
-        subtitulo: 'En el período',
-        tono: 'sky',
-      },
-      {
-        titulo: 'Unidades movidas',
-        valor: formatearUnidades(movimientos?.unidades ?? 0),
-        subtitulo: 'Entradas más salidas',
-        tono: 'violet',
-      },
-      {
-        titulo: 'Entradas',
-        valor: entradas,
-        subtitulo: 'Mercadería que ingresó',
+        titulo: 'Valor del inventario',
+        valor: inventarioDisponible && valorInventario !== null
+          ? formatearMoneda(valorInventario)
+          : '—',
+        subtitulo: !inventarioDisponible
+          ? 'No se pudo consultar el inventario'
+          : valorInventario === null
+            ? 'Calculando inventario actual…'
+            : 'Al costo del stock actual',
         tono: 'emerald',
       },
       {
-        titulo: 'Salidas',
-        valor: salidas,
-        subtitulo: 'Mercadería que salió',
-        tono: salidas > entradas ? 'amber' : 'emerald',
+        titulo: 'Movimientos',
+        valor: movimientos?.cantidad ?? 0,
+        subtitulo: 'Registros en el período',
+        tono: 'sky',
+      },
+      {
+        titulo: 'Unidades ingresadas',
+        valor: formatearUnidades(unidadesEntradas),
+        subtitulo: 'Entradas, ajustes positivos y devoluciones',
+        tono: 'emerald',
+      },
+      {
+        titulo: 'Unidades retiradas',
+        valor: formatearUnidades(unidadesSalidas),
+        subtitulo: 'Ventas, ajustes negativos y mermas',
+        tono: unidadesSalidas > 0 ? 'amber' : 'emerald',
       },
     ]
   }

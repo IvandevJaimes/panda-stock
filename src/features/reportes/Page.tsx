@@ -30,6 +30,7 @@ import { EmptyState } from '../../components/ui/EmptyState'
 import { LoadingState } from '../../components/ui/LoadingState'
 import { PeriodNav } from '../../components/ui/periodNav/PeriodNav'
 import { cn } from '../../lib/cn'
+import { productosService } from '../../services/productos.service'
 import { reportesService } from '../../services/reportes.service'
 import { HistorialVentas } from './HistorialVentas'
 import { MetodosPagoChart } from './MetodosPagoChart'
@@ -105,6 +106,8 @@ function ContenidoReportes() {
   const [periodo, setPeriodo] = useState<PeriodoReporte>('month')
   const [cursor, setCursor] = useState(() => new Date())
   const [resumen, setResumen] = useState<ReportesSummary | null>(null)
+  const [valorInventario, setValorInventario] = useState<number | null>(null)
+  const [inventarioDisponible, setInventarioDisponible] = useState(true)
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [recarga, setRecarga] = useState(0)
@@ -176,6 +179,26 @@ function ContenidoReportes() {
     }
   }, [rango, recarga])
 
+  useEffect(() => {
+    let vigente = true
+    productosService.getAll()
+      .then((productos) => {
+        if (!vigente) return
+        const valor = productos.reduce(
+          (total, producto) => total + producto.stockActual * producto.costo,
+          0,
+        )
+        setValorInventario(Math.round(valor * 100) / 100)
+      })
+      .catch(() => {
+        if (vigente) setInventarioDisponible(false)
+      })
+
+    return () => {
+      vigente = false
+    }
+  }, [])
+
   const ranking = useMemo(
     () => construirRanking(resumen?.productosMasVendidos ?? [], resumen?.totalVentas ?? 0),
     [resumen],
@@ -189,7 +212,10 @@ function ContenidoReportes() {
     [resumen, rango],
   )
 
-  const metricas = useMemo(() => metricasDePestana(pestana, resumen), [pestana, resumen])
+  const metricas = useMemo(
+    () => metricasDePestana(pestana, resumen, valorInventario, inventarioDisponible),
+    [pestana, resumen, valorInventario, inventarioDisponible],
+  )
   const periodoSinDatos = resumen !== null
     && resumen.cantVentas === 0
     && resumen.totalCobrado === 0
@@ -242,7 +268,7 @@ function ContenidoReportes() {
             </Button>
           </div>
         </div>
-      ) : periodoSinDatos ? (
+      ) : periodoSinDatos && pestana !== 'movimientos' ? (
         <EmptyState
           className="min-h-[55vh]"
           icon={<PackageX size={22} />}

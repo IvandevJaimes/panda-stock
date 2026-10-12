@@ -394,6 +394,11 @@ export function HistorialVentas({ desde, hasta }: HistorialVentasProps) {
   const fechaSeleccionada = ventaSeleccionadaId === null
     ? null
     : ventas?.find((venta) => venta.id === ventaSeleccionadaId) ?? null
+  const limpiarFiltros = () => {
+    setBuscar('')
+    setEstadoFiltro('todas')
+    setPagina(1)
+  }
 
   if (ventas === null) {
     return (
@@ -432,6 +437,8 @@ export function HistorialVentas({ desde, hasta }: HistorialVentasProps) {
           setBuscar(valor)
           setPagina(1)
         }}
+        onClearFilters={limpiarFiltros}
+        hayFiltrosActivos={buscar.trim() !== '' || estadoFiltro !== 'todas'}
         placeholder="Buscar por ticket, fecha o importe"
         total={filtradas.length}
       >
@@ -458,13 +465,7 @@ export function HistorialVentas({ desde, hasta }: HistorialVentasProps) {
           No hay ventas registradas en el período seleccionado.
         </p>
       ) : (
-        <EmptySearch
-          onClear={() => {
-            setBuscar('')
-            setEstadoFiltro('todas')
-            setPagina(1)
-          }}
-        />
+        <EmptySearch onClear={limpiarFiltros} />
       ) : (
         <>
           <div className="hidden lg:block">
@@ -558,7 +559,7 @@ export function HistorialVentas({ desde, hasta }: HistorialVentasProps) {
             </Table>
           </div>
 
-          <ul className="px-4 lg:hidden">
+          <ul className="lg:hidden">
             {visibles.map((venta, indice) => {
               const estado = ESTADOS[venta.estado]
               const detalle = detalles.get(venta.id)

@@ -9,6 +9,7 @@ type ChartCardProps = {
   acciones?: ReactNode
   children: ReactNode
   className?: string
+  contenidoClassName?: string
   /**
    * Alto del área del gráfico, en px.
    *
@@ -34,6 +35,7 @@ export function ChartCard({
   acciones,
   children,
   className,
+  contenidoClassName,
   alto = 280,
 }: ChartCardProps) {
   return (
@@ -70,7 +72,7 @@ export function ChartCard({
         etiquetas. El wrapper `relative` + hijo `h-full` es lo que le da a
         `ResponsiveContainer` una altura que medir.
       */}
-      <div className="relative w-full overflow-hidden" style={{ height: alto }}>
+      <div className={cn('relative w-full overflow-hidden', contenidoClassName)} style={{ height: alto }}>
         <div className="h-full w-full">{children}</div>
       </div>
     </section>

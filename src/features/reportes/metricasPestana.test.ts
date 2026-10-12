@@ -114,17 +114,18 @@ describe('metricasDePestana', () => {
     expect(ventasNetas?.titulo).toBe('Ingresos cobrados')
   })
 
-  it('movimientos: cantidad, unidades y el desglose entradas/salidas', () => {
-    const [cantidad, unidades, entradas, salidas] = metricasDePestana('movimientos', COMPLETO)
+  it('movimientos: valor del inventario y unidades según el sentido del cambio', () => {
+    const [inventario, cantidad, entradas, salidas] = metricasDePestana('movimientos', COMPLETO, 12345)
 
+    expect(inventario?.titulo).toBe('Valor del inventario')
+    expect(inventario?.valor).toBe('$12345.00')
+    expect(inventario?.subtitulo).toBe('Al costo del stock actual')
     expect(cantidad?.titulo).toBe('Movimientos')
     expect(cantidad?.valor).toBe(25)
-    expect(unidades?.titulo).toBe('Unidades movidas')
-    expect(unidades?.valor).toBe('310')
-    expect(entradas?.titulo).toBe('Entradas')
-    expect(entradas?.valor).toBe(8)
-    expect(salidas?.titulo).toBe('Salidas')
-    expect(salidas?.valor).toBe(17)
+    expect(entradas?.titulo).toBe('Unidades ingresadas')
+    expect(entradas?.valor).toBe('202')
+    expect(salidas?.titulo).toBe('Unidades retiradas')
+    expect(salidas?.valor).toBe('108')
     expect(salidas?.tono).toBe('amber')
   })
 
