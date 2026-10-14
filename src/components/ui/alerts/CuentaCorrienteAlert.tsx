@@ -8,6 +8,8 @@ interface CuentaCorrienteToastProps {
   toastId: string | number
 }
 
+const ID_ALERTA_CUENTA_CORRIENTE = 'alerta-cuenta-corriente'
+
 function CuentaCorrienteToast({ notificaciones, toastId }: CuentaCorrienteToastProps) {
   const cantidad = notificaciones.length
   const unicaNotificacion = cantidad === 1 ? notificaciones[0] : null
@@ -66,9 +68,14 @@ export function showCuentaCorrienteAlert(notificaciones: Notificacion[]): void {
       <CuentaCorrienteToast notificaciones={notificaciones} toastId={toastId} />
     ),
     {
+      id: ID_ALERTA_CUENTA_CORRIENTE,
       toasterId: 'stock',
       position: 'top-center',
       duration: 7000,
     },
   )
+}
+
+export function dismissCuentaCorrienteAlert(): void {
+  toast.dismiss(ID_ALERTA_CUENTA_CORRIENTE)
 }

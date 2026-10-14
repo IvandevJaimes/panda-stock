@@ -1,7 +1,7 @@
 {
   "name": "panda-stock",
   "private": true,
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Sistema de gestión de inventario y punto de venta para comercios",
   "author": "Panda Stock",
   "type": "module",

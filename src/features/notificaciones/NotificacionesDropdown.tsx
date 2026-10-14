@@ -5,6 +5,7 @@ import { cn } from '../../lib/cn'
 import { buildAssetUrl } from '../../lib/assets'
 import { getProductPlaceholder } from '../../lib/productPlaceholder'
 import { onAlertCreated } from '../../stores/stockAlertHistoryStore'
+import { useSettingsStore } from '../../stores/settings.store'
 import { Badge } from '../../components/ui/Badge'
 import {
   DropdownMenu,
@@ -181,6 +182,7 @@ function FilaNotificacion({
 
 export function NotificacionesDropdown() {
   const { notificaciones, eliminar, limpiar } = useNotificaciones()
+  const cuentaCorrienteHabilitada = useSettingsStore((estado) => estado.cuentaCorrienteHabilitada)
   const navegar = useNavigate()
   const [abierto, setAbierto] = useState(false)
   const [animando, setAnimando] = useState(false)
@@ -189,13 +191,16 @@ export function NotificacionesDropdown() {
   const timeoutAnimacionRef = useRef<number | null>(null)
   const timerLimpiarRef = useRef<number | null>(null)
 
+  const filtroActual = !cuentaCorrienteHabilitada && filtro === 'cuenta_corriente'
+    ? 'todas'
+    : filtro
   const total = notificaciones.length
   const notificacionesFiltradas = notificaciones.filter((notificacion) => {
-    if (filtro === 'todas') return true
-    if (filtro === 'stock') {
+    if (filtroActual === 'todas') return true
+    if (filtroActual === 'stock') {
       return notificacion.tipo === 'stock_bajo' || notificacion.tipo === 'stock_agotado'
     }
-    return notificacion.tipo === filtro
+    return notificacion.tipo === filtroActual
   })
   const abreviado = total > 99 ? '99+' : String(total)
 
@@ -333,8 +338,10 @@ export function NotificacionesDropdown() {
 
         {total > 0 && (
           <div className="flex shrink-0 flex-wrap gap-1.5 border-b border-slate-100 px-3 py-2 dark:border-slate-800/80">
-            {FILTROS.map((opcion) => {
-              const activo = filtro === opcion.id
+            {FILTROS.filter((opcion) =>
+              cuentaCorrienteHabilitada || opcion.id !== 'cuenta_corriente',
+            ).map((opcion) => {
+              const activo = filtroActual === opcion.id
               const cuentaActiva = activo && opcion.id === 'cuenta_corriente'
               return (
                 <button
@@ -365,7 +372,9 @@ export function NotificacionesDropdown() {
               Sin notificaciones pendientes
             </p>
             <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
-              El inventario y las cuentas están al día
+              {cuentaCorrienteHabilitada
+                ? 'El inventario y las cuentas están al día'
+                : 'El inventario está al día'}
             </p>
           </div>
         ) : (
