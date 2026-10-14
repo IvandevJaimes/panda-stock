@@ -44,7 +44,7 @@ import type {
   ProteccionesSeguridad,
   ResultadoSeguro,
 } from '../../electron/db/types'
-import type { ExportarExcelInput } from '../../electron/exportaciones.types'
+import type { SolicitudExportacionReportes } from '../../electron/exportaciones.types'
 import type { ConfiguracionCopias, EstadoDestinoCopias, TipoDestinoCopias } from '../../electron/db/types'
 import type { EstadoLicencia, ResultadoLicencia } from '../../electron/licencia/tipos'
 
@@ -136,9 +136,7 @@ declare global {
       }
       reportes: {
         getSummary: (filtros?: FiltrosReportes) => Promise<ResultadoSeguro<ReportesSummary>>
-        exportarExcel: (
-          input: ExportarExcelInput,
-        ) => Promise<ResultadoSeguro<string | null>>
+        exportar: (solicitud: SolicitudExportacionReportes) => Promise<ResultadoSeguro<string | null>>
       }
       cuentasCorrientes: {
         getClientes: (opciones?: {

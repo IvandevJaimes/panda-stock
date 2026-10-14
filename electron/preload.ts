@@ -31,7 +31,7 @@ import type {
   MovimientoCuentaCorriente,
   ResumenCuentasCorrientes,
 } from "./db/types.ts";
-import type { ExportarExcelInput } from "./exportaciones.types.ts";
+import type { SolicitudExportacionReportes } from "./exportaciones.types.ts";
 import type { EstadoLicencia, ResultadoLicencia } from "./licencia/tipos.ts";
 
 import { webFrame } from "electron";
@@ -153,8 +153,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   reportes: {
     getSummary: (filtros?: FiltrosReportes): Promise<ResultadoSeguro<ReportesSummary>> =>
       ipcRenderer.invoke("reportes:summary", filtros),
-    exportarExcel: (input: ExportarExcelInput): Promise<ResultadoSeguro<string | null>> =>
-      ipcRenderer.invoke("reportes:exportar-excel", input),
+    exportar: (solicitud: SolicitudExportacionReportes): Promise<ResultadoSeguro<string | null>> =>
+      ipcRenderer.invoke("reportes:exportar", solicitud),
   },
   cuentasCorrientes: {
     getClientes: (opciones?: { incluirInactivos?: boolean }): Promise<ResultadoSeguro<ClienteConSaldo[]>> =>

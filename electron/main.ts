@@ -94,8 +94,8 @@ import {
   registrarAbono,
   registrarCargoManual,
 } from "./db/repository.ts";
-import { exportarExcel } from "./exportaciones.ts";
-import type { ExportarExcelInput } from "./exportaciones.types.ts";
+import { exportarReportes } from "./exportaciones.ts";
+import type { SolicitudExportacionReportes } from "./exportaciones.types.ts";
 import type {
   AjusteStockInput,
   AbonoInput,
@@ -176,6 +176,24 @@ const accesosVerificados = new Map<number, Set<ClaveProteccion>>();
 function resultadoSeguro<T>(accion: () => T): ResultadoSeguro<T> {
   try {
     return { ok: true, value: accion() };
+  } catch (error) {
+    if (error instanceof ErrorAutorizacion) {
+      return {
+        ok: false,
+        error: {
+          code: error.code,
+          message: error.message,
+          ...(error.retryAt === undefined ? {} : { retryAt: error.retryAt }),
+        },
+      };
+    }
+    throw error;
+  }
+}
+
+async function resultadoSeguroAsync<T>(accion: () => Promise<T> | T): Promise<ResultadoSeguro<T>> {
+  try {
+    return { ok: true, value: await accion() };
   } catch (error) {
     if (error instanceof ErrorAutorizacion) {
       return {
@@ -473,8 +491,8 @@ function createWindow() {
 
   // Volcado de errores del renderer a userData/panda-stock.log para diagnosticar
   // desde la VM sin DevTools.
-  win.webContents.on("console-message", (_evento, nivel, mensaje, linea, origen) => {
-    escribirLog("renderer", `[${nivel}] ${mensaje} (${origen}:${linea})`);
+  win.webContents.on("console-message", (details) => {
+    escribirLog("renderer", `[${details.level}] ${details.message} (${details.sourceId}:${details.lineNumber})`);
   });
   win.webContents.on("did-fail-load", (_evento, codigo, descripcion, url, esMarcoPrincipal) => {
     escribirLog("load", `${codigo} ${descripcion} ${url}`);
@@ -648,8 +666,8 @@ function createSetupWindow() {
     else app.quit();
   });
 
-  win.webContents.on("console-message", (_evento, nivel, mensaje, linea, origen) => {
-    escribirLog("renderer-setup", `[${nivel}] ${mensaje} (${origen}:${linea})`);
+  win.webContents.on("console-message", (details) => {
+    escribirLog("renderer-setup", `[${details.level}] ${details.message} (${details.sourceId}:${details.lineNumber})`);
   });
 
   // El renderer detecta `?vista=configuracion` y monta la ventana de inicio
@@ -701,8 +719,8 @@ function createLicenseWindow() {
   win.on("closed", () => {
     if (ventanaLicencia === win) ventanaLicencia = null;
   });
-  win.webContents.on("console-message", (_evento, nivel, mensaje, linea, origen) => {
-    escribirLog("renderer-licencia", `[${nivel}] ${mensaje} (${origen}:${linea})`);
+  win.webContents.on("console-message", (details) => {
+    escribirLog("renderer-licencia", `[${details.level}] ${details.message} (${details.sourceId}:${details.lineNumber})`);
   });
   win.webContents.on("did-fail-load", (_evento, codigo, descripcion, url, esMarcoPrincipal) => {
     escribirLog("load-licencia", `${codigo} ${descripcion} ${url}`);
@@ -1022,10 +1040,10 @@ function registerIpcHandlers() {
     }),
   );
 
-  ipcMain.handle("reportes:exportar-excel", (event, input: ExportarExcelInput) =>
-    resultadoSeguro(() => {
+  ipcMain.handle("reportes:exportar", (event, solicitud: SolicitudExportacionReportes) =>
+    resultadoSeguroAsync(() => {
       requerirAccesoVerificado(event.sender.id, 'reportes');
-      return exportarExcel(input);
+      return exportarReportes(solicitud, BrowserWindow.fromWebContents(event.sender));
     }),
   );
 

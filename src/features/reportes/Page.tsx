@@ -4,16 +4,16 @@ import {
   useCallback,
   useContext,
   useEffect,
-  useLayoutEffect,
   useMemo,
-  useRef,
   useState,
 } from 'react'
 import {
   AlertTriangle,
   ArrowDownRight,
   BarChart3,
+  Download,
   FileSpreadsheet,
+  FileText,
   Info,
   Loader2,
   PackageX,
@@ -29,11 +29,11 @@ import { useSearchParams } from 'react-router-dom'
 import { Button } from '../../components/ui/Button'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { LoadingState } from '../../components/ui/LoadingState'
+import { Modal } from '../../components/ui/Modal'
 import { PeriodNav } from '../../components/ui/periodNav/PeriodNav'
 import { cn } from '../../lib/cn'
 import { productosService } from '../../services/productos.service'
 import { reportesService } from '../../services/reportes.service'
-import { useSettingsStore } from '../../stores/settings.store'
 import { HistorialVentas } from './HistorialVentas'
 import { MetodosPagoChart } from './MetodosPagoChart'
 import { MetodosPagoResumen } from './MetodosPagoResumen'
@@ -55,8 +55,8 @@ import {
   construirRanking,
   rangoDesdePeriodo,
   type PeriodoReporte,
+  type RangoFechas,
 } from './reportsQuery'
-import { construirExportacion } from './exportacionQuery'
 import type { ReportesSummary } from '../../../electron/db/types'
 
 const ICONO_TONO: Record<TonoMetrica, LucideIcon> = {
@@ -69,6 +69,41 @@ const ICONO_TONO: Record<TonoMetrica, LucideIcon> = {
 
 const RETRASOS_METRICAS = ['stagger-1', 'stagger-2', 'stagger-3', 'stagger-4'] as const
 const CLASE_NOTA = 'flex items-start gap-2 rounded-xl border border-slate-200/80 bg-white/75 px-3 py-2.5 text-xs leading-relaxed text-slate-600 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-300'
+
+function formatearRangoExportacion(rango: RangoFechas): string {
+  const formatear = (fecha: string) => {
+    const valor = new Date(fecha)
+    return Number.isNaN(valor.getTime())
+      ? `${fecha.slice(8, 10)}/${fecha.slice(5, 7)}/${fecha.slice(0, 4)}`
+      : valor.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  }
+  if (rango.desde && rango.hasta) {
+    const desde = formatear(rango.desde)
+    const hasta = formatear(rango.hasta)
+    return desde === hasta ? desde : `${desde} - ${hasta}`
+  }
+  if (rango.desde) return `Desde ${formatear(rango.desde)}`
+  if (rango.hasta) return `Hasta ${formatear(rango.hasta)}`
+  return 'Todo el historial'
+}
+
+function describirPeriodoExportacion(periodo: PeriodoReporte, cursor: Date): string {
+  if (periodo === 'day') {
+    return cursor.toLocaleDateString('es-AR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })
+  }
+  if (periodo === 'month') {
+    return cursor.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })
+  }
+  return String(cursor.getFullYear())
+}
+
+function tieneActividadEnPeriodo(resumen: ReportesSummary): boolean {
+  return resumen.cantVentas > 0
+    || resumen.totalCobrado !== 0
+    || resumen.movimientos.cantidad > 0
+    || resumen.perdidas.cantidadMermas > 0
+    || resumen.cortes.cantidad > 0
+}
 
 const COLOR_TONO: Record<TonoMetrica, string> = {
   emerald: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400',
@@ -107,13 +142,6 @@ type ReportesPeriodoContextValue = {
   onToday: () => void
 }
 
-type ReportesExportacionContextValue = {
-  pestana: PestanaReportes
-  resumen: ReportesSummary | null
-  rango: ReturnType<typeof rangoDesdePeriodo>
-  cargando: boolean
-}
-
 const ReportesPestanaContext = createContext<ReportesPestanaContextValue | null>(null)
 const ReportesPeriodoContext = createContext<ReportesPeriodoContextValue | null>(null)
 
@@ -143,7 +171,6 @@ function ContenidoReportes() {
     () => rangoDesdePeriodo(periodo, cursor),
     [periodo, cursor],
   )
-  const [rangoDatosCargados, setRangoDatosCargados] = useState(rango)
 
   /*
     Reset durante el render (mismo patrón que `HistorialVentasModal`): el effect
@@ -169,17 +196,6 @@ function ContenidoReportes() {
     () => ({ periodo, setPeriodo, cursor, setCursor, onToday: irAHoy }),
     [periodo, cursor, irAHoy],
   )
-  const exportacionRef = useRef<ReportesExportacionContextValue>({
-    pestana,
-    resumen,
-    rango: rangoDatosCargados,
-    cargando,
-  })
-
-  useLayoutEffect(() => {
-    exportacionRef.current = { pestana, resumen, rango: rangoDatosCargados, cargando }
-  }, [pestana, resumen, rangoDatosCargados, cargando])
-
   useEffect(() => {
     let vigente = true
 
@@ -190,7 +206,6 @@ function ContenidoReportes() {
     })
       .then((datos) => {
         if (!vigente) return
-        setRangoDatosCargados(rango)
         setResumen(datos)
       })
       .catch((fallo: unknown) => {
@@ -256,12 +271,14 @@ function ContenidoReportes() {
     ),
     [pestana, resumen, inventarioActual],
   )
-  const periodoSinDatos = resumen !== null
-    && resumen.cantVentas === 0
-    && resumen.totalCobrado === 0
+  const periodoSinDatos = resumen !== null && !tieneActividadEnPeriodo(resumen)
+  const movimientosSinDatos = pestana === 'movimientos'
+    && resumen !== null
     && resumen.movimientos.cantidad === 0
-    && resumen.perdidas.cantidadMermas === 0
-    && resumen.cortes.cantidad === 0
+  const mostrarEstadoVacio = movimientosSinDatos
+    || (periodoSinDatos
+      && pestana !== 'movimientos'
+      && !(pestana === 'ventas' && searchParams.get('tab') === 'ventas'))
 
   if (cargando && resumen === null) {
     return (
@@ -276,8 +293,15 @@ function ContenidoReportes() {
   return (
     <div className="w-full space-y-4 py-4">
       <EncabezadoReportes
-        exportacionRef={exportacionRef}
-        habilitado={resumen !== null}
+        periodo={periodo}
+        cursor={cursor}
+        estadoDatos={cargando || resumen === null
+          ? 'cargando'
+          : error !== null
+            ? 'error'
+            : periodoSinDatos
+              ? 'sin-datos'
+              : 'disponible'}
       />
 
       <ReportesPestanaContext.Provider value={contextoPestana}>
@@ -308,14 +332,14 @@ function ContenidoReportes() {
             </Button>
           </div>
         </div>
-      ) : periodoSinDatos
-        && pestana !== 'movimientos'
-        && !(pestana === 'ventas' && searchParams.get('tab') === 'ventas') ? (
+      ) : mostrarEstadoVacio ? (
         <EmptyState
           className="min-h-[55vh]"
           icon={<PackageX size={22} />}
-          title="Sin datos en este período"
-          description="No hay ventas, movimientos, pérdidas ni cortes registrados en el período seleccionado."
+          title={movimientosSinDatos ? 'Sin movimientos en este período' : 'Sin datos en este período'}
+          description={movimientosSinDatos
+            ? 'No hay movimientos de stock registrados en el período seleccionado.'
+            : 'No hay ventas, movimientos, pérdidas ni cortes registrados en el período seleccionado.'}
         />
       ) : (
         <div className="px-1 flex flex-col gap-4">
@@ -437,102 +461,155 @@ function ContenidoReportes() {
   )
 }
 
-type ReportesExportacionRef = { current: ReportesExportacionContextValue }
-
-type EncabezadoReportesProps = {
-  exportacionRef: ReportesExportacionRef
-  habilitado: boolean
-}
-
 const EncabezadoReportes = memo(function EncabezadoReportes({
-  exportacionRef,
-  habilitado,
-}: EncabezadoReportesProps) {
+  periodo,
+  cursor,
+  estadoDatos,
+}: {
+  periodo: PeriodoReporte
+  cursor: Date
+  estadoDatos: 'cargando' | 'error' | 'sin-datos' | 'disponible'
+}) {
   return (
     <div className="flex items-center justify-between gap-3 animate-entry-up">
       <h1 className="min-w-0 font-display text-xl font-bold text-slate-900 dark:text-white sm:text-2xl">
         Reportes
       </h1>
-      <BotonExportarReporte
-        exportacionRef={exportacionRef}
-        habilitado={habilitado}
-      />
+      <BotonExportarReporte periodo={periodo} cursor={cursor} estadoDatos={estadoDatos} />
     </div>
   )
 })
 
-type BotonExportarReporteProps = {
-  exportacionRef: { current: ReportesExportacionContextValue }
-  habilitado: boolean
-}
-
 const BotonExportarReporte = memo(function BotonExportarReporte({
-  exportacionRef,
-  habilitado,
-}: BotonExportarReporteProps) {
-  const [exportando, setExportando] = useState(false)
-  const exportandoRef = useRef(false)
+  periodo,
+  cursor,
+  estadoDatos,
+}: {
+  periodo: PeriodoReporte
+  cursor: Date
+  estadoDatos: 'cargando' | 'error' | 'sin-datos' | 'disponible'
+}) {
+  const [formatoExportando, setFormatoExportando] = useState<'excel' | 'pdf' | null>(null)
+  const [modalAbierto, setModalAbierto] = useState(false)
+  const rangoExportacion = useMemo(
+    () => rangoDesdePeriodo(periodo, cursor),
+    [cursor, periodo],
+  )
+  const periodoExportado = formatearRangoExportacion(rangoExportacion)
+  const descripcionPeriodo = describirPeriodoExportacion(periodo, cursor)
+  const exportacionBloqueada = estadoDatos !== 'disponible' || formatoExportando !== null
 
-  const iniciarExportacion = useCallback(async () => {
-    if (exportandoRef.current) return
+  const abrirModal = useCallback(() => {
+    setModalAbierto(true)
+  }, [])
 
-    const actual = exportacionRef.current
-    if (actual.cargando) {
-      toast.info('Esperá a que termine de cargar el período')
-      return
-    }
-    if (actual.resumen === null) return
-
-    exportandoRef.current = true
-    setExportando(true)
+  const iniciarExportacion = useCallback(async (formato: 'excel' | 'pdf') => {
+    if (estadoDatos !== 'disponible' || formatoExportando !== null) return
+    setModalAbierto(false)
+    setFormatoExportando(formato)
     try {
-      const ajustesPago = useSettingsStore.getState()
-      const input = construirExportacion({
-        pestana: actual.pestana,
-        resumen: actual.resumen,
-        rango: actual.rango,
-        metodosHabilitados: {
-          tarjetaHabilitada: ajustesPago.tarjetaHabilitada,
-          transferenciaHabilitada: ajustesPago.transferenciaHabilitada,
-          qrHabilitado: ajustesPago.qrHabilitado,
-          cuentaCorrienteHabilitada: ajustesPago.cuentaCorrienteHabilitada,
-        },
-      })
-      const ruta = await reportesService.exportarExcel({
-        ...input,
-        elegirCarpeta: true,
+      const ruta = await reportesService.exportar({
+        formato,
+        desde: rangoExportacion.desde,
+        hasta: rangoExportacion.hasta,
       })
       if (ruta === null) {
         toast.info('Exportación cancelada')
         return
       }
-      toast.success('Reporte exportado', { description: ruta })
+      toast.success(`Reporte ${formato === 'excel' ? 'Excel' : 'PDF'} exportado`, { description: ruta })
     } catch (fallo) {
       toast.error('No se pudo exportar el reporte', {
         description: fallo instanceof Error ? fallo.message : undefined,
       })
     } finally {
-      exportandoRef.current = false
-      setExportando(false)
+      setFormatoExportando(null)
     }
-  }, [exportacionRef])
+  }, [estadoDatos, formatoExportando, rangoExportacion])
 
   return (
-    <Button
-      onClick={() => void iniciarExportacion()}
-      disabled={!habilitado || exportando}
-      aria-label={exportando ? 'Exportando reporte' : 'Exportar reporte'}
-      title="Elige la carpeta donde guardar la pestaña activa como .xlsx"
-      variant="primary"
-      className="h-10 shrink-0 gap-2 rounded-2xl px-4 text-sm font-bold shadow-xs sm:h-12 sm:px-6 sm:text-base"
-    >
-      {exportando ? (
-        <Loader2 className="h-5 w-5 shrink-0 animate-spin" />
-      ) : (
-        <FileSpreadsheet className="h-5 w-5 shrink-0" />
-      )}
-      {exportando ? 'Exportando…' : 'Exportar'}
-    </Button>
+    <>
+      <Button
+        onClick={abrirModal}
+        disabled={formatoExportando !== null}
+        aria-label={formatoExportando ? 'Exportando reporte' : 'Exportar reportes'}
+        title="Exporta todos los reportes del período elegido, sin aplicar filtros de búsqueda"
+        variant="primary"
+        className="h-10 shrink-0 gap-2 rounded-2xl px-4 text-sm font-bold shadow-xs sm:h-12 sm:px-6 sm:text-base"
+      >
+        {formatoExportando ? <Loader2 className="h-5 w-5 shrink-0 animate-spin" /> : <Download className="h-5 w-5 shrink-0" />}
+        {formatoExportando ? 'Exportando…' : 'Exportar'}
+      </Button>
+      <Modal
+        isOpen={modalAbierto}
+        onClose={() => setModalAbierto(false)}
+        title="Exportar reportes"
+        subtitle="Revisá el período y elegí el formato del archivo."
+        headerIcon={<FileSpreadsheet size={18} />}
+        maxWidth="xl"
+        footer={(
+          <Button variant="outline" onClick={() => setModalAbierto(false)}>
+            Cerrar
+          </Button>
+        )}
+      >
+        <div className="mb-5 grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:grid-cols-2 dark:border-slate-800 dark:bg-slate-900/60">
+          <div className="min-w-0 rounded-xl border border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-950">
+            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Período seleccionado</p>
+            <p className="mt-1 truncate text-sm font-bold text-slate-900 dark:text-white">{descripcionPeriodo}</p>
+          </div>
+          <div className="min-w-0 rounded-xl border border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-950">
+            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Fechas incluidas</p>
+            <p className="mt-1 text-sm font-bold text-slate-900 dark:text-white">{periodoExportado}</p>
+          </div>
+        </div>
+        {estadoDatos !== 'disponible' && (
+          <div
+            role="status"
+            className="mb-4 flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800 dark:border-amber-900/70 dark:bg-amber-950/30 dark:text-amber-300"
+          >
+            <Info size={17} className="shrink-0" aria-hidden="true" />
+            <span>
+              {estadoDatos === 'sin-datos'
+                ? 'No hay datos para exportar en el período seleccionado.'
+                : estadoDatos === 'error'
+                  ? 'No se pudieron comprobar los datos del período. Reintentá cargar los reportes.'
+                  : 'Comprobando los datos del período…'}
+            </span>
+          </div>
+        )}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => void iniciarExportacion('excel')}
+            disabled={exportacionBloqueada}
+            className="flex min-h-40 cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-center text-emerald-800 transition-colors hover:border-emerald-400 hover:bg-emerald-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-500 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-60 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:border-emerald-700 dark:hover:bg-emerald-950/70"
+          >
+            {formatoExportando === 'excel'
+              ? <Loader2 size={32} className="animate-spin" />
+              : <FileSpreadsheet size={32} aria-hidden="true" />}
+            <span className="text-base font-bold">Exportar a Excel</span>
+            <span className="text-xs font-medium text-emerald-700/80 dark:text-emerald-300/80">
+              Registros del período en pestañas separadas
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => void iniciarExportacion('pdf')}
+            disabled={exportacionBloqueada}
+            className="flex min-h-40 cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-5 text-center text-rose-800 transition-colors hover:border-rose-400 hover:bg-rose-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-500 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-60 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300 dark:hover:border-rose-700 dark:hover:bg-rose-950/70"
+          >
+            {formatoExportando === 'pdf'
+              ? <Loader2 size={32} className="animate-spin" />
+              : <FileText size={32} aria-hidden="true" />}
+            <span className="text-base font-bold">Exportar a PDF</span>
+            <span className="text-xs font-medium text-rose-700/80 dark:text-rose-300/80">
+              Métricas y resúmenes, sin listados completos
+            </span>
+          </button>
+        </div>
+      </Modal>
+    </>
   )
 })
 

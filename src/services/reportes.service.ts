@@ -1,5 +1,5 @@
-import type { ExportarExcelInput } from '../../electron/exportaciones.types'
 import type { FiltrosReportes, ReportesSummary } from '../../electron/db/types'
+import type { SolicitudExportacionReportes } from '../../electron/exportaciones.types'
 import { desenvolverResultadoSeguro, normalizarError } from './errors'
 
 export const reportesService = {
@@ -11,10 +11,10 @@ export const reportesService = {
     }
   },
 
-  /** Guarda la pestaña activa como `.xlsx` y devuelve la ruta, o `null` si se canceló la elección de carpeta. */
-  async exportarExcel(input: ExportarExcelInput): Promise<string | null> {
+  /** Exporta el rango seleccionado y devuelve la ruta, o `null` si se canceló. */
+  async exportar(solicitud: SolicitudExportacionReportes): Promise<string | null> {
     try {
-      return desenvolverResultadoSeguro(await window.electronAPI.reportes.exportarExcel(input))
+      return desenvolverResultadoSeguro(await window.electronAPI.reportes.exportar(solicitud))
     } catch (error) {
       throw normalizarError(error)
     }
